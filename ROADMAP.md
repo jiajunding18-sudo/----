@@ -6,19 +6,23 @@
 
 ### 1.1 路线不是线性清单
 
-Stage 0–11 是稳定的内容分类，不表示必须按编号串行学完。实际执行遵循有向无环依赖图（Directed Acyclic Graph, DAG）：
+Stage 0–11 是稳定的内容分类，不表示必须按编号串行学完。实际执行顺序由 `hard` 依赖子图构成的有向无环图（Directed Acyclic Graph, DAG）决定：
 
 ```mermaid
 flowchart LR
   S0[Stage 0 工具与编程] --> S2[Stage 2 图像计算与 OpenCV]
   S1A[Stage 1A 即时数学] --> S2
+  S1A --> S1B[Stage 1B 几何/优化数学]
   S2 --> S3[Stage 3 数字图像处理]
   S2 --> S5[Stage 5 二维视觉]
   S2 --> S7A[Stage 7A 训练基础]
+  S3 -. CNN 部分条件前置 .-> S7A
   S3 --> S4A[Stage 4A 最低必需成像]
+  S4A --> S4B[Stage 4B 工业成像]
+  S4A --> S4C[Stage 4C 成像质量深入]
   S4A --> S5
-  S4A --> S8[Stage 8 工业视觉]
-  S1B[Stage 1B 几何/优化数学] --> S6A[Stage 6A 几何视觉]
+  S4B -. 工业成像按任务交错补齐 .-> S8[Stage 8 工业视觉]
+  S1B --> S6A[Stage 6A 几何视觉]
   S5 --> S6A
   S1B --> S7A
   S5 --> S7B[Stage 7B 视觉任务]
@@ -29,19 +33,25 @@ flowchart LR
   S7B -. 学习式任务条件前置 .-> S8
   S6B --> S9[Stage 9 3D 工业视觉]
   S8 --> S9
-  S4C[Stage 4C 成像质量深入] --> S10[Stage 10 计算成像]
-  S7B --> S10
+  S4C --> S10[Stage 10 计算成像]
+  S7B -. 学习式方法条件前置 .-> S10
   S8 --> S11[Stage 11 综合项目]
-  S9 --> S11
-  S10 --> S11
+  S4B --> S11
+  S6B --> S11
+  S7B --> S11
+  S9 -. 二选一主修达到 M .-> ADV{Stage 9 或 Stage 10}
+  S10 -. 二选一主修达到 M .-> ADV
+  ADV --> S11
 ```
+
+图中的实线表示公共主干或无条件方向，虚线表示只对相应任务生效的条件前置。`ADV` 是 OR 门槛：Stage 9 与 Stage 10 至少一条达到 M，不要求两条同时达到 M。
 
 等价的文字规则是：
 
 - 先取得 Stage 0 的最低编程门槛，再用 Stage 2 尽快操作真实图像。
-- Stage 1 不整段前置；数学概念在第一次被视觉任务需要之前学习。
+- Stage 1 不整段前置；数学概念在第一次被视觉任务需要之前学习。图中的 S1A 指 `math.vectors-matrices`, `math.linear-transforms`, `math.calculus-gradients`, `math.probability-statistics`；S1B 指 `math.coordinate-frames`, `math.least-squares`, `math.eigen-svd`, `math.optimization`, `math.numerical-stability`，`math.lie-groups` 始终为 A 级选修。
 - Stage 4 分为最低必需成像、工业成像和高级成像质量三次回访，不让完整光学理论阻塞实践。
-- Stage 7A 的张量、自动微分和训练基础可在 Stage 2 与必要数学后并行启动；Stage 7B 的分类、检测和分割任务在 Stage 5 的任务定义与评价基础后进入。深度学习不是经典多视图几何（Multi-view Geometry）的前置条件。
+- Stage 7A 的张量、自动微分和训练基础可在 Stage 2 与必要数学后并行启动，CNN 部分再补 Stage 3 的卷积；Stage 7B 的数据、评价、分类、检测和分割任务在 Stage 5 的任务定义与评价基础后进入。两组稳定 ID 见 9.2 节。深度学习不是经典多视图几何（Multi-view Geometry）的前置条件。
 - Stage 8 的系统意识从早期项目开始，完整工业集成在二维视觉和成像基础之后进行。
 - Stage 9 与 Stage 10 是两条高级主修支线；三年内至少精通一条，另一条先达到理解层。
 - Stage 11 的项目证据贯穿三年，不是学完前十阶段后才开始。
@@ -57,6 +67,10 @@ flowchart LR
 | `M`（Master） | 必须掌握：能独立应用、解释关键选择、诊断常见错误，并产生可检查结果。 |
 | `U`（Understand） | 理解即可：能说明用途、读懂结果并在文档帮助下正确使用。 |
 | `A`（Advanced） | 后期深入：当前知道何时需要即可，固定视为选修，不进入公共主干进度分母。 |
+
+路线目标状态统一为：M 节点达到 `mastered`；U 节点达到 `understood` 或 `mastered`；A 节点默认达到 `understood` 即完成当前选修探索，但不参与公共阶段通过。项目若通过 `minimumStatus` 要求更高状态，以项目要求为准。
+
+只有 `hard` 子图参与拓扑顺序和环检测。`recommended` 可表达交错学习中的互相参照，不阻塞开始，也不参与拓扑排序；但仍禁止自依赖、重复边和引用不存在的 ID。
 
 ### 1.3 统一完成规则
 
@@ -75,6 +89,34 @@ flowchart LR
 - 阶段工时包含概念学习、练习、复盘及关联项目在该阶段的份额；项目表中的工时不是额外重复相加。
 - `A` 级深入内容不计入公共主干的基础工时。
 - 工时是范围而非截止日期；能否通过出口标准比“用了几周”更重要。
+
+### 1.5 关联项目与阶段门槛
+
+章节中的“关联项目”只说明该阶段会为项目贡献知识或证据，不等于必须完成其列出的所有项目。项目门槛只取下表的 `projectGates`；项目中间版本可以作为出口标准证据，但不提前把整个项目标为完成。
+
+稳定 Track ID 固定为公共主干 `track.common`、3D 工业分支 `track.industrial-3d` 与计算成像分支 `track.computational-imaging`。默认路线把前者设为 `master`、后两者分别设为 `master` 和 `understand`；交换高级主次时只交换两个高级 Track 的目标，不修改内容 ID 或既有证据。
+
+| 永久 checkpoint ID | 显示名 | 分类 | `entryGate` | `projectGates` | `categoryExitForTrackIds` | `retestAfterDays` |
+|---|---|---:|---|---|---|---:|
+| `stage.tooling-foundations` | Stage 0 | 0 | — | —；Pixel Lab 最小版本仅作出口证据 | `track.common` | 7 |
+| `stage.vision-math-immediate` | Stage 1A | 1 | — | — | — | — |
+| `stage.vision-math-geometry-optimization` | Stage 1B | 1 | `stage.vision-math-immediate` | `project.math-vision-lab` | `track.common` | 7 |
+| `stage.image-computing` | Stage 2 | 2 | — | `project.pixel-lab`；Classical Inspection v1 仅作出口证据 | `track.common` | 7 |
+| `stage.digital-image-processing` | Stage 3 | 3 | — | `project.classical-inspection` | `track.common` | 7 |
+| `stage.imaging-foundations` | Stage 4A | 4 | — | —；Imaging Quality Lab 最小版本仅作出口证据 | — | — |
+| `stage.industrial-imaging` | Stage 4B | 4 | `stage.imaging-foundations` | `project.imaging-quality-lab` | `track.common` | 7 |
+| `stage.imaging-quality-advanced` | Stage 4C | 4 | `stage.imaging-foundations` | —；PSF/MTF 证据作为出口 | `track.computational-imaging` | 7 |
+| `stage.planar-vision` | Stage 5 | 5 | `stage.imaging-foundations` | `project.planar-localization` | `track.common` | 7 |
+| `stage.geometric-vision` | Stage 6A | 6 | — | `project.calibrated-metrology`, `project.stereo-or-pnp` | — | — |
+| `stage.depth-reconstruction` | Stage 6B | 6 | `stage.geometric-vision` | `project.pointcloud-measurement` | `track.common` | 7 |
+| `stage.deep-learning-foundations` | Stage 7A | 7 | — | — | — | — |
+| `stage.modern-vision-tasks` | Stage 7B | 7 | `stage.deep-learning-foundations` | `project.learning-defect-inspection` | `track.common` | 7 |
+| `stage.industrial-vision` | Stage 8 | 8 | — | `project.industrial-vision-system` | `track.common` | 7 |
+| `stage.industrial-3d` | Stage 9 | 9 | `allOf(stage.depth-reconstruction, stage.industrial-vision)` | `project.industrial-3d-system`，仅当 `track.industrial-3d = master` | `track.industrial-3d` | 7 |
+| `stage.computational-imaging` | Stage 10 | 10 | `stage.imaging-quality-advanced` | `project.optics-algorithm`，仅当 `track.computational-imaging = master` | `track.computational-imaging` | 7 |
+| `stage.capstone` | Stage 11 | 11 | 公共 Stage 0–8 分类出口 `allOf`，再加 Stage 9/10 主修 checkpoint `anyOf` | `project.capstone` | `track.common` | 7 |
+
+`entryGate` 引用的是 checkpoint 的完整通过状态，不可用若干相关概念已理解来替代其项目、出口证据或复测。Stage 11 的公共 `allOf` 精确包含表中 `track.common` 的九个分类出口，高级 `anyOf` 的两个 leaf 还分别要求对应 Track 当前目标为 `master`；完整永久 ID 展开与 `ARCHITECTURE.md` 一致。
 
 ---
 
@@ -308,13 +350,13 @@ flowchart LR
 | `sensor.exposure-shutter` | 曝光、增益、滚动/全局快门（Exposure, Gain, Rolling/Global Shutter） | M | `imaging.formation-chain` | `sensor.noise-snr` | 用运动目标或仿真解释曝光时间、增益和形变/模糊的取舍。 |
 | `optics.industrial-lenses` | 工业镜头与远心镜头（Industrial/Telecentric Lens） | U | `optics.fov-magnification`, `optics.aperture-dof` | `industrial.metrology` | 根据测量任务说明普通、低畸变和远心方案的选择理由。 |
 | `illumination.geometry` | 明场、暗场、背光、同轴、偏振与颜色（Illumination Geometry） | M | `imaging.formation-chain` | `dip.enhancement` | 使用可获得光源拍摄同一目标，证明照明几何可改变缺陷可见性。 |
-| `imaging.system-resolution` | 光学—传感器—算法联合分辨率（System Resolution） | M | `imaging.psf-mtf`, `sensor.pixel-sampling` | `industrial.quality-grr` | 建立系统误差预算，避免把标称像素数直接当测量精度。 |
+| `imaging.system-resolution` | 光学—传感器—算法联合分辨率（System Resolution） | M | `sensor.pixel-sampling`, `optics.fov-magnification` | `imaging.psf-mtf`, `industrial.quality-grr` | 建立系统误差预算，避免把标称像素数直接当测量精度；PSF/MTF 在 4C 继续加深。 |
 | `imaging.emva1288-literacy` | 工业相机规格与 EMVA 1288 阅读能力 | U | `sensor.noise-snr`, `sensor.dynamic-range` | `industrial.camera-selection` | 从相机规格中解释灵敏度、噪声、动态范围等指标的用途和限制。 |
 
 ### 6.2 三次回访边界
 
-- **4A 最低必需成像：** `imaging.formation-chain`, `optics.fov-magnification`, `optics.aperture-dof`, `sensor.pixel-sampling`, `sensor.exposure-shutter`, `illumination.geometry`。完成后即可继续二维视觉。
-- **4B 工业成像：** `sensor.noise-snr`, `sensor.dynamic-range`, `optics.industrial-lenses`, `imaging.system-resolution`, `imaging.emva1288-literacy`。与 Stage 8 项目同步。
+- **4A 最低必需成像：** `imaging.formation-chain`, `optics.thin-lens`, `optics.fov-magnification`, `optics.aperture-dof`, `sensor.pixel-sampling`, `sensor.exposure-shutter`, `illumination.geometry`。完成后即可继续二维视觉。
+- **4B 工业成像：** `sensor.noise-snr`, `sensor.dynamic-range`, `optics.industrial-lenses`, `imaging.system-resolution`, `imaging.emva1288-literacy`。第一、二年先建立基础，Stage 8 项目中按任务补齐并完成最终复测；它不是进入 Stage 8 前必须整段完成的线性门槛。
 - **4C 高级成像质量：** `optics.aberration-diffraction`, `imaging.psf-mtf` 的深入实验。只作为 Stage 10 的硬前置，不阻塞 Stage 5–9。
 
 ### 6.3 阶段项目与出口标准
@@ -448,7 +490,12 @@ flowchart LR
 | `dl.transformers-vision` | Transformer 与 ViT 基础（Vision Transformer） | U | `dl.cnn-foundations` | `dl.training-evaluation` | 能解释 patch、attention 和数据规模取舍；无需追逐最新变体。 |
 | `dl.failure-reproducibility` | 泄漏、偏差、校准与可复现实验（Failure & Reproducibility） | M | `dl.training-evaluation`, `math.probability-statistics` | `imaging.formation-chain` | 发现至少一种泄漏或捷径风险，提供分组测试和失败样例。 |
 
-### 9.2 阶段项目与出口标准
+### 9.2 两个执行波次
+
+- **7A 训练基础：** `dl.tensor-autograd`, `dl.nn-backprop`, `dl.cnn-foundations`, `dl.loss-optimizer`。张量与反向传播可先启动；CNN 部分需先补 `dip.convolution-lsi`。
+- **7B 数据与视觉任务：** `dl.data-pipeline`, `dl.augmentation`, `dl.training-evaluation`, `dl.classification`, `dl.detection-yolo`, `dl.segmentation-unet`, `dl.transformers-vision`, `dl.failure-reproducibility`。进入前必须具备 `cv.task-framing` 与 `cv.evaluation-basics`，再按具体任务补 hard 前置。
+
+### 9.3 阶段项目与出口标准
 
 **项目：** `project.learning-defect-inspection`。对缺陷分类、检测或分割中的一个任务，先建立简单规则/传统视觉基线，再训练一个稳定模型。无 GPU 时缩小数据和模型、使用 CPU 完成最小训练，或只做预训练模型推理与严谨评价；不得因算力不足跳过数据质量和实验设计。
 
@@ -510,7 +557,7 @@ flowchart LR
 
 **目标：** 将 3D 几何、成像传感和工业验收结合，能为测量、定位、抓取或缺陷任务选择并验证合适的 3D 技术。
 
-**进入条件：** Stage 6B，`industrial.requirements`, `industrial.calibration`, `industrial.quality-grr`。
+**进入条件：** Stage 6B 与 Stage 8 checkpoint 均通过；这同时保证 `industrial.requirements`, `industrial.calibration`, `industrial.quality-grr` 及工业系统验收已经形成证据。
 
 **估算工时：** 90–130 小时。
 
@@ -539,10 +586,10 @@ flowchart LR
 
 **出口标准：**
 
-- 能根据任务而不是技术热度选择双目、结构光、激光三角或 ToF。
-- 完成一个从传感数据到物理量/位姿的闭环，并报告单位、坐标系、偏差和重复性。
-- 对遮挡、反光、透明/黑色材质、弱纹理和多路径等失败条件有验证或明确风险说明。
-- 项目结论清楚区分算法误差、标定误差、传感误差和机械/时序误差。
+- **U/M 共同：** 能根据任务而不是技术热度比较双目、结构光、激光三角与 ToF，并说明选择边界。
+- **U/M 共同：** 用公开数据、仿真或可用设备完成一个最小实验，正确标注单位、坐标系、数据来源和不能外推的硬件结论。
+- **仅主修 M：** 完成一个从传感数据到物理量/位姿的完整闭环，报告偏差、重复性以及遮挡、反光、透明/黑色材质、弱纹理或多路径等失败条件。
+- **仅主修 M：** 项目结论清楚区分算法误差、标定误差、传感误差和机械/时序误差。
 
 ---
 
@@ -578,10 +625,10 @@ flowchart LR
 
 **出口标准：**
 
-- 具备明确的前向模型、噪声假设、朴素基线、恢复方法和评价指标。
-- 能解释先验/正则化带来的收益和伪影，不把视觉锐利等同于信息真实。
-- 至少完成一次模型失配或分布外测试。
-- 学习式方法必须与物理/传统基线比较，且说明训练数据与真实成像链差异。
+- **U/M 共同：** 完成一个含明确前向模型、噪声假设、朴素基线和评价指标的最小实验。
+- **U/M 共同：** 能解释先验/正则化可能带来的收益和伪影，不把视觉锐利等同于信息真实。
+- **仅主修 M：** 完成恢复方法与朴素基线的可复现对照，并至少进行一次模型失配或分布外测试。
+- **仅主修 M：** 若采用学习式方法，必须与物理/传统基线比较，并说明训练数据与真实成像链差异。
 
 ---
 
@@ -589,7 +636,7 @@ flowchart LR
 
 **目标：** 将学习证据收束为一个完整、可复现、可答辩的机器视觉系统，并为科研、竞赛、实习或研究生阶段形成可信作品。
 
-**进入条件：** 公共主干 Stage 0–8 通过；Stage 9 或 Stage 10 至少一条达到 M 主修要求。早期迷你项目不受此条件限制。
+**进入条件：** 公共主干 Stage 0–3、Stage 4A/4B、Stage 5–8 通过；Stage 9 或 Stage 10 至少一条达到 M 主修要求。Stage 4C 只在选择 Stage 10 时成为前置，不阻塞以 Stage 9 为唯一高级主修的路线。早期迷你项目不受此条件限制。
 
 **估算工时：** 140–200 小时，其中大部分在第三年；阶段性项目已贯穿前两年。
 
@@ -684,7 +731,7 @@ flowchart LR
 | 第二年 B：现代视觉 | 17–30 | Stage 7 主干 | `project.learning-defect-inspection` | 能建立无明显泄漏的训练与评价闭环。 |
 | 第二年 C：深度与点云 | 31–42 | Stage 6B；Stage 4B 回访 | `project.pointcloud-measurement` v1 | 能完成深度/点云处理并报告几何误差。 |
 | 第二年 D：缓冲验收 | 43–44 | 补 hard 前置、整理作品；若第三年学习 Stage 10，完成 Stage 4C 的 PSF/MTF 最小实验 | 选一个项目做干净复现 | 前两年核心证据可从新环境重现，Stage 10 所需成像质量前置已有证据。 |
-| 第三年 A：工业系统 | 1–14 | Stage 8 | `project.industrial-vision-system` | 能从需求到部署验证一个二维系统。 |
+| 第三年 A：工业系统 | 1–14 | Stage 8；Stage 4B 最终回访 | `project.industrial-vision-system` | 能从需求到部署验证一个二维系统，并复测工业成像选型与误差预算。 |
 | 第三年 B：高级主修 | 15–28 | 先补齐 Stage 4C，再默认使 Stage 9 达到 M、Stage 10 达到 U；若计算成像优先则互换 | `project.industrial-3d-system` 或 `project.optics-algorithm` | 一个高级方向形成可答辩专业深度。 |
 | 第三年 C：综合项目 | 29–42 | Stage 11；按问题回补 Stage 6–10 | `project.capstone` | 完整系统通过冻结需求后的独立验收。 |
 | 第三年 D：答辩交付 | 43–44 | 复现、报告、演示与路线复盘 | 作品集定稿 | 技术结论、局限和个人贡献表达可信。 |
@@ -725,7 +772,7 @@ flowchart LR
 | 28–30 | `dip.frequency-domain`, `dip.enhancement`, S1-U3 梯度入门 | 空域/频域、增强和数值梯度检查 | 频谱解释正确；识别过增强；能解释图像梯度的方向与幅值。 |
 | 31–32 | `dip.edge-detection`, `dip.segmentation`, `dip.morphology`, `dip.quality-metrics` | 固定数据上的边缘/分割两种方案比较 | `cv.corners-keypoints` 的梯度与边缘 hard 前置达到 understood；通过 Stage 3 核心出口。 |
 | 33–34 | Stage 4A：成像链、薄透镜、FOV、像素采样 | 成像设计单 v1 | `optics.thin-lens` 达到 understood；能从目标尺寸推导 FOV 和像素当量。 |
-| 35–36 | Stage 4A：光圈/景深、曝光、照明 | `project.imaging-quality-lab` | 完成受控实验和成像失败故障树。 |
+| 35–36 | Stage 4A：光圈/景深、曝光、照明；Stage 4B 入口：SNR 与动态范围 | `project.imaging-quality-lab` | 完成受控实验和成像失败故障树；区分欠曝、可用区、饱和与主要噪声趋势。 |
 | 37–38 | `cv.corners-keypoints`, `cv.local-descriptors` | 平面定位 v0 | 比较两类关键点/描述子。 |
 | 39–40 | `cv.feature-matching`, S1-U5 最小二乘 | 平面定位 v1 | 匹配可视化、误配分析和残差检查。 |
 | 41–42 | `geometry.homography`, `robust.ransac` | 平面定位 v2 | 报告内点率、重投影误差和退化案例。 |
@@ -755,18 +802,19 @@ flowchart LR
 - M/U/A 是当前节点的目标学习深度，不改变其前置节点的状态门槛；项目可以在自身要求中另行指定某个知识必须“已掌握”。
 - `recommended` 缺失时允许开始；学习系统显示最小补充建议，并可把它列为备选任务，但不得抢占或阻塞已经可执行的主任务。
 - A 级节点永不阻塞公共主干，除非其后续研究项目明确把它提升为新的 M 目标。
-- 发生前置环或引用不存在 ID 时，路线数据视为无效，不允许静默忽略。
+- `hard` 子图发生前置环，或任一依赖引用不存在 ID、自依赖、重复时，路线数据视为无效，不允许静默忽略。
 
 ### 17.2 阶段解锁
 
-阶段完成必须同时满足：
+先计算当前路线的有效目标：M/U/A 分别默认映射为 `mastered / understood / understood`，高级 Track 的 `understand` 目标可以把该分支 M 节点降为 `understood`；若同一节点还属于目标为 `master` 的活动 Track，取较高要求。在此基础上，阶段或命名子波次 checkpoint 完成必须同时满足：
 
-1. 所有本阶段 M 节点均已达到 `mastered`，即全部必需掌握标准有通过证据覆盖且已由用户手动确认；
-2. 所有关联必做项目通过核心验收；
-3. 出口标准逐条有证据链接或明确的未通过标记；
-4. 完成一次间隔至少一周的复现/复测，而非仅保存第一次成功结果。
+1. 第 1.5 节声明的 `entryGate` 已满足；没有配置时视为满足；
+2. checkpoint 内所有已发布必修节点均达到有效目标；项目 `minimumStatus` 可以再提高相关节点门槛，A 节点只有在被当前必做项目提升时才参与；
+3. 第 1.5 节在当前 Track 目标下生效的 `projectGates` 均通过核心验收；“关联项目”本身不构成门槛；
+4. 当前 Track 目标下生效的每项必需出口标准均有通过证据。未通过标记只用于显示阻塞，不能满足完成条件；Stage 9/10 的 U/M 共同标准始终生效，主修级标准只在对应 Track 目标为 `master` 时生效；
+5. 若 checkpoint 配置 `retestAfterDays`，复测时间必须不早于首次同时满足前四项的 `initiallyEligibleAt + retestAfterDays`。第 1.5 节中 `categoryExitForTrackIds` 非空的分类出口统一配置为 7 天；只有该字段为空的中间 checkpoint 才可省略或另行配置复测。
 
-页面进度严格采用 `PRODUCT_SPEC.md` 定义的覆盖、理解、掌握三类比例，对当前路线已发布的必修节点按稳定 ID 去重后计算，不做主观加权。阶段是否通过是另一项判定：M 节点须达到“已掌握”，U 节点须达到“已理解”，必做项目和出口复现须通过；A 节点不进入公共主干的进度分母。
+任一前四项后来失效时，当前 `initiallyEligibleAt` 失效并在再次全部满足时重记；旧复测历史可以保留，但不能满足新一轮间隔。页面进度严格采用 `PRODUCT_SPEC.md` 定义的覆盖、理解、掌握三类比例，对当前路线已发布的必修节点按稳定 ID 去重后计算，不做主观加权。阶段是否通过是独立判定，因此 U 节点已达标时掌握进度不必为 `100%`。
 
 ### 17.3 每四周复盘
 
@@ -798,8 +846,8 @@ flowchart LR
 
 本路线不在规划阶段堆砌资源。仅保留以下三个已经核验、与对应主线直接相关的入口；本节链接最后核验日期为 **2026-08-26**：
 
-- [OpenCV 4.x 官方文档](https://docs.opencv.org/4.x/)：Stage 2–6 的 API、教程与模块参考；先理解数据契约和算法假设，再查具体函数。
-- [Stanford CS231A: Computer Vision, From 3D Perception to 3D Reconstruction and beyond](https://web.stanford.edu/class/cs231a/)：Stage 5–6 的几何视觉与 3D 课程参照；开始前应具备 Python、线性代数、微积分和基础概率统计。
+- [OpenCV 5.0：Camera Calibration](https://docs.opencv.org/5.0/tutorials/calib3d/camera_calibration/camera_calibration.html)：Stage 6 相机标定的官方实现与质量检查锚点。
+- [Stanford CS231A: Course Notes](https://web.stanford.edu/class/cs231a/course_notes.html)：Stage 5–6 的几何视觉与 3D 顺序参照；开始前应具备 Python、线性代数、微积分和基础概率统计。
 - [EMVA 1288 官方页面](https://www.emva.org/standards-technology/emva-1288/)：Stage 4B/8 的工业相机与传感器性能表述参照；当前目标是会正确阅读和比较规格，不要求首年完成标准级实验室测量。
 
 其余教材、课程、论文、数据集和工具链接应进入独立资源系统，并在加入前逐一验证；无法确认时只记录“待验证”，不得猜测 URL。
@@ -817,4 +865,4 @@ flowchart LR
 - [x] 所有阶段以可复现证据和失败分析验收，不以观看时长或页面勾选替代掌握。
 - [x] 提供每周 8–10 小时的三年波次和第一年 44 周安排。
 - [x] 中文解释保留关键英文术语，便于查阅官方文档和后续论文。
-- [x] 外部链接仅限已核验的 OpenCV、Stanford CS231A 与 EMVA 1288。
+- [x] 外部链接仅限已核验的 OpenCV、Stanford CS231A 与 EMVA 1288 官方入口。

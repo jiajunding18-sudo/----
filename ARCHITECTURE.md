@@ -53,12 +53,12 @@ MDX + 声明式 TypeScript catalog
 | 框架 | Next.js App Router | 使用 React Server/Client Component 边界，但最终输出纯静态站点 |
 | UI | React + TypeScript strict | 禁止无理由使用 `any`；领域类型由 schema 推导或显式定义 |
 | 样式 | Tailwind CSS + CSS variables | CSS variables 保存颜色、间距等设计 token；不引入第二套样式系统 |
-| 内容 | MDX + frontmatter | 正文适合公式、代码、图示与受控交互组件 |
+| 内容 | `@next/mdx` + MDX + `remark-frontmatter` | 正文适合公式、代码、图示与受控交互组件；元数据仍由构建脚本统一校验 |
 | 结构数据 | 声明式 TypeScript catalog | 只保存数据，不允许函数、网络请求或业务逻辑 |
 | 校验 | Zod | frontmatter、catalog、持久化数据和导入文件共用 schema |
 | 客户端状态 | Zustand | UI 只调用 store actions/selectors，不直接操作 LocalStorage |
 | 搜索 | 构建期索引 + Fuse.js | 客户端按需加载，无搜索服务器 |
-| 图谱 | 派生图模型；Phase 7 使用 React Flow + Dagre | 只读浏览，不建设图编辑器或图数据库 |
+| 图谱 | 派生图模型；Phase 7 使用 `@xyflow/react` + Dagre | 只读浏览，不建设图编辑器或图数据库 |
 | 单元测试 | Vitest + React Testing Library | 领域逻辑、schema、普通客户端组件 |
 | 端到端测试 | Playwright | 静态构建、持久化、关键流程、响应式和基础无障碍 |
 
@@ -170,7 +170,7 @@ export default nextConfig;
 以下工作只允许发生在 Node.js 构建环境或静态 Server Component 中：
 
 - 扫描 `content/`、解析 MDX/frontmatter 和 catalog。
-- 执行 Zod 校验、交叉引用校验、依赖环检测和内部链接检查。
+- 执行 Zod 校验、交叉引用校验、`hard` 子图环检测和内部链接检查。
 - 生成内容 manifest、静态路由参数、页面 metadata、搜索索引和图谱基础数据。
 - 渲染无交互的正文、目录、前置知识列表和资源列表。
 
@@ -207,8 +207,8 @@ export default nextConfig;
 1. 以稳定排序扫描所有概念和项目 MDX 文件。
 2. 解析 frontmatter；导入只含声明式数据的 track/stage/resource catalog。
 3. 使用 Zod 将源数据转换为规范化 `ContentCatalog`。
-4. 校验唯一 ID、唯一 slug、方向/阶段/资源/项目引用、依赖引用、掌握标准引用、Advanced 必须为 optional、项目执行路径与环境要求、内部链接与锚点。
-5. 对全部 dependency edge 检测自依赖和有向环；互相关联必须使用 `relatedConceptIds`，不能伪装成循环依赖。
+4. 校验唯一 ID、唯一 slug、方向/阶段/资源/项目引用、依赖引用、掌握标准引用、Advanced 必须为 optional、Track 目标约束、checkpoint/project gate、项目执行路径与环境要求、内部链接与锚点。
+5. 对全部 dependency edge 检测缺失引用、自依赖和重复边，并只对 `hard` 子图检测有向环；recommended edge 不参与拓扑排序。无方向的关联必须使用 `relatedConceptIds`。
 6. 生成 `.generated/content-manifest.ts`，其中只包含静态 MDX import、规范化 metadata 和 ID/slug 索引。
 7. 生成 `public/_generated/search-index.json` 和图谱基础数据。
 8. 任一错误都以“文件路径 + 字段路径 + 原因”终止构建；不得跳过坏内容继续发布。
@@ -230,7 +230,7 @@ MDX 由 Next.js 的本地 MDX 支持编译，frontmatter 通过 remark frontmatt
 
 项目页必须具备：目标、所需知识、难度、时间范围、技术栈、步骤、数据来源、验收标准和可形成的作品/简历成果。
 
-资源链接状态必须是 `verified` 或 `pending`。`pending` 可以没有 URL；禁止用猜测 URL 填充。
+资源链接状态必须是 `verified`、`pending` 或 `broken`。`pending` 可以没有 URL，禁止用猜测 URL 填充；`broken` 必须保留最后已知 URL 和检查说明，有已验证替代时引用替代资源，暂时没有时在说明中明确记录，不能静默删除历史。
 
 ## 6. 稳定 ID 与 slug 规则
 
@@ -267,6 +267,7 @@ type MasteryCriterionId = string;
 type EvidenceId = string;
 
 type DependencyKind = "hard" | "recommended";
+type TrackGoal = "understand" | "master";
 
 interface ConceptDependency {
   conceptId: ConceptId;
@@ -334,37 +335,67 @@ interface ConceptMeta {
 依赖语义：
 
 - `hard`：进入该概念前应达到的最低条件。前置概念为 `understood` 或 `mastered` 时即满足。
-- `recommended`：有帮助但不影响就绪判断，UI 仅给出建议。
+- `recommended`：有帮助但不影响就绪判断，UI 仅给出建议；不参与拓扑排序或环阻塞。
 - 硬前置未满足时仍允许打开和学习目标页面；系统显示“尚未就绪”及缺失项，不做强制锁页。
 - `relatedConceptIds` 表示无方向关系，不参与就绪判断和进度顺序。
 - schema 强制 `targetDepth: "advanced"` 与 `requiredness: "optional"` 同时出现；A 节点不得成为公共主进度的必修分母。
+- 路线所称 DAG 专指 `hard` 子图；recommended edge 仍须通过引用、重复边和自依赖校验，但允许为交错学习形成互相参照。
+- 路线目标先按 `master → mastered`、`understand → understood`、`advanced → understood` 映射；Track 的 `understand` 目标可把该分支 M 节点的当前要求降为 `understood`，同一节点属于多个当前 Track 时取较高要求；项目的 `minimumStatus` 可以再提高当前上下文门槛。
 
 ### 7.2 Stage、资源和项目
 
 ```ts
+type TrackGoalCondition =
+  | { kind: "always" }
+  | { kind: "track-goal"; trackId: TrackId; minimumGoal: TrackGoal };
+
 interface StageExitCriterion {
   id: string;
   description: string;
   required: boolean;
+  when: TrackGoalCondition;
 }
+
+type StageCategoryOrder = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
 interface TrackDefinition {
   id: TrackId;
   order: number;
   title: string;
   summary: string;
-  stageIds: StageId[];
+  kind: "common" | "advanced-branch";
+  defaultGoal: TrackGoal;
+  exclusiveMasteryGroup?: string;
 }
+
+interface StageProjectGate {
+  projectId: ProjectId;
+  when: TrackGoalCondition;
+}
+
+type CheckpointGate =
+  | { kind: "checkpoint"; stageId: StageId }
+  | {
+      kind: "track-goal-checkpoint";
+      stageId: StageId;
+      trackId: TrackId;
+      minimumTrackGoal: TrackGoal;
+    }
+  | { kind: "allOf"; gates: [CheckpointGate, ...CheckpointGate[]] }
+  | { kind: "anyOf"; gates: [CheckpointGate, ...CheckpointGate[]] };
 
 interface StageDefinition {
   id: StageId;
+  categoryOrder: StageCategoryOrder;
   order: number;
   title: string;
   summary: string;
   trackIds: TrackId[];
+  categoryExitForTrackIds: TrackId[];
   outcomes: string[];
   estimatedHours: { min: number; max: number };
-  requiredProjectIds: ProjectId[];
+  projectGates: StageProjectGate[];
+  entryGate?: CheckpointGate;
   exitCriteria: StageExitCriterion[];
   retestAfterDays?: number;
 }
@@ -379,7 +410,7 @@ type ResourceType =
   | "paper"
   | "dataset";
 
-interface Resource {
+interface ResourceBase {
   id: ResourceId;
   title: string;
   authorOrOrganization?: string;
@@ -389,11 +420,31 @@ interface Resource {
   language: "zh-CN" | "en" | "bilingual" | "other";
   reason: string;
   recommendedParts?: string[];
-  url?: string;
-  verification: "verified" | "pending";
-  verifiedAt?: string; // YYYY-MM-DD
   aliases?: string[];
 }
+
+type Resource = ResourceBase &
+  (
+    | {
+        verification: "verified";
+        url: string;
+        verifiedAt: string; // YYYY-MM-DD
+        lastCheckedAt: string;
+      }
+    | {
+        verification: "pending";
+        url?: string;
+        lastCheckedAt?: string;
+        verificationNote: string;
+      }
+    | {
+        verification: "broken";
+        url: string;
+        lastCheckedAt: string;
+        verificationNote: string;
+        replacementResourceId?: ResourceId;
+      }
+  );
 
 interface ProjectConceptRequirement {
   conceptId: ConceptId;
@@ -405,6 +456,12 @@ interface ProjectConceptRequirement {
 interface ProjectAcceptanceCriterion {
   id: string;
   description: string;
+  required: boolean;
+}
+
+interface ProjectResourceRef {
+  resourceId: ResourceId;
+  role: "dataset" | "documentation" | "course" | "repository" | "reference";
   required: boolean;
 }
 
@@ -437,7 +494,7 @@ interface ProjectMeta {
   conceptRequirements: ProjectConceptRequirement[];
   estimatedHours: { min: number; max: number };
   techStack: string[];
-  datasetResourceIds: ResourceId[];
+  resources: ProjectResourceRef[];
   environmentRequirements: ProjectEnvironmentRequirement[];
   executionPaths: ProjectExecutionPath[];
   acceptanceCriteria: ProjectAcceptanceCriterion[];
@@ -451,6 +508,20 @@ interface ProjectMeta {
 ```
 
 概念之间的 `hard` 前置统一由 `understood` 或 `mastered` 满足；项目可以通过 `minimumStatus` 对个别知识要求 `mastered`。项目完成不能自动把关联概念设为 `mastered`，只能成为用户可选择引用的证据候选。
+
+Stage→Track 关系只维护在 `StageDefinition.trackIds`；`TrackDefinition` 的阶段列表按 `stage.order` 派生，不双向保存。`categoryExitForTrackIds` 必须是 `trackIds` 的子集。资源关联也只从 `ConceptMeta.resourceIds` 与 `ProjectMeta.resources` 单向维护，`Resource` 不保存反向实体数组；Resources 页面和搜索索引使用构建期反向索引。
+
+这里的 `StageDefinition` 表示可执行 checkpoint，而不是把数字分类强行当作线性阶段。单波次分类只有一个 checkpoint；Stage 1/4/6/7 分别可有 A/B/C checkpoint，共享 `categoryOrder`，`ConceptMeta.stageId` 指向精确 checkpoint。`categoryExitForTrackIds` 标记它在哪些 Track 中是分类出口；非空的分类出口按 `ROADMAP.md` 配置 7 天复测，纯中间 checkpoint 可省略复测。
+
+默认 Track catalog 使用 `track.common = master`、`track.industrial-3d = master`、`track.computational-imaging = understand`。所有 `kind: "common"` 的 Track 在 catalog 和用户偏好中都固定为 `master`，不能被设置、导入或迁移为 `understand`；两个高级 Track 共享同一 `exclusiveMasteryGroup`，catalog 默认值和 `UserPreferences.trackGoals` 都必须保证组内恰有一个当前目标为 `master`。用户交换主次只更新高级分支的 `trackGoals`，既有状态与证据不变；`focusedTrackIds` 只影响呈现和同层推荐顺序，不改变完整路线成员。
+
+`CheckpointGate` 是无法只靠概念 hard edge 表达的阶段入口唯一事实来源：无条件 leaf 只含 checkpoint ID，条件 leaf 必须同时包含 Track ID 和最低目标；`allOf / anyOf` 至少各含一个子 gate。目标次序固定为 `understand < master`。条件 leaf 只有在所指 checkpoint 已通过且 Track 目标达到 `minimumTrackGoal` 时才满足；不满足 Track 条件时在 `anyOf` 中返回 false，而不是被忽略。
+
+`ROADMAP.md` 第 1.5 节是 checkpoint gate 的 catalog 契约：1B 引用 1A；4B、4C 和 Stage 5 引用 4A；6B 引用 6A；7B 引用 7A；Stage 9 对 Stage 6B 与 Stage 8 使用 `allOf`。`stage.computational-imaging.entryGate` 必须直接引用 `stage.imaging-quality-advanced`，不能用“相关概念已理解”代替 Stage 4C 的出口证据和复测。
+
+`stage.capstone.entryGate` 的根节点是 `allOf`：它包含公共出口 `stage.tooling-foundations`、`stage.vision-math-geometry-optimization`、`stage.image-computing`、`stage.digital-image-processing`、`stage.industrial-imaging`、`stage.planar-vision`、`stage.depth-reconstruction`、`stage.modern-vision-tasks`、`stage.industrial-vision`，并包含一个由“`stage.industrial-3d` 且对应 Track 目标为 `master`”与“`stage.computational-imaging` 且对应 Track 目标为 `master`”组成的 `anyOf`。因此以 Stage 9 为主修时不额外要求 Stage 4C；以 Stage 10 为主修时会通过 Stage 10 的入口门槛要求 Stage 4C。
+
+`StageExitCriterion.when` 与 `StageProjectGate.when` 使用同一条件语义。公共 checkpoint 的必需出口标准为 `always`；高级副修 checkpoint 只执行 `always` 的 U/M 共同标准，目标达到 `master` 后才额外执行对应的主修级标准和项目门槛。
 
 ### 7.3 个人进度、证据和学习日志
 
@@ -508,6 +579,7 @@ interface ConceptProgress {
 interface ProjectProgress {
   status: "not_started" | "in_progress" | "paused" | "completed";
   note: string;
+  nextAction?: string;
   selectedExecutionPathId?: string;
   environmentChecks: Record<string, boolean>;
   prerequisiteOverride?: {
@@ -520,6 +592,8 @@ interface ProjectProgress {
     title: string;
     reference?: string;
     note?: string;
+    createdAt: string;
+    updatedAt: string;
   }>;
   unverifiedAssumptions: string[];
   completionConfirmation?: {
@@ -548,6 +622,7 @@ interface StudyLog {
 
 interface UserPreferences {
   focusedTrackIds: TrackId[];
+  trackGoals: Record<TrackId, TrackGoal>;
   activeStageId?: StageId;
   weeklyTargetMinutes: number;
   todayAvailableMinutes?: number;
@@ -559,8 +634,8 @@ interface UserPreferences {
 
 interface StageCheckpoint {
   criterionEvidence: Record<string, string[]>;
+  initiallyEligibleAt?: string;
   retestedAt?: string;
-  confirmedAt?: string;
   updatedAt: string;
 }
 
@@ -587,7 +662,11 @@ interface LearningStateV1 {
 - 从 `mastered` 回退时保留证据、`firstMasteredAt` 和 `lastMasteredAt`，但清除当前 `masteryConfirmation`；以后需重新手动确认。再次掌握只更新 `lastMasteredAt`。
 - 只有 `result: "passed"` 的证据参与必需标准覆盖判断；失败证据保留用于反思，但不授予掌握资格。
 - 进度汇总必须分别计算覆盖、理解、掌握三类数量与比例；三类主进度始终对去重后的已发布必修概念等权计数，不得合并成单一“完成率”或加权。
-- Stage 通过由 `getStageReadiness` 统一判断：该阶段 M 节点已 `mastered`、U 节点已 `understood`、必做项目已完成、必需出口标准有证据，且需要复测时 `retestedAt` 满足间隔。页面不得仅凭节点百分比宣告阶段通过。
+- 路线目标状态由 `getRouteRequiredStatus` 基于学习深度和 `trackGoals` 统一计算；同一概念跨 Track 时取较高要求，项目要求可以再提高门槛。U 节点或副修 Track 中被降为 U 要求的 M 节点达到 `understood` 后不再作为普通路线任务重复推荐，但若当前项目要求 `mastered`，仍作为该项目缺口推荐。
+- `in_progress` 项目必须保存去除首尾空白后非空的 `nextAction`；转为 `paused` 时保留最近下一动作，`not_started` 或 `completed` 可以省略。开始 action 必须同时保存有效的 `selectedExecutionPathId`。
+- 项目环境准备度只由所选执行路径引用且标记为必需的环境要求计算；未选择路径时为 `null` 并返回每条路径的独立准备度。首选硬件路径的缺口不得污染消费级设备、公开数据或仿真路径。
+- Stage 通过由 `getStageReadiness` 统一判断：`entryGate` 已满足；checkpoint 内已发布必修节点达到当前 Track 的有效目标；当前 Track 下生效的 `projectGates` 已完成；这些项目的 hard `conceptRequirements` 也达到各自 `minimumStatus`；当前 Track 下生效的必需出口标准有通过证据；若配置复测则间隔已满足。项目通过覆盖操作开始或完成，不能绕过阶段的项目知识门槛；A 节点仅在生效项目以 hard 要求提升时参与。页面不得仅凭节点百分比宣告阶段通过。
+- 前述条件首次同时成立时写入 `initiallyEligibleAt`；任一条件失效时该锚点失效。配置 `retestAfterDays` 时，只有 `retestedAt >= initiallyEligibleAt + retestAfterDays` 才通过。`ROADMAP.md` 的完整 Stage 0–11 最终 checkpoint 统一使用 7 天，中间波次可省略或单独配置。
 
 ## 8. 派生服务接口
 
@@ -599,6 +678,19 @@ interface DependencyReadiness {
   missingHard: ConceptId[];
   missingRecommended: ConceptId[];
 }
+
+type RequiredConceptStatus = "understood" | "mastered";
+
+function getRouteRequiredStatus(
+  concept: ConceptMeta,
+  tracks: TrackDefinition[],
+  preferences: UserPreferences,
+): RequiredConceptStatus;
+
+function hasReachedRequiredStatus(
+  status: LearningStatus,
+  requiredStatus: RequiredConceptStatus,
+): boolean;
 
 function getConceptReadiness(
   concept: ConceptMeta,
@@ -618,9 +710,17 @@ function getMasteryEligibility(
 
 interface ProjectReadiness {
   knowledgeReady: boolean;
-  environmentReady: boolean;
+  environmentReady: boolean | null; // 未选择路径时为 null
+  selectedExecutionPathId?: string;
   missingHardConceptIds: ConceptId[];
   missingRecommendedConceptIds: ConceptId[];
+  missingEnvironmentRequirementIds: string[]; // 只含所选路径的缺口
+  pathReadiness: ProjectExecutionPathReadiness[];
+}
+
+interface ProjectExecutionPathReadiness {
+  pathId: string;
+  ready: boolean;
   missingEnvironmentRequirementIds: string[];
 }
 
@@ -635,10 +735,16 @@ interface ProjectCompletionEligibility {
   hasDeliverable: boolean;
 }
 
+function getProjectCompletionEligibility(
+  project: ProjectMeta,
+  progress: ProjectProgress,
+): ProjectCompletionEligibility;
+
 interface ProgressSummary {
   scope:
     | { kind: "route" }
     | { kind: "stage"; stageId: StageId }
+    | { kind: "stage-category"; categoryOrder: StageCategoryOrder }
     | { kind: "track"; trackId: TrackId };
   total: number;
   started: number;
@@ -657,8 +763,12 @@ function summarizeProgress(
 
 interface StageReadiness {
   ready: boolean;
+  entryReady: boolean;
+  unmetEntryStageIds: StageId[];
   unmetMasterConceptIds: ConceptId[];
   unmetUnderstandConceptIds: ConceptId[];
+  unmetProjectRequirementConceptIds: ConceptId[];
+  effectiveRequiredProjectIds: ProjectId[];
   incompleteProjectIds: ProjectId[];
   unmetExitCriterionIds: string[];
   retestDue: boolean;
@@ -666,7 +776,10 @@ interface StageReadiness {
 
 function getStageReadiness(
   stage: StageDefinition,
+  stages: StageDefinition[],
   concepts: ConceptMeta[],
+  projects: ProjectMeta[],
+  tracks: TrackDefinition[],
   state: LearningStateV1,
 ): StageReadiness;
 
@@ -680,7 +793,11 @@ interface RecommendationTaskBase {
 
 type RecommendationTask = RecommendationTaskBase &
   (
-    | { kind: "concept"; targetId: ConceptId }
+    | {
+        kind: "concept";
+        targetId: ConceptId;
+        requiredStatus: RequiredConceptStatus;
+      }
     | { kind: "project"; targetId: ProjectId }
     | { kind: "stage-transition"; targetId: StageId }
     | { kind: "review"; targetId?: StageId }
@@ -699,7 +816,7 @@ type RecommendationResult =
 
 `summarizeProgress` 先按 scope 筛选 `published + required` 概念并按稳定 ID 去重；`total === 0` 时三个 ratio 都返回 `null`，UI 显示“暂无必修内容”，不得伪装成 0% 或 100%。
 
-推荐服务必须按 `PRODUCT_SPEC.md` 的确定顺序解析 `activeStageId`，并输出一个主任务和最多三个备选。排序严格遵循：当前焦点且状态为 `learning` → 其他学习中节点 → 主项目的必需知识或首个可执行前置 → 当前阶段必修 → 当前重点方向必修 → 选修；同层再按 recommended 缺口、可用时间、路线优先级、拓扑顺序和稳定 ID 排序。recommended 缺口只能成为提示或备选补充任务，不能抢占已就绪主任务。没有普通候选时依次处理数据错误、阶段项目、下一阶段、综合项目/周回顾和选修内容。v1 不使用 AI、随机数或黑盒评分。
+推荐服务必须按 `PRODUCT_SPEC.md` 的确定顺序解析 `activeStageId`，并输出一个主任务和最多三个备选。每个概念候选先按推荐上下文计算 `requiredStatus`：普通路线使用 `getRouteRequiredStatus(concept, tracks, preferences)`，主项目缺口再以 `minimumStatus` 提高门槛；达到该门槛的候选必须排除。候选所属 Stage 的 `entryGate` 必须先满足；未满足时沿 gate 返回第一个未通过 checkpoint 的可执行知识或项目，不能把 Stage 11 内容提前推荐。排序严格遵循：当前焦点且状态为 `learning` → 其他学习中节点 → 主项目的必需知识或首个可执行前置 → 当前阶段必修 → 当前重点方向必修 → 选修；同层再按 recommended 缺口、可用时间、路线优先级、`hard` 子图拓扑顺序和稳定 ID 排序。recommended 缺口只能成为提示或备选补充任务，不能抢占已就绪主任务。没有显式主项目时按 `updatedAt` 降序选择进行中项目，并以稳定 `Project.id` 字典序打破同时间戳平局。没有普通候选时依次处理数据/门槛错误、未满足的阶段入口、阶段项目、下一阶段、综合项目/周回顾和选修内容。v1 不使用 AI、随机数或黑盒评分。
 
 ## 9. Zustand 与持久化适配器
 
@@ -745,6 +862,14 @@ interface ImportReport {
   unchanged: number;
   orphanConceptIds: ConceptId[];
   orphanProjectIds: ProjectId[];
+  orphanStageIds: StageId[];
+  orphanTrackIds: TrackId[];
+  trackGoalConflicts: Array<{
+    exclusiveMasteryGroup: string;
+    activeTrackIds: TrackId[];
+    storedMasterTrackIds: TrackId[];
+    reason: "missing-master" | "multiple-masters" | "restored-orphan";
+  }>;
 }
 
 type StorageLoadResult =
@@ -771,14 +896,15 @@ LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` �
 - 每次破坏性 schema 变化增加版本，并实现连续、可单测的 `vN → vN+1` 迁移；不得跨版本猜测转换。
 - 迁移前先 Zod 校验旧 schema，迁移后再校验新 schema。
 - 读到比当前应用更新的版本时进入只读恢复状态，绝不降级覆盖。
-- 内容中已不存在的实体 ID 不是损坏数据：记录继续保留为 orphan，排除在当前统计之外，并在数据管理页列出。
+- 内容中已不存在的 Concept、Project、Stage 或 Track ID 不是损坏数据：记录继续保留为 orphan，排除在当前统计、目标计算或 readiness 之外，并在数据管理页列出。内容新增 Track 时，缺失目标只有在结果仍满足组约束时才用 catalog `defaultGoal` 补入有效视图；删除 Track 时保留未知 `trackGoals` 键但不生效。公共 Track 的有效目标始终强制为 `master`；导入文件若显式违反该不变量则校验失败，而不是静默改写。
+- Track 被删除、恢复或跨内容版本导入后，若活动 `exclusiveMasteryGroup` 出现零个或多个 `master`，孤立键不得自动重新生效。已知内容升级必须携带可测试的 Track goal 迁移并在结果摘要中说明继任主修；未知组合进入“路线偏好待修复”状态，`ImportReport.trackGoalConflicts` 列出冲突，catalog 默认值只作为建议。用户确认恰一主修前不得写回偏好或生成依赖该路线的推荐，但全部原始目标仍可导出恢复。
 
 ### 9.4 导入、导出和损坏恢复
 
 - 导出使用 `ExportEnvelopeV1`，文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
 - 导入先解析、识别 app、迁移、Zod 校验，再显示 `ImportReport`；用户确认前不得写入主 storage key。
-- 默认 `merge`：同一稳定记录 ID 采用 `updatedAt` 较新者，不能按状态高低合并，因此用户主动降级会被保留；证据、交付物和日志按自身稳定 ID 合并。
-- 可选 `replace`：完全替换现有用户状态，必须二次确认，并先提供当前状态的可下载备份。
+- 默认 `merge`：`UserPreferences` 整体按 `updatedAt` 选择；Concept、Project 与 StageCheckpoint 记录按其 Record key 和 `updatedAt` 合并，不能按状态高低合并，因此用户主动降级会被保留；证据、交付物和日志再按自身稳定 ID 与 `updatedAt` 合并。
+- 可选 `replace`：完全替换现有用户状态。提交前必须先成功生成可下载的 `ExportEnvelopeV1` 或写入独立 recovery key，再进行二次确认；备份生成/持久化失败时 action 必须拒绝替换。
 - 合并和替换完成后都要再次校验，并重新计算进度、阶段/项目就绪度和推荐。
 - JSON 解析失败、schema 不合法或版本过新时，不得向主 storage key 写入任何内容。
 - 若主数据损坏，应用保留原始字符串于内存并提供“下载原始数据”“导入备份”“明确清空并重新开始”三种动作；用户做出选择前禁用持久化写入。
@@ -851,12 +977,12 @@ interface KnowledgeGraphEdge {
 - 图节点来自 `ConceptMeta`，边只来自 `dependencies`，方向固定为“前置 → 后续”。
 - `dependent concepts` 通过反向邻接表派生，内容中不得再维护一份。
 - 个人状态只在运行时叠加到节点视图，不写回静态图数据。
-- build-time 校验缺失节点、自环、重复边和有向环。
+- build-time 校验全部边的缺失节点、自环和重复边，并校验 `hard` 子图无有向环；recommended edge 可形成不阻塞的交错参照。
 
 ### 11.2 展示策略
 
 - 概念页先提供可访问的 DOM 前置/后续列表，图谱不是唯一导航。
-- Phase 7 使用动态加载的 React Flow 和 Dagre 只读布局；不实现拖拽保存、连线编辑或协作。
+- Phase 7 使用动态加载的 `@xyflow/react` 和 Dagre 只读布局；不实现拖拽保存、连线编辑或协作。
 - 默认显示当前节点一至两跳，支持按 Stage、dependency kind 和掌握状态筛选；全局图是辅助总览，不默认展示无法阅读的全部节点。
 - 图中的颜色不能是状态的唯一表达，节点同时显示文字/图标；键盘用户可通过等价列表完成导航。
 
@@ -869,10 +995,13 @@ interface KnowledgeGraphEdge {
 必须覆盖：
 
 - frontmatter 和 catalog schema 成功/失败样例。
-- 重复 ID、重复 slug、坏引用、self dependency、dependency cycle。
+- 重复 ID、重复 slug、坏引用、self dependency、重复 dependency edge、`hard` dependency cycle。
 - mastery criterion ID 唯一性、证据引用不存在标准。
-- `advanced + required`、不存在的 Track/Stage、项目执行路径引用不存在环境要求等不合法组合。
-- 内部页面链接和锚点存在；外部链接只做 URL 格式校验，在线可达性由独立命令检查，避免构建受网络波动影响。
+- `advanced + required`、不存在的 Track/Stage、`categoryExitForTrackIds` 不是 `trackIds` 子集等不合法组合。
+- `projectGates`、条件出口标准与 `entryGate` 的坏引用；checkpoint leaf 的字段组合、空 `allOf / anyOf`、自引用和间接 gate 环；Stage 10/11 的门槛与 `ROADMAP.md` 的永久 checkpoint ID 一致。
+- 所有 common Track 的 catalog/用户目标固定为 `master`；每个 `exclusiveMasteryGroup` 恰有一个高级 Track 目标为 `master`；主/副方向交换不改变实体 ID。
+- 项目执行路径只引用本项目存在的环境要求；每个已发布项目至少有一条完整执行路径，涉及专业硬件时至少有一条 `consumer-hardware`、`public-data` 或 `simulation` 替代路径，并声明可验收的 `evidenceBoundary`。
+- 内部页面链接和锚点存在；资源判别联合的状态组合有效，`replacementResourceId` 引用存在且不自指；外部链接只做 URL 格式校验，在线可达性由独立命令检查，避免构建受网络波动影响。
 - 所有 `published` 与 `hidden` 内容产生静态内容路由；`retired` 产生迁移/说明页，`draft` 不产生公开路由。
 
 ### 12.2 领域单元测试
@@ -881,15 +1010,17 @@ interface KnowledgeGraphEdge {
 
 - `understood` 和 `mastered` 都满足 hard dependency；其他状态不满足。
 - recommended dependency 不阻断就绪。
+- U/A 路线节点达到 `understood` 后不再重复推荐；副修 Track 的 M 节点按 U 要求判断，主/副方向交换后节点、项目与出口标准要求随之交换，common Track 不能被降级；高级组因 Track 删除/恢复出现零个或多个主修时进入待确认修复且不生成路线推荐；项目 `minimumStatus: mastered` 能在相同节点上提高当前任务和阶段门槛。
 - hard dependency 未满足时仍可访问，但 readiness 返回缺失项。
 - 证据未覆盖全部 required criterion 时不能确认掌握。
 - `result: "failed"` 的证据不计入覆盖，降级后保留首次/最近掌握历史时间戳。
 - 证据覆盖后仍必须显式确认，不能自动进入 `mastered`。
 - 删除最后覆盖证据时拒绝操作或在已确认事务中降级。
-- 三类等权进度、零分母的 `null`、Stage 出口/复测、项目知识与环境就绪度和下一步推荐。
+- 三类等权进度、零分母的 `null`、条件出口标准、Stage 10 的 4C 门槛、Stage 11 的公共 `allOf` 加高级方向 `anyOf` 门槛；`entryGate` 未满足时不得写入 `initiallyEligibleAt`，并覆盖锚点失效重记与复测间隔边界。
+- 项目知识就绪度；选择不同执行路径时环境缺口隔离；`in_progress` 缺少非空 `nextAction` 或有效路径时拒绝保存。
 - 项目覆盖开始记录当时缺口；只有必需验收项、至少一个交付物和手动确认同时满足时才能完成。
 - 每个持久化 schema 迁移、未知新版本、orphan 记录和坏 JSON。
-- 导出/导入 round trip 保持语义一致；默认 merge 保留 `updatedAt` 较新的主动降级，replace 必须走备份与确认分支。
+- 导出/导入 round trip 保持语义一致；默认 merge 覆盖 preferences、Concept/Project/StageCheckpoint、证据、交付物与日志，并保留 `updatedAt` 较新的主动降级；orphan Stage/Track 被保留且不参与当前计算，新增、删除与恢复 Track 覆盖无冲突回落和待确认修复分支；replace 必须在备份成功后走二次确认分支。
 
 ### 12.3 Playwright 关键流程
 
@@ -901,7 +1032,7 @@ interface KnowledgeGraphEdge {
 4. 未覆盖全部必需标准不能掌握；补齐通过证据并手动确认后才成为 `mastered`。
 5. 默认合并导入、显式替换导入和导出恢复均符合预览摘要；损坏文件不会覆盖已有数据。
 6. 中文、英文缩写、公式和工具搜索能进入正确页面/锚点。
-7. 项目显示已满足和缺失的 hard/recommended 知识、环境检查及替代路径；覆盖开始和手动完成确认可追溯。
+7. 项目显示已满足和缺失的 hard/recommended 知识、各执行路径的环境检查及替代路径；选择公开数据/仿真路径不会被首选硬件缺口阻塞；覆盖开始、下一动作和手动完成确认可追溯。
 8. Graph 节点可导航，并存在等价文本列表。
 9. 1440px 桌面与 390px 移动视口没有阻断性布局问题。
 10. 核心流程可用键盘操作，关键页面通过自动化基础无障碍检查。
@@ -935,7 +1066,7 @@ interface KnowledgeGraphEdge {
 
 具体命令可随工具主版本做机械调整，但这些脚本名称和语义是开发阶段的公共接口。Playwright 的 `webServer` 必须启动 `out/` 的本地静态服务器，以验证真实 static export，而不只验证 `next dev`。
 
-每个 Phase 完成前至少运行 `npm run check:full`，检查浏览器 console、桌面和移动关键页面，并记录失败与修复结果。外链在线检查可单独运行，不因第三方临时不可用阻断所有本地开发；确认失效的链接必须改为 `pending` 或替换。
+Phase 0 不初始化应用，也不运行尚不存在的 npm 脚本；它以文档结构、术语、内部引用、`hard` 依赖 DAG 和已写入外链检查作为验收。从 Phase 1 项目脚本建立后，每个应用开发 Phase 至少运行 `npm run check:full`，检查浏览器 console、桌面和移动关键页面，并记录失败与修复结果。外链在线检查可单独运行，不因第三方临时不可用阻断所有本地开发；确认失效的链接必须标记为 `broken` 并保留历史，或新增已验证的替代资源。
 
 ## 14. 部署与数据边界
 
@@ -953,7 +1084,7 @@ interface KnowledgeGraphEdge {
 以下能力不属于 v1，也不得以“以后可能需要”为理由提前搭建：
 
 - 账号、应用内认证、数据库、API 层、微服务、消息队列。
-- 自动跨设备同步、冲突合并、CRDT、事件溯源。
+- 自动跨设备同步及其多主冲突合并、CRDT、事件溯源；不影响本地 JSON 导入的确定性 merge。
 - Headless CMS、所见即所得正式内容编辑器、运行时远程 MDX。
 - Redux、复杂领域框架、依赖注入容器、多 package monorepo。
 - Neo4j、图数据库、GraphQL、可编辑图谱和复杂自动布局。

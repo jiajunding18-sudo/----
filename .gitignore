@@ -1,0 +1,30 @@
+# dependencies
+/node_modules/
+
+# Next.js
+/.next/
+/out/
+/next-env.d.ts
+*.tsbuildinfo
+
+# generated content
+/.generated/*
+!/.generated/.gitkeep
+/public/_generated/*
+!/public/_generated/.gitkeep
+
+# test output
+/coverage/
+/playwright-report/
+/test-results/
+
+# local configuration
+.env*
+!.env.example
+*.log
+
+# editor and operating system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

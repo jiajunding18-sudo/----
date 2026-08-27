@@ -184,9 +184,29 @@ function validateConceptReferences({
   readonly issues: ContentValidationIssue[];
 }) {
   const masteryCriterionRegistry = new Map<string, EntityIdentity>();
+  const conceptOrderRegistryByStage = new Map<
+    string,
+    Map<number, EntityIdentity>
+  >();
 
   concepts.forEach((concept) => {
     const identity = conceptIdentity(concept);
+    const stageOrderRegistry =
+      conceptOrderRegistryByStage.get(concept.meta.stageId) ??
+      new Map<number, EntityIdentity>();
+    const existingOrder = stageOrderRegistry.get(concept.meta.order);
+    if (existingOrder) {
+      issues.push({
+        sourcePath: concept.sourcePath,
+        fieldPath: "order",
+        entityId: concept.meta.id,
+        slug: concept.meta.slug,
+        message: `Stage "${concept.meta.stageId}" 内的 Concept order ${concept.meta.order} 与 ${existingOrder.sourcePath}:order 重复，推荐路线顺序不唯一`,
+      });
+    } else {
+      stageOrderRegistry.set(concept.meta.order, identity);
+      conceptOrderRegistryByStage.set(concept.meta.stageId, stageOrderRegistry);
+    }
     if (!stageIds.has(concept.meta.stageId)) {
       addMissingReferenceIssue(
         issues,

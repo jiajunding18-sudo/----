@@ -48,6 +48,10 @@ function createConcept(
   slug: string,
   overrides: Partial<ConceptMeta> = {},
 ) {
+  const fixtureOrder = [...id].reduce(
+    (hash, character) => (hash * 31 + character.charCodeAt(0)) % 1_000_003,
+    0,
+  );
   return conceptMetaSchema.parse({
     schemaVersion: 1,
     id,
@@ -61,7 +65,7 @@ function createConcept(
     why: "用于验证结构化内容校验，不作为正式学习内容。",
     stageId: "stage.fixture",
     trackIds: ["track.common"],
-    order: 1,
+    order: fixtureOrder,
     level: "beginner",
     requiredness: "required",
     targetDepth: "master",
@@ -381,6 +385,23 @@ describe("manifest 与跨实体校验", () => {
         }),
       ),
     ).toThrow(/Concept slug "duplicate-slug" .* 重复/);
+  });
+
+  it("同一 Stage 内重复 Concept order 会失败", () => {
+    const first = createConcept("fixture.first", "fixture-first", { order: 10 });
+    const second = createConcept("fixture.second", "fixture-second", {
+      order: 10,
+    });
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [loadedConcept(first), loadedConcept(second)],
+        }),
+      ),
+    ).toThrow(
+      /Stage "stage\.fixture" 内的 Concept order 10 .* 重复，推荐路线顺序不唯一/,
+    );
   });
 
   it("不存在的依赖 ID 会失败并给出精确字段", () => {

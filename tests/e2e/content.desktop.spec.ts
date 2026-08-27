@@ -48,7 +48,10 @@ test("真实 Stage 0 内容可从 Knowledge、Roadmap 与 Projects 浏览", asyn
 
   await page.goto("/roadmap/");
   await expect(page.getByRole("heading", { name: "Stage 0：计算机与编程基础" })).toBeVisible();
-  await page.getByRole("link", { name: "Python 核心语法" }).click();
+  await page
+    .locator('[data-concept-id="tooling.python-core"]')
+    .getByRole("link", { name: "Python 核心语法" })
+    .click();
   await expect(page).toHaveURL(/\/knowledge\/python-core\/$/);
   await expect(page.getByRole("heading", { level: 1, name: /Python 核心语法/ })).toBeVisible();
 

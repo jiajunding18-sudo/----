@@ -10,6 +10,7 @@ import {
   getConceptBySlug,
   loadMdxDirectory,
   parseRepositoryCatalog,
+  serializeContentModuleRegistry,
   serializeContentManifest,
 } from "@/lib/content";
 import {
@@ -334,6 +335,9 @@ describe("manifest 与跨实体校验", () => {
     );
     expect(serializeContentManifest(manifest)).toBe(
       serializeContentManifest(manifest),
+    );
+    expect(serializeContentModuleRegistry(manifest)).toContain(
+      '"fixture-alpha": () => import("../content/concepts/fixtures/fixture-alpha.mdx")',
     );
   });
 

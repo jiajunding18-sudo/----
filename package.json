@@ -14,9 +14,12 @@
     "content:build": "tsx scripts/build-content.ts",
     "prebuild": "npm run content:build",
     "build": "node scripts/run-next.mjs build",
+    "pretypecheck": "npm run content:build",
     "typecheck": "node scripts/run-next.mjs typegen && tsc --noEmit",
     "lint": "eslint .",
+    "pretest": "npm run content:build",
     "test": "vitest run",
+    "pretest:unit": "npm run content:build",
     "test:unit": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "serve:static": "node scripts/serve-static.mjs",
@@ -24,9 +27,14 @@
     "check:full": "npm run check && playwright test"
   },
   "dependencies": {
+    "@mdx-js/loader": "3.1.1",
+    "@mdx-js/react": "3.1.1",
+    "@next/mdx": "16.3.3",
     "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "remark-gfm": "4.0.1",
+    "remark-mdx-frontmatter": "5.2.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

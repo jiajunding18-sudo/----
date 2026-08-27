@@ -66,6 +66,7 @@ export async function startStaticServer({
       : extname(pathname)
         ? pathname.slice(1)
         : `${pathname.slice(1)}/index.html`;
+    const isRouteRequest = pathname.endsWith("/") || !extname(pathname);
     const requestedPath = resolve(
       outputRoot,
       mapExportedRoutePayload(relativePath),
@@ -95,7 +96,28 @@ export async function startStaticServer({
 
       createReadStream(requestedPath).pipe(response);
     } catch {
-      sendText(response, 404, "Not Found");
+      if (!isRouteRequest) {
+        sendText(response, 404, "Not Found");
+        return;
+      }
+
+      try {
+        const notFoundPath = resolve(outputRoot, "404.html");
+        const notFoundStats = await stat(notFoundPath);
+        response.writeHead(404, {
+          "Content-Length": notFoundStats.size,
+          "Content-Type": "text/html; charset=utf-8",
+        });
+
+        if (request.method === "HEAD") {
+          response.end();
+          return;
+        }
+
+        createReadStream(notFoundPath).pipe(response);
+      } catch {
+        sendText(response, 404, "Not Found");
+      }
     }
   });
 

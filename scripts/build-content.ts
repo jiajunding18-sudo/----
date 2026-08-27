@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import {
   loadRepositoryContentManifest,
   writeContentManifest,
+  writeContentModuleRegistry,
 } from "../src/lib/content";
 
 async function main() {
@@ -26,12 +27,18 @@ async function main() {
     return;
   }
 
-  const result = await writeContentManifest(
-    resolve(workspaceRoot, ".generated/content-manifest.ts"),
-    manifest,
-  );
+  const [manifestResult, moduleRegistryResult] = await Promise.all([
+    writeContentManifest(
+      resolve(workspaceRoot, ".generated/content-manifest.ts"),
+      manifest,
+    ),
+    writeContentModuleRegistry(
+      resolve(workspaceRoot, ".generated/content-modules.ts"),
+      manifest,
+    ),
+  ]);
   console.log(
-    `Content manifest ${result.changed ? "generated" : "unchanged"}: ${summary}`,
+    `Content manifest ${manifestResult.changed ? "generated" : "unchanged"}; MDX registry ${moduleRegistryResult.changed ? "generated" : "unchanged"}: ${summary}`,
   );
 }
 

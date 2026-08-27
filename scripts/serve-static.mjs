@@ -16,6 +16,7 @@ const contentTypes = new Map([
   [".map", "application/json; charset=utf-8"],
   [".png", "image/png"],
   [".svg", "image/svg+xml"],
+  [".txt", "text/plain; charset=utf-8"],
   [".webp", "image/webp"],
   [".woff2", "font/woff2"],
 ]);
@@ -23,6 +24,19 @@ const contentTypes = new Map([
 function sendText(response, statusCode, message) {
   response.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8" });
   response.end(message);
+}
+
+function mapExportedRoutePayload(relativePath) {
+  const routePayloadMatch = relativePath.match(
+    /^(.*\/)?(__next\.[^./]+)((?:\.[^./]+)*)\.__PAGE__\.txt$/,
+  );
+
+  if (!routePayloadMatch) {
+    return relativePath;
+  }
+
+  const [, directory = "", routeRoot, nestedSegments] = routePayloadMatch;
+  return `${directory}${routeRoot}${nestedSegments.replaceAll(".", "/")}/__PAGE__.txt`;
 }
 
 export async function startStaticServer({
@@ -49,8 +63,13 @@ export async function startStaticServer({
 
     const relativePath = pathname.endsWith("/")
       ? `${pathname.slice(1)}index.html`
-      : pathname.slice(1);
-    const requestedPath = resolve(outputRoot, relativePath);
+      : extname(pathname)
+        ? pathname.slice(1)
+        : `${pathname.slice(1)}/index.html`;
+    const requestedPath = resolve(
+      outputRoot,
+      mapExportedRoutePayload(relativePath),
+    );
 
     if (requestedPath !== outputRoot && !requestedPath.startsWith(outputRootPrefix)) {
       sendText(response, 403, "Forbidden");

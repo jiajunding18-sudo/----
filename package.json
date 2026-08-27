@@ -9,6 +9,10 @@
   },
   "scripts": {
     "dev": "node scripts/run-next.mjs dev",
+    "predev": "npm run content:build",
+    "content:check": "tsx scripts/build-content.ts --check",
+    "content:build": "tsx scripts/build-content.ts",
+    "prebuild": "npm run content:build",
     "build": "node scripts/run-next.mjs build",
     "typecheck": "node scripts/run-next.mjs typegen && tsc --noEmit",
     "lint": "eslint .",
@@ -16,7 +20,7 @@
     "test:unit": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "serve:static": "node scripts/serve-static.mjs",
-    "check": "npm run typecheck && npm run lint && npm run test:unit && npm run build",
+    "check": "npm run content:check && npm run typecheck && npm run lint && npm run test:unit && npm run build",
     "check:full": "npm run check && playwright test"
   },
   "dependencies": {
@@ -38,8 +42,15 @@
     "eslint-config-next": "16.3.3",
     "jsdom": "30.0.1",
     "postcss": "8.5.26",
+    "remark-frontmatter": "5.0.0",
+    "remark-mdx": "3.1.1",
+    "remark-parse": "11.0.0",
     "tailwindcss": "4.3.3",
+    "tsx": "4.23.12",
     "typescript": "5.9.3",
+    "unified": "11.0.5",
+    "vfile": "6.0.3",
+    "vfile-matter": "5.0.1",
     "vitest": "4.1.11"
   }
 }

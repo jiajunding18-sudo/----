@@ -13,10 +13,13 @@ async function expectNoHorizontalOverflow(page: import("@playwright/test").Page)
 
 test("360px 下可浏览 Concept 与 Pixel Lab 正文", async ({ page }) => {
   await page.goto("/knowledge/");
-  await expect(page.getByRole("link", { name: "计算机、文件与终端" })).toBeVisible();
+  const firstConcept = page
+    .locator('[data-knowledge-concept-id="tooling.computer-files"] h2')
+    .getByRole("link", { name: "计算机、文件与终端" });
+  await expect(firstConcept).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.getByRole("link", { name: "计算机、文件与终端" }).click();
+  await firstConcept.click();
   await expect(page.getByRole("heading", { level: 1, name: /计算机、文件与终端/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Practice/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);

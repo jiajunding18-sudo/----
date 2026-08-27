@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 
-import { ConceptList } from "@/components/content/concept-list";
 import { ContentState } from "@/components/content/content-state";
 import { PageHeader } from "@/components/shell/page-header";
-import { readStageZeroSlice } from "@/lib/content/site-content";
+import { KnowledgeBrowser } from "@/features/knowledge/knowledge-browser";
+import { readKnowledgeView } from "@/features/knowledge/knowledge-content";
 
 export const metadata: Metadata = {
   title: "Knowledge · 机器视觉 Learning OS",
 };
 
 export default function KnowledgePage() {
-  const content = readStageZeroSlice();
+  const content = readKnowledgeView();
   if (content.status === "error") {
     console.error("Knowledge 页面读取内容失败", content.error);
     return (
@@ -27,7 +27,7 @@ export default function KnowledgePage() {
     );
   }
 
-  const { concepts, stage, tracks } = content.value;
+  const knowledge = content.value;
 
   return (
     <div className="max-w-5xl">
@@ -35,13 +35,13 @@ export default function KnowledgePage() {
           description="浏览当前已发布的机器视觉学习单元；每篇正文都来自仓库中的正式 MDX 内容。"
           title="Knowledge"
         />
-        {concepts.length === 0 ? (
+        {knowledge.concepts.length === 0 ? (
           <ContentState
             description="manifest 已成功读取，但当前没有已发布的 Concept。请先运行内容构建或检查 publicationStatus。"
             title="当前没有可浏览的知识内容"
           />
         ) : (
-          <ConceptList concepts={concepts} stages={[stage]} tracks={tracks} />
+          <KnowledgeBrowser knowledge={knowledge} />
         )}
     </div>
   );

@@ -1,0 +1,114 @@
+import { describe, expect, it } from "vitest";
+
+import { contentManifest } from "../../.generated/content-manifest";
+import { buildKnowledgeView } from "@/features/knowledge/knowledge-model";
+import type { ContentManifest } from "@/lib/content";
+
+const stageZeroConceptIds = [
+  "tooling.computer-files",
+  "tooling.dev-environment",
+  "tooling.python-core",
+  "tooling.python-modules",
+  "tooling.git-basics",
+  "tooling.debugging",
+  "tooling.linux-basics",
+  "tooling.reproducibility",
+] as const;
+
+describe("Knowledge manifest 派生视图", () => {
+  it("只纳入已发布 Concept，并按正式 Stage / Concept order 返回推荐序位", () => {
+    const knowledge = buildKnowledgeView(contentManifest);
+
+    expect(knowledge.concepts.map(({ concept }) => concept.id)).toEqual(
+      stageZeroConceptIds,
+    );
+    expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8],
+    );
+    expect(
+      knowledge.concepts.every(
+        ({ concept }) => concept.publicationStatus === "published",
+      ),
+    ).toBe(true);
+  });
+
+  it("从 catalog 派生全部 Stage / Track 筛选项并诚实保留 planned 覆盖", () => {
+    const knowledge = buildKnowledgeView(contentManifest);
+    const stageZero = knowledge.stages.find(
+      ({ id }) => id === "stage.tooling-foundations",
+    );
+    const stageTwo = knowledge.stages.find(
+      ({ id }) => id === "stage.image-computing",
+    );
+
+    expect(knowledge.stages).toHaveLength(17);
+    expect(knowledge.tracks.map(({ id }) => id)).toEqual([
+      "track.common",
+      "track.industrial-3d",
+      "track.computational-imaging",
+    ]);
+    expect(stageZero).toMatchObject({
+      contentStatus: "available",
+      publishedConceptCount: 8,
+    });
+    expect(stageTwo).toMatchObject({
+      contentStatus: "planned",
+      publishedConceptCount: 0,
+    });
+    expect(knowledge.availableStageCount).toBe(1);
+    expect(knowledge.plannedStageCount).toBe(16);
+    expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
+      8, 0, 0,
+    ]);
+  });
+
+  it("区分 hard / recommended 前置，并从同一 dependency 数据派生后续 Concept", () => {
+    const knowledge = buildKnowledgeView(contentManifest);
+    const reproducibility = knowledge.concepts.find(
+      ({ concept }) => concept.id === "tooling.reproducibility",
+    );
+    const pythonCore = knowledge.concepts.find(
+      ({ concept }) => concept.id === "tooling.python-core",
+    );
+
+    expect(
+      reproducibility?.prerequisites.map(({ concept, kind }) => [
+        concept.id,
+        kind,
+      ]),
+    ).toEqual([
+      ["tooling.python-modules", "hard"],
+      ["tooling.git-basics", "hard"],
+      ["tooling.debugging", "recommended"],
+    ]);
+    expect(
+      pythonCore?.prerequisites.map(({ concept, kind }) => [concept.id, kind]),
+    ).toEqual([["tooling.computer-files", "recommended"]]);
+    expect(
+      pythonCore?.dependents.map(({ concept, kind }) => [concept.id, kind]),
+    ).toEqual([
+      ["tooling.python-modules", "hard"],
+      ["tooling.debugging", "hard"],
+      ["tooling.dev-environment", "recommended"],
+    ]);
+  });
+
+  it("依赖引用损坏时拒绝生成 Knowledge 视图", () => {
+    const invalidManifest = {
+      ...contentManifest,
+      dependencies: [
+        ...contentManifest.dependencies,
+        {
+          prerequisiteId: "tooling.missing",
+          targetId: "tooling.python-core",
+          kind: "hard",
+          rationale: "测试坏引用",
+        },
+      ],
+    } satisfies ContentManifest;
+
+    expect(() => buildKnowledgeView(invalidManifest)).toThrow(
+      "Dependency tooling.missing -> tooling.python-core 引用了不存在的 Concept tooling.missing",
+    );
+  });
+});

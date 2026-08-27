@@ -3,12 +3,12 @@ import { notFound } from "next/navigation";
 
 import { DocumentContext } from "@/components/content/document-context";
 import { ResourceLinks } from "@/components/content/resource-links";
+import { ConceptNavigation } from "@/features/knowledge/concept-navigation";
+import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content";
 import {
   getPublishedConceptBySlug,
   getPublishedConceptSlugs,
   getResources,
-  getStage,
-  getTracks,
   loadConceptContent,
 } from "@/lib/content/site-content";
 
@@ -43,8 +43,10 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
     notFound();
   }
 
-  const stage = getStage(concept.stageId);
-  const tracks = getTracks(concept.trackIds);
+  const knowledgeConcept = getKnowledgeConceptView(concept.id);
+  if (!knowledgeConcept) {
+    notFound();
+  }
   const resources = getResources(concept.resourceIds);
   const ConceptContent = contentModule.default;
 
@@ -54,13 +56,14 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
         backHref="/knowledge/"
         backLabel="返回 Knowledge"
         details={[
-          stage?.title ?? concept.stageId,
-          tracks.map(({ title }) => title).join(" / ") || concept.trackIds.join(" / "),
-          `学习顺序 ${concept.order}`,
+          knowledgeConcept.stage.title,
+          knowledgeConcept.tracks.map(({ title }) => title).join(" / "),
+          `推荐序位 ${String(knowledgeConcept.recommendedSequence).padStart(2, "0")}`,
           `预计 ${concept.estimatedHours.min}–${concept.estimatedHours.max} 小时`,
         ]}
-        eyebrow="Concept · 可访问"
+        eyebrow="Concept · available（正式内容）"
       />
+      <ConceptNavigation concept={knowledgeConcept} />
       <div className="learning-document">
         <ConceptContent />
       </div>

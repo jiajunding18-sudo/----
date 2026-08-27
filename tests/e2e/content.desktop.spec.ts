@@ -28,10 +28,12 @@ test("真实 Stage 0 内容可从 Knowledge、Roadmap 与 Projects 浏览", asyn
   await page.goto("/knowledge/");
   await expect(page.getByRole("heading", { level: 1, name: "Knowledge" })).toBeVisible();
   const knowledgeList = page.getByRole("main").locator("ol");
-  await expect(knowledgeList.getByRole("link")).toHaveCount(8);
+  await expect(knowledgeList.locator("[data-knowledge-concept-id] h2 a")).toHaveCount(8);
   await expect(page.getByText("Computer, Files, and Terminal")).toBeVisible();
 
-  const firstConcept = page.getByRole("link", { name: "计算机、文件与终端" });
+  const firstConcept = page
+    .locator('[data-knowledge-concept-id="tooling.computer-files"] h2')
+    .getByRole("link", { name: "计算机、文件与终端" });
   await firstConcept.focus();
   await expect(firstConcept).toBeFocused();
   await page.keyboard.press("Enter");
@@ -47,7 +49,11 @@ test("真实 Stage 0 内容可从 Knowledge、Roadmap 与 Projects 浏览", asyn
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/roadmap/");
-  await expect(page.getByRole("heading", { name: "Stage 0：计算机与编程基础" })).toBeVisible();
+  await expect(
+    page
+      .locator('[data-overview-stage-id="stage.tooling-foundations"]')
+      .getByRole("heading", { name: "Stage 0：计算机与编程基础" }),
+  ).toBeVisible();
   await page
     .locator('[data-concept-id="tooling.python-core"]')
     .getByRole("link", { name: "Python 核心语法" })

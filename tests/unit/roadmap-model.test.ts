@@ -56,6 +56,61 @@ describe("Roadmap manifest 派生视图", () => {
     expect(industrial3d?.entryGateSummary).toContain("全部满足");
     expect(capstone?.entryGate?.kind).toBe("allOf");
     expect(capstone?.entryGateSummary).toContain("满足其中一项");
+
+    expect(roadmap.overview.stages).toHaveLength(17);
+    expect(
+      new Set(roadmap.overview.stages.map(({ id }) => id)).size,
+    ).toBe(17);
+    expect(roadmap.overview.tracks).toHaveLength(3);
+
+    const industrial3dOverview = roadmap.overview.stages.find(
+      ({ id }) => id === "stage.industrial-3d",
+    );
+    expect(industrial3dOverview?.entryGate?.kind).toBe("allOf");
+    if (industrial3dOverview?.entryGate?.kind !== "allOf") {
+      throw new Error("Stage 9 overview 缺少 allOf entryGate");
+    }
+    expect(
+      industrial3dOverview.entryGate.gates.map((gate) =>
+        gate.kind === "checkpoint" ? gate.stage.id : gate.kind,
+      ),
+    ).toEqual(["stage.depth-reconstruction", "stage.industrial-vision"]);
+    expect(
+      industrial3dOverview.entryGate.gates[0].kind === "checkpoint"
+        ? industrial3dOverview.entryGate.gates[0].stage.primaryOutcome
+        : undefined,
+    ).toContain("深度");
+  });
+
+  it("为 planned Stage 派生能力出口与已规划 Project gate，不伪造 Concept", () => {
+    const roadmap = buildRoadmapView(contentManifest);
+    const stageOneB = roadmap.overview.stages.find(
+      ({ id }) => id === "stage.vision-math-geometry-optimization",
+    );
+    const stageTwo = roadmap.overview.stages.find(
+      ({ id }) => id === "stage.image-computing",
+    );
+
+    expect(stageOneB?.contentStatus).toBe("planned");
+    expect(stageOneB?.conceptCount).toBe(0);
+    expect(stageOneB?.outcomes).toHaveLength(2);
+    expect(stageOneB?.exitCriteria).toHaveLength(2);
+    expect(stageOneB?.retestAfterDays).toBe(7);
+    expect(stageOneB?.projectGates).toEqual([
+      expect.objectContaining({
+        conditionSummary: "所有路线目标下都要求",
+        project: expect.objectContaining({
+          id: "project.math-vision-lab",
+          publicationStatus: "draft",
+        }),
+      }),
+    ]);
+    expect(stageTwo?.projectGates[0].project).toEqual(
+      expect.objectContaining({
+        id: "project.pixel-lab",
+        publicationStatus: "published",
+      }),
+    );
   });
 
   it("从正式 manifest 派生 Stage 0、推荐顺序、依赖、项目和出口", () => {

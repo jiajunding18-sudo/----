@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const stageZeroConceptIds = [
   "tooling.computer-files",
@@ -35,6 +35,16 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(true);
 }
 
+async function expectUniqueFocusedStages(list: Locator, expectedCount: number) {
+  const stageIds = await list
+    .locator(":scope > [data-overview-stage-id]")
+    .evaluateAll((items) =>
+      items.map((item) => item.getAttribute("data-overview-stage-id")),
+    );
+  expect(stageIds).toHaveLength(expectedCount);
+  expect(new Set(stageIds).size).toBe(expectedCount);
+}
+
 test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", async ({
   page,
 }) => {
@@ -47,23 +57,49 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   ).toHaveCount(2);
 
   const overview = page.locator("[data-roadmap-overview]");
-  await expect(overview.locator("[data-track-id]")).toHaveCount(3);
-  await expect(
-    overview.locator('[data-track-id="track.common"]'),
-  ).toContainText("公共主干");
-  await expect(
-    overview.locator('[data-track-id="track.industrial-3d"]'),
-  ).toContainText("3D 工业视觉高级分支");
-  await expect(
-    overview.locator('[data-track-id="track.computational-imaging"]'),
-  ).toContainText("计算成像高级分支");
+  const focusedStageList = overview.locator("[data-focused-stage-list]");
+  const allRoutesButton = overview.getByRole("button", { name: "全部路线" });
+  const commonButton = overview.getByRole("button", { name: "公共主干" });
+  const industrialButton = overview.getByRole("button", {
+    name: "3D 工业视觉高级分支",
+  });
+  const computationalButton = overview.getByRole("button", {
+    name: "计算成像高级分支",
+  });
 
-  const overviewStageIds = await overview
-    .locator("[data-overview-stage-id]")
-    .evaluateAll((items) => [
-      ...new Set(items.map((item) => item.getAttribute("data-overview-stage-id"))),
-    ]);
-  expect(overviewStageIds).toHaveLength(17);
+  await expect(overview.locator("[data-track-focus]")).toHaveCount(4);
+  await expect(allRoutesButton).toHaveAttribute("aria-pressed", "true");
+  await expectUniqueFocusedStages(focusedStageList, 17);
+
+  await commonButton.focus();
+  await expect(commonButton).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(overview.locator("[data-active-track]")).toHaveAttribute(
+    "data-active-track",
+    "track.common",
+  );
+  await expectUniqueFocusedStages(focusedStageList, 14);
+  await expect(
+    focusedStageList.locator('[data-overview-stage-id="stage.industrial-3d"]'),
+  ).toHaveCount(0);
+
+  await industrialButton.click();
+  await expectUniqueFocusedStages(focusedStageList, 2);
+  await expect(
+    focusedStageList.locator('[data-overview-stage-id="stage.industrial-3d"]'),
+  ).toBeVisible();
+  await expect(
+    focusedStageList.locator('[data-overview-stage-id="stage.capstone"]'),
+  ).toHaveAttribute("data-shared-checkpoint", "true");
+
+  await computationalButton.click();
+  await expectUniqueFocusedStages(focusedStageList, 3);
+  await expect(
+    focusedStageList.locator('[data-overview-stage-id="stage.imaging-quality-advanced"]'),
+  ).toBeVisible();
+
+  await allRoutesButton.click();
+  await expectUniqueFocusedStages(focusedStageList, 17);
 
   const stageZeroOverview = overview.locator(
     '[data-overview-stage-id="stage.tooling-foundations"]',
@@ -72,23 +108,61 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await expect(stageZeroOverview).toContainText("可学习");
   await expect(stageZeroOverview).toContainText("8 个 Concept");
 
-  const plannedStage = overview.locator(
+  const plannedStage = focusedStageList.locator(
     '[data-overview-stage-id="stage.vision-math-immediate"]',
   );
   await expect(plannedStage).toHaveAttribute("data-content-status", "planned");
-  await expect(plannedStage).toContainText("已规划 · 尚未展开");
+  await expect(plannedStage).toContainText("已规划 · 正式学习内容尚未展开");
   await expect(plannedStage).toContainText("0 个已发布 Concept");
   await expect(plannedStage.locator("[data-concept-id]")).toHaveCount(0);
+  await plannedStage.locator("summary").click();
+  await expect(plannedStage).toHaveAttribute("open", "");
+  await expect(plannedStage.locator("[data-exit-criterion-id]")).toHaveCount(2);
 
-  const industrial3d = overview.locator(
+  await industrialButton.click();
+  const industrial3d = focusedStageList.locator(
     '[data-overview-stage-id="stage.industrial-3d"]',
   );
   await expect(industrial3d).toHaveAttribute("data-entry-gate-kind", "allOf");
-  await expect(industrial3d).toContainText("全部满足");
-  const capstone = overview
-    .locator('[data-overview-stage-id="stage.capstone"]')
-    .first();
-  await expect(capstone).toContainText("满足其中一项");
+  await industrial3d.locator("summary").click();
+  await expect(industrial3d).toContainText("以下条件都需要满足");
+  await expect(industrial3d.locator('[data-gate-operator="allOf"]')).toHaveCount(1);
+  await expect(industrial3d.getByRole("button", { name: /Stage 6B/ })).toBeVisible();
+  await expect(industrial3d.getByRole("button", { name: /Stage 8/ })).toBeVisible();
+
+  await industrial3d.getByRole("button", { name: /Stage 6B/ }).click();
+  await expect(overview.locator("[data-active-track]")).toHaveAttribute(
+    "data-active-track",
+    "all",
+  );
+  const depthReconstruction = focusedStageList.locator(
+    '[data-overview-stage-id="stage.depth-reconstruction"]',
+  );
+  await expect(depthReconstruction).toHaveAttribute("open", "");
+  await expect(depthReconstruction.locator("summary")).toBeFocused();
+
+  const capstone = focusedStageList.locator(
+    '[data-overview-stage-id="stage.capstone"]',
+  );
+  await capstone.locator("summary").click();
+  await expect(capstone).toContainText("以下条件满足任意一项即可");
+  await expect(capstone.locator('[data-gate-operator="anyOf"]')).toHaveCount(1);
+  await expect(capstone).toContainText("主修掌握");
+
+  const stageOneB = focusedStageList.locator(
+    '[data-overview-stage-id="stage.vision-math-geometry-optimization"]',
+  );
+  await stageOneB.locator("summary").click();
+  await expect(stageOneB.locator("[data-project-gate-id]")).toHaveCount(1);
+  await expect(stageOneB).toContainText("项目已规划 · 正文未发布");
+  await expect(stageOneB.getByRole("link", { name: /视觉数学实验册/ })).toHaveCount(0);
+
+  const stageTwo = focusedStageList.locator(
+    '[data-overview-stage-id="stage.image-computing"]',
+  );
+  await stageTwo.locator("summary").click();
+  await expect(stageTwo.locator('[data-project-gate-id="project.pixel-lab"]')).toBeVisible();
+  await expect(stageTwo.getByRole("link", { name: /Pixel Lab/ })).toBeVisible();
 
   const stage = page.locator('[data-stage-id="stage.tooling-foundations"]');
   const conceptItems = stage.locator("[data-concept-id]");
@@ -119,8 +193,9 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await page.keyboard.press("Space");
   await expect(stage.locator("details")).toHaveAttribute("open", "");
 
-  const stageZeroOverviewLink = overview.getByRole("link", {
-    name: "查看正式内容（8 个 Concept）",
+  await stageZeroOverview.locator("summary").click();
+  const stageZeroOverviewLink = stageZeroOverview.getByRole("link", {
+    name: "进入正式 Stage 内容（8 个 Concept）",
   });
   await stageZeroOverviewLink.focus();
   await expect(stageZeroOverviewLink).toBeFocused();

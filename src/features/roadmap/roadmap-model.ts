@@ -7,6 +7,8 @@ import type { ContentManifest } from "@/lib/content/manifest-types";
 type ManifestCheckpointGate = NonNullable<
   ContentManifest["stages"][number]["entryGate"]
 >;
+type ManifestTrackGoalCondition =
+  ContentManifest["stages"][number]["exitCriteria"][number]["when"];
 
 function byOrderThenId<Ordered extends { readonly id: string; readonly order: number }>(
   left: Ordered,
@@ -68,17 +70,28 @@ function resolveCheckpointGate(
   gate: ManifestCheckpointGate,
 ): RoadmapCheckpointGateView {
   if (gate.kind === "checkpoint") {
+    const stage = getRequiredStage(manifest, gate.stageId, "entryGate");
     return {
       kind: gate.kind,
-      stage: getRequiredStage(manifest, gate.stageId, "entryGate"),
+      stage: {
+        id: stage.id,
+        title: stage.title,
+        primaryOutcome: stage.outcomes[0],
+      },
     };
   }
 
   if (gate.kind === "track-goal-checkpoint") {
+    const stage = getRequiredStage(manifest, gate.stageId, "entryGate");
+    const track = getRequiredTrack(manifest, gate.trackId, "entryGate");
     return {
       kind: gate.kind,
-      stage: getRequiredStage(manifest, gate.stageId, "entryGate"),
-      track: getRequiredTrack(manifest, gate.trackId, "entryGate"),
+      stage: {
+        id: stage.id,
+        title: stage.title,
+        primaryOutcome: stage.outcomes[0],
+      },
+      track: { title: track.title },
       minimumTrackGoal: gate.minimumTrackGoal,
     };
   }
@@ -104,6 +117,48 @@ function getCheckpointGateSummary(gate: RoadmapCheckpointGateView): string {
 
   const prefix = gate.kind === "allOf" ? "全部满足" : "满足其中一项";
   return `${prefix}：${gate.gates.map(getCheckpointGateSummary).join("；")}`;
+}
+
+function getTrackGoalConditionSummary(
+  manifest: ContentManifest,
+  condition: ManifestTrackGoalCondition,
+) {
+  if (condition.kind === "always") {
+    return "所有路线目标下都要求";
+  }
+
+  const track = getRequiredTrack(
+    manifest,
+    condition.trackId,
+    "Stage 条件",
+  );
+  const goalLabel =
+    condition.minimumGoal === "master" ? "主修掌握" : "理解";
+  return `当「${track.title}」目标至少为「${goalLabel}」时要求`;
+}
+
+function getStageProjectGates(
+  manifest: ContentManifest,
+  stageId: string,
+  projectGates: ContentManifest["stages"][number]["projectGates"],
+) {
+  return projectGates.map((gate) => {
+    const project = getRequiredProject(
+      manifest,
+      gate.projectId,
+      `Stage ${stageId} projectGate`,
+    );
+
+    return {
+      project: {
+        id: project.id,
+        title: project.title,
+        slug: project.slug,
+        publicationStatus: project.publicationStatus,
+      },
+      conditionSummary: getTrackGoalConditionSummary(manifest, gate.when),
+    } as const;
+  });
 }
 
 function getStageProjects(
@@ -188,6 +243,19 @@ export function buildRoadmapView(manifest: ContentManifest) {
     const entryGate = stage.entryGate
       ? resolveCheckpointGate(manifest, stage.entryGate)
       : undefined;
+    const projectGates = getStageProjectGates(
+      manifest,
+      stage.id,
+      stage.projectGates,
+    );
+    const exitCriteria = stage.exitCriteria.map((criterion) => ({
+      criterion: {
+        id: criterion.id,
+        description: criterion.description,
+        required: criterion.required,
+      },
+      conditionSummary: getTrackGoalConditionSummary(manifest, criterion.when),
+    }));
 
     return {
       stage,
@@ -198,6 +266,8 @@ export function buildRoadmapView(manifest: ContentManifest) {
         : "无 checkpoint 级入口门槛；具体学习前置由 Concept hard dependency 决定。",
       concepts,
       projects: getStageProjects(manifest, stageConceptIds, projectGateIds),
+      projectGates,
+      exitCriteria,
       conditionalExitCriterionCount: stage.exitCriteria.filter(
         ({ when }) => when.kind !== "always",
       ).length,
@@ -221,9 +291,37 @@ export function buildRoadmapView(manifest: ContentManifest) {
     } as const;
   });
 
+  const overview = {
+    tracks: tracks.map(({ track }) => ({ track })),
+    stages: stages.map(
+      ({
+        stage,
+        tracks: stageTracks,
+        entryGate,
+        concepts,
+        projectGates,
+        exitCriteria,
+      }) => ({
+        id: stage.id,
+        title: stage.title,
+        summary: stage.summary,
+        contentStatus: stage.contentStatus,
+        outcomes: stage.outcomes,
+        estimatedHours: stage.estimatedHours,
+        retestAfterDays: stage.retestAfterDays,
+        tracks: stageTracks,
+        entryGate,
+        conceptCount: concepts.length,
+        projectGates,
+        exitCriteria,
+      }),
+    ),
+  } as const;
+
   return {
     stages,
     tracks,
+    overview,
     availableStages: stages.filter(
       ({ stage }) => stage.contentStatus === "available",
     ),
@@ -240,16 +338,26 @@ export function buildRoadmapView(manifest: ContentManifest) {
 export type RoadmapView = ReturnType<typeof buildRoadmapView>;
 export type RoadmapStageView = RoadmapView["stages"][number];
 export type RoadmapTrackView = RoadmapView["tracks"][number];
+export type RoadmapOverviewView = RoadmapView["overview"];
+export type RoadmapOverviewStageView = RoadmapOverviewView["stages"][number];
 
 export type RoadmapCheckpointGateView =
   | {
       readonly kind: "checkpoint";
-      readonly stage: ContentManifest["stages"][number];
+      readonly stage: {
+        readonly id: string;
+        readonly title: string;
+        readonly primaryOutcome: string;
+      };
     }
   | {
       readonly kind: "track-goal-checkpoint";
-      readonly stage: ContentManifest["stages"][number];
-      readonly track: ContentManifest["tracks"][number];
+      readonly stage: {
+        readonly id: string;
+        readonly title: string;
+        readonly primaryOutcome: string;
+      };
+      readonly track: { readonly title: string };
       readonly minimumTrackGoal: "understand" | "master";
     }
   | {

@@ -11,7 +11,7 @@ import { parseRepositoryCatalog } from "./catalog-loader";
 import { buildContentManifest } from "./manifest-builder";
 import { loadMdxDirectory } from "./mdx-loader";
 
-export async function loadRepositoryContentManifest({
+export async function loadRepositoryContent({
   workspaceRoot = process.cwd(),
 }: {
   readonly workspaceRoot?: string;
@@ -35,5 +35,12 @@ export async function loadRepositoryContentManifest({
     resources: repositoryResources,
   });
 
-  return buildContentManifest({ concepts, projects, ...catalog });
+  const input = { concepts, projects, ...catalog };
+  return { input, manifest: buildContentManifest(input) } as const;
+}
+
+export async function loadRepositoryContentManifest(options: {
+  readonly workspaceRoot?: string;
+} = {}) {
+  return (await loadRepositoryContent(options)).manifest;
 }

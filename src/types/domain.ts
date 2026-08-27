@@ -1,0 +1,40 @@
+// Public type-only facade. Field definitions remain owned by the Zod schemas;
+// this module deliberately contains no parallel interfaces.
+export type {
+  CheckpointGate,
+  ConceptDependency,
+  ConceptMeta,
+  Dependency,
+  EmbeddedSearchEntry,
+  MasteryCriterion,
+  ProjectAcceptanceCriterion,
+  ProjectConceptRequirement,
+  ProjectEnvironmentRequirement,
+  ProjectExecutionPath,
+  ProjectMeta,
+  ProjectResourceRef,
+  Resource,
+  StageDefinition,
+  StageExitCriterion,
+  StageProjectGate,
+  TrackDefinition,
+  TrackGoalCondition,
+} from "@/lib/validation/content-schemas";
+export type {
+  ConceptProgress,
+  EvidenceKind,
+  MasteryConfirmation,
+  MasteryEvidence,
+} from "@/lib/validation/progress-schemas";
+export type {
+  ConceptId,
+  DependencyKind,
+  EvidenceId,
+  LearningStatus,
+  MasteryCriterionId,
+  ProjectId,
+  ResourceId,
+  StageId,
+  TrackGoal,
+  TrackId,
+} from "@/lib/validation/shared-schemas";

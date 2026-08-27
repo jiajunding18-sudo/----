@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { DocumentContext } from "@/components/content/document-context";
 import { ResourceLinks } from "@/components/content/resource-links";
 import { ConceptNavigation } from "@/features/knowledge/concept-navigation";
+import { ConceptTableOfContents } from "@/features/knowledge/concept-table-of-contents";
 import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content";
 import {
   getPublishedConceptBySlug,
@@ -51,23 +52,29 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
   const ConceptContent = contentModule.default;
 
   return (
-    <article className="mx-auto max-w-4xl">
-      <DocumentContext
-        backHref="/knowledge/"
-        backLabel="返回 Knowledge"
-        details={[
-          knowledgeConcept.stage.title,
-          knowledgeConcept.tracks.map(({ title }) => title).join(" / "),
-          `推荐序位 ${String(knowledgeConcept.recommendedSequence).padStart(2, "0")}`,
-          `预计 ${concept.estimatedHours.min}–${concept.estimatedHours.max} 小时`,
-        ]}
-        eyebrow="Concept · available（正式内容）"
-      />
-      <ConceptNavigation concept={knowledgeConcept} />
-      <div className="learning-document">
-        <ConceptContent />
+    <div className="mx-auto max-w-6xl">
+      <div className="items-start gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_14rem]">
+        <article className="min-w-0">
+          <DocumentContext
+            backHref="/knowledge/"
+            backLabel="返回 Knowledge"
+            details={[
+              knowledgeConcept.stage.title,
+              knowledgeConcept.tracks.map(({ title }) => title).join(" / "),
+              `推荐序位 ${String(knowledgeConcept.recommendedSequence).padStart(2, "0")}`,
+              `预计 ${concept.estimatedHours.min}–${concept.estimatedHours.max} 小时`,
+            ]}
+            eyebrow="Concept · available（正式内容）"
+          />
+          <ConceptNavigation concept={knowledgeConcept} />
+          <ConceptTableOfContents headings={concept.headings} variant="mobile" />
+          <div className="learning-document">
+            <ConceptContent />
+          </div>
+          <ResourceLinks resources={resources} />
+        </article>
+        <ConceptTableOfContents headings={concept.headings} variant="desktop" />
       </div>
-      <ResourceLinks resources={resources} />
-    </article>
+    </div>
   );
 }

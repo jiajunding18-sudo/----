@@ -91,14 +91,14 @@ function SearchResultLink({ result }: { readonly result: SearchResult }) {
   const className =
     "text-lg font-semibold underline decoration-[var(--color-border)] underline-offset-4 hover:decoration-[var(--color-accent)]";
 
-  if (!result.document.href) {
+  if (!result.href) {
     return <span className="text-lg font-semibold">{content}</span>;
   }
   if (result.document.external) {
     return (
       <a
         className={className}
-        href={result.document.href}
+        href={result.href}
         rel="noreferrer"
         target="_blank"
       >
@@ -107,7 +107,7 @@ function SearchResultLink({ result }: { readonly result: SearchResult }) {
     );
   }
   return (
-    <Link className={className} href={result.document.href}>
+    <Link className={className} href={result.href}>
       {content}
     </Link>
   );

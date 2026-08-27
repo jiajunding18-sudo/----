@@ -7,6 +7,8 @@ import type {
   TrackDefinition,
 } from "@/types";
 
+import type { ContentHeading } from "./mdx-headings.mjs";
+
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
   : T extends readonly (infer Item)[]
@@ -16,7 +18,7 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
       : T;
 
 export type ConceptManifestEntry = DeepReadonly<
-  ConceptMeta & { sourcePath: string }
+  ConceptMeta & { sourcePath: string; headings: ContentHeading[] }
 >;
 export type ProjectManifestEntry = DeepReadonly<
   ProjectMeta & { sourcePath: string }

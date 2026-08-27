@@ -17,7 +17,7 @@ const fieldPriority = [
   "aliases",
   "keywords",
   "tags",
-  "headings",
+  "headings.title",
   "goals",
   "stageTitles",
   "trackTitles",
@@ -36,7 +36,7 @@ const fieldLabels: Record<SearchField, string> = {
   aliases: "别名",
   keywords: "关键词",
   tags: "标签",
-  headings: "正文标题",
+  "headings.title": "正文标题",
   goals: "目标",
   stageTitles: "Stage",
   trackTitles: "Track",
@@ -93,6 +93,9 @@ function getDocumentField(
   field: SearchField,
   refIndex?: number,
 ) {
+  if (field === "headings.title") {
+    return document.headings[refIndex ?? 0]?.title ?? "";
+  }
   const value = document[field];
   if (Array.isArray(value)) {
     return value[refIndex ?? 0] ?? value[0] ?? "";
@@ -123,11 +126,28 @@ function getFuseMatch(
   )[0];
   const field = (match?.key as SearchField | undefined) ?? "summary";
   const text = getDocumentField(document, field, match?.refIndex);
-  return { field, text: toExcerpt(text, match) } as const;
+  return { field, refIndex: match?.refIndex, text: toExcerpt(text, match) } as const;
+}
+
+function getResultHref(
+  document: SearchDocument,
+  field: SearchField,
+  refIndex?: number,
+) {
+  if (
+    document.kind === "concept" &&
+    document.href &&
+    field === "headings.title"
+  ) {
+    const heading = document.headings[refIndex ?? 0];
+    return heading ? `${document.href}#${heading.anchor}` : document.href;
+  }
+  return document.href;
 }
 
 export interface SearchResult {
   readonly document: SearchDocument;
+  readonly href?: string;
   readonly matchTier: number;
   readonly matchField: SearchField;
   readonly matchLabel: string;
@@ -158,7 +178,7 @@ export function searchDocuments(
       { name: "aliases", weight: 0.2 },
       { name: "keywords", weight: 0.08 },
       { name: "tags", weight: 0.06 },
-      { name: "headings", weight: 0.05 },
+      { name: "headings.title", weight: 0.05 },
       { name: "goals", weight: 0.025 },
       { name: "stageTitles", weight: 0.012 },
       { name: "trackTitles", weight: 0.012 },
@@ -191,6 +211,7 @@ export function searchDocuments(
       const matchField = deterministicMatch?.field ?? fuseMatch.field;
       return {
         document: result.item,
+        href: getResultHref(result.item, matchField, fuseMatch.refIndex),
         matchTier: deterministicMatch?.tier ?? 4,
         matchField,
         matchLabel: fieldLabels[matchField],

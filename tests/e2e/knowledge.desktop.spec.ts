@@ -160,3 +160,63 @@ test("Concept 详情可用键盘进入，并提供前置、后续与 Roadmap 导
   expect(accessibilityScan.violations).toEqual([]);
   expect(browserErrors).toEqual([]);
 });
+
+test("Concept 自动目录与中英文深链接在桌面端稳定可用", async ({ page }) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/debugging-and-problem-localization/");
+
+  const desktopToc = page.locator('[data-concept-toc="desktop"]');
+  const mobileToc = page.locator('[data-concept-toc="mobile"]');
+  await expect(desktopToc).toBeVisible();
+  await expect(mobileToc).toBeHidden();
+  expect(await desktopToc.evaluate((element) => getComputedStyle(element).position)).toBe(
+    "sticky",
+  );
+
+  const tocTitles = await desktopToc.getByRole("link").allTextContents();
+  const documentTitles = await page
+    .locator(".learning-document h2, .learning-document h3")
+    .evaluateAll((headings) =>
+      headings.map((heading) => {
+        const copy = heading.cloneNode(true) as HTMLElement;
+        copy.querySelector(".heading-anchor")?.remove();
+        return copy.textContent?.trim() ?? "";
+      }),
+    );
+  expect(tocTitles).toEqual(documentTitles);
+  expect(tocTitles).toHaveLength(14);
+
+  const recallLink = desktopToc.getByRole("link", {
+    name: "9. Active Recall 主动回忆",
+  });
+  await recallLink.focus();
+  await expect(recallLink).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-9-active-recall-主动回忆");
+
+  const recallHeading = page.locator("#section-9-active-recall-主动回忆");
+  await expect(recallHeading).toBeFocused();
+  await expect
+    .poll(async () => (await recallHeading.boundingBox())?.y ?? 0)
+    .toBeGreaterThan(64);
+  await expect(recallLink).toHaveAttribute("aria-current", "location");
+
+  await page.reload();
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-9-active-recall-主动回忆");
+  await expect
+    .poll(async () => (await recallHeading.boundingBox())?.y ?? 0)
+    .toBeGreaterThan(64);
+
+  await page.goto("/knowledge/reproducible-learning-projects/");
+  await expect(page.locator("#section-python-pixel-lab")).toHaveText(
+    /Python：Pixel Lab/,
+  );
+  await expectNoHorizontalOverflow(page);
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { searchDocuments } from "@/features/search/search-engine";
 import { loadRepositoryContent } from "@/lib/content";
+import { extractMdxHeadings } from "@/lib/content/mdx-headings.mjs";
 import {
   buildSearchIndex,
   extractMdxSearchText,
@@ -25,6 +26,16 @@ describe("构建期 SearchDocument", () => {
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "concept"),
     ).toHaveLength(8);
+    expect(
+      searchIndex.documents
+        .filter(({ kind }) => kind === "concept")
+        .every(
+          ({ headings }) =>
+            headings.length >= 14 &&
+            new Set(headings.map(({ anchor }) => anchor)).size ===
+              headings.length,
+        ),
+    ).toBe(true);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "project"),
     ).toHaveLength(1);
@@ -58,13 +69,15 @@ describe("构建期 SearchDocument", () => {
       aliases: ["系统化调试", "Systematic Debugging"],
     });
     expect(
-      debugging?.headings.some((heading) =>
-        heading.startsWith("9. Active Recall"),
+      debugging?.headings.some(({ title }) =>
+        title.startsWith("9. Active Recall"),
       ),
     ).toBe(true);
     expect(debugging?.goals[0]).toContain("最小复现");
     expect(pixelLab?.relatedTitles).toContain("Python 核心语法");
-    expect(pixelLab?.headings).toContain("项目目标");
+    expect(pixelLab?.headings).toContainEqual(
+      expect.objectContaining({ title: "项目目标" }),
+    );
     expect(pythonTutorial).toMatchObject({
       aliases: ["Python 官方教程"],
       external: true,
@@ -75,8 +88,17 @@ describe("构建期 SearchDocument", () => {
 
   it("MDX 文本提取不执行代码，并保持确定性序列化", () => {
     expect(
-      extractMdxSearchText("# 标题\n\n## Section `code`\n\n正文 **内容**").headings,
-    ).toEqual(["标题", "Section code"]);
+      extractMdxHeadings("# 标题\n\n## Section `code`\n\n正文 **内容**"),
+    ).toEqual([
+      {
+        depth: 2,
+        title: "Section code",
+        anchor: "section-section-code",
+      },
+    ]);
+    expect(
+      extractMdxSearchText("# 标题\n\n## Section `code`\n\n正文 **内容**").body,
+    ).toContain("Section code");
     expect(serializeSearchIndex(searchIndex)).toBe(
       serializeSearchIndex(searchIndex),
     );
@@ -86,7 +108,7 @@ describe("构建期 SearchDocument", () => {
     const document = searchIndex.documents[0];
     expect(() =>
       searchIndexSchema.parse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         documents: [document, document],
       }),
     ).toThrow("SearchDocument ID 必须唯一");
@@ -142,6 +164,27 @@ describe("基础搜索匹配与排序", () => {
       document: { id: "resource.python-tutorial" },
       matchTier: 2,
     });
+  });
+
+  it("正文标题命中复用 manifest anchor，其他实体仍保持原导航", () => {
+    const headingResult = searchDocuments(
+      searchIndex.documents,
+      "9. Active Recall 主动回忆",
+    ).find(({ document }) => document.id === "tooling.debugging");
+    expect(headingResult).toMatchObject({
+      href: "/knowledge/debugging-and-problem-localization/#section-9-active-recall-主动回忆",
+      matchLabel: "正文标题",
+    });
+
+    expect(searchDocuments(searchIndex.documents, "调试与问题定位")[0]?.href).toBe(
+      "/knowledge/debugging-and-problem-localization/",
+    );
+    expect(searchDocuments(searchIndex.documents, "Pixel Lab")[0]?.href).toBe(
+      "/projects/pixel-lab/",
+    );
+    expect(
+      searchDocuments(searchIndex.documents, "Python 官方教程")[0]?.href,
+    ).toMatch(/^https:\/\//u);
   });
 
   it("不返回 draft Project，也能安全处理空白和特殊字符", () => {

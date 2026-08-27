@@ -15,7 +15,13 @@ export const searchDocumentSchema = z.strictObject({
   englishTitle: z.string().trim().min(1).optional(),
   aliases: z.array(z.string().trim().min(1)),
   keywords: z.array(z.string().trim().min(1)),
-  headings: z.array(z.string().trim().min(1)),
+  headings: z.array(
+    z.strictObject({
+      depth: z.union([z.literal(2), z.literal(3)]),
+      title: z.string().trim().min(1),
+      anchor: z.string().trim().min(1),
+    }),
+  ),
   goals: z.array(z.string().trim().min(1)),
   authorOrOrganization: z.string().trim().min(1).optional(),
   summary: z.string().trim().min(1),
@@ -35,7 +41,7 @@ export const searchDocumentSchema = z.strictObject({
 
 export const searchIndexSchema = z
   .strictObject({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     documents: z.array(searchDocumentSchema),
   })
   .superRefine(({ documents }, context) => {

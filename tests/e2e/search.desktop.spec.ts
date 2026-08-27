@@ -139,3 +139,38 @@ test("多类型结果、Project 导航与 Resource 外链语义正确", async ({
   expect(accessibilityScan.violations).toEqual([]);
   expect(browserErrors).toEqual([]);
 });
+
+test("正文标题命中直接进入 Concept 对应稳定章节", async ({ page }) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/search/?q=9.%20Active%20Recall%20主动回忆");
+
+  const debugging = page.locator(
+    '[data-search-result-id="tooling.debugging"]',
+  );
+  await expect(debugging).toContainText("命中正文标题");
+  const resultLink = debugging.getByRole("link", { name: "调试与问题定位" });
+  await expect(resultLink).toHaveAttribute(
+    "href",
+    "/knowledge/debugging-and-problem-localization/#section-9-active-recall-主动回忆",
+  );
+
+  await resultLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-9-active-recall-主动回忆");
+  const target = page.locator("#section-9-active-recall-主动回忆");
+  await expect(target).toBeVisible();
+  await expect
+    .poll(async () => (await target.boundingBox())?.y ?? 0)
+    .toBeGreaterThan(64);
+
+  await page.reload();
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-9-active-recall-主动回忆");
+  await expectNoHorizontalOverflow(page);
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});

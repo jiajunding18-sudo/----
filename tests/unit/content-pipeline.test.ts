@@ -336,6 +336,7 @@ describe("manifest 与跨实体校验", () => {
     ]);
     expect(manifest.concepts[0]).toMatchObject({
       sourcePath: "content/concepts/fixtures/fixture-alpha.mdx",
+      headings: [],
       stageId: "stage.fixture",
       trackIds: ["track.common"],
       masteryCriteria: [{ id: "criterion.fixture-alpha", required: true }],

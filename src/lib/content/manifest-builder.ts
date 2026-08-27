@@ -1,6 +1,7 @@
 import { deriveDependencies } from "@/lib/validation";
 
 import { validateContentCatalog } from "./catalog-validator";
+import { extractMdxHeadings } from "./mdx-headings.mjs";
 import type {
   ConceptManifestEntry,
   ContentCatalogInput,
@@ -42,9 +43,10 @@ export function buildContentManifest(
   const concepts = [...input.concepts]
     .sort((left, right) => byId(left.meta, right.meta))
     .map(
-      ({ meta, sourcePath }): ConceptManifestEntry => ({
+      ({ body, meta, sourcePath }): ConceptManifestEntry => ({
         ...meta,
         sourcePath,
+        headings: extractMdxHeadings(body),
       }),
     );
   const projects = [...input.projects]

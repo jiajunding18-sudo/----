@@ -4,6 +4,7 @@ import type {
   LoadedConcept,
   LoadedProject,
 } from "@/lib/content/manifest-types";
+import { extractMdxHeadings } from "@/lib/content/mdx-headings.mjs";
 
 import { searchIndexSchema, type SearchDocument } from "./search-schema";
 import { buildSearchTokens } from "./search-text";
@@ -33,12 +34,7 @@ function cleanMarkdownText(value: string) {
 }
 
 export function extractMdxSearchText(body: string) {
-  const headings = [...body.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gmu)]
-    .map((match) => cleanMarkdownText(match[1] ?? ""))
-    .filter(Boolean);
-
   return {
-    headings: uniqueSorted(headings),
     body: cleanMarkdownText(body),
   } as const;
 }
@@ -105,7 +101,7 @@ function withTokens(
       document.englishTitle ?? "",
       ...document.aliases,
       ...document.keywords,
-      ...document.headings,
+      ...document.headings.map(({ title }) => title),
       ...document.goals,
       ...document.tags,
       ...document.stageTitles,
@@ -123,6 +119,7 @@ function buildConceptDocuments(
     .filter(({ meta }) => meta.publicationStatus === "published")
     .flatMap(({ body, meta }) => {
       const text = extractMdxSearchText(body);
+      const manifestConcept = getRequiredConcept(manifest, meta.id);
       const stageContext = getStageContext(manifest, [meta.stageId]);
       const trackContext = getTrackContext(manifest, meta.trackIds);
       const common = {
@@ -148,7 +145,7 @@ function buildConceptDocuments(
         kind: "concept",
         title: meta.title,
         englishTitle: meta.englishTitle,
-        headings: text.headings,
+        headings: [...manifestConcept.headings],
         goals: meta.learningOutcomes,
         summary: meta.summary,
         body: text.body,
@@ -204,7 +201,7 @@ function buildProjectDocuments(
           ...stageContext.stageTitles,
           ...trackContext.trackTitles,
         ]),
-        headings: text.headings,
+        headings: extractMdxHeadings(body),
         goals: [meta.resumeOutcome],
         summary: meta.resumeOutcome,
         body: text.body,
@@ -294,7 +291,7 @@ export function buildSearchIndex(
   manifest: ContentManifest,
 ) {
   const index = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     documents: [
       ...buildConceptDocuments(input.concepts, manifest),
       ...buildProjectDocuments(input.projects, manifest),

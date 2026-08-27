@@ -5,5 +5,6 @@ export * from "./manifest-builder";
 export * from "./manifest-reader";
 export * from "./manifest-serializer";
 export * from "./manifest-types";
+export * from "./mdx-headings.mjs";
 export * from "./mdx-loader";
 export * from "./repository-content";

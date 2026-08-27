@@ -91,6 +91,7 @@ dialog:focus-visible {
 .learning-document h2 {
   margin-top: 3rem;
   padding-top: 0.25rem;
+  scroll-margin-top: 6rem;
   font-size: 1.5rem;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -99,9 +100,34 @@ dialog:focus-visible {
 
 .learning-document h3 {
   margin-top: 2rem;
+  scroll-margin-top: 6rem;
   font-size: 1.125rem;
   font-weight: 650;
   line-height: 1.5;
+}
+
+.learning-document h2:target,
+.learning-document h3:target {
+  text-decoration-color: var(--color-accent);
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.28em;
+}
+
+.learning-document .heading-anchor {
+  margin-left: 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.72em;
+  font-weight: 500;
+  opacity: 0.55;
+  text-decoration: none;
+}
+
+.learning-document h2:hover .heading-anchor,
+.learning-document h3:hover .heading-anchor,
+.learning-document .heading-anchor:focus-visible {
+  color: var(--color-accent);
+  opacity: 1;
 }
 
 .learning-document p,

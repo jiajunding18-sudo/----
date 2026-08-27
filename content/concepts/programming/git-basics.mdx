@@ -1,0 +1,193 @@
+---
+schemaVersion: 1
+id: tooling.git-basics
+slug: git-basics
+title: Git 基础与学习项目 Checkpoint
+englishTitle: Git Basics and Learning Project Checkpoints
+aliases:
+  - Git 与版本控制基础
+  - Version Control Basics
+searchKeywords:
+  - repository
+  - working tree
+  - staging area
+  - commit
+  - branch
+  - checkpoint
+summary: 用 Git 看清工作区变化、选择要保存的内容并形成可解释的提交历史，让学习实验能够比较、回退和继续。
+why: 机器视觉实验会频繁修改代码、参数和说明；没有可靠历史时，失败修改与有效结果混在一起，无法判断哪个变化造成结果差异。
+stageId: stage.tooling-foundations
+trackIds:
+  - track.common
+order: 50
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 4
+  max: 5
+dependencies:
+  - conceptId: tooling.computer-files
+    kind: hard
+    reason: Git 命令作用于具体目录和文件；必须先理解当前工作目录、相对路径与文件状态。
+  - conceptId: tooling.python-modules
+    kind: recommended
+    reason: 已有一个分成源码、说明和输出的小程序后，更容易体会一次提交为何应该只表达一个目的。
+tags:
+  - Git
+  - 版本控制
+  - Checkpoint
+learningOutcomes:
+  - 能区分 repository、working tree、staging area 与 commit，并用 status 和 diff 说明当前变化处于哪一层。
+  - 能建立语义清楚的小步历史，创建基础分支，并在通过检查后记录可恢复的 Git checkpoint。
+masteryCriteria:
+  - id: criterion.tooling-git-basics.create-checkpoints
+    description: 在一个学习项目中完成至少五次单一目的的提交，能用 status、diff、staged diff 和 log 解释每次 checkpoint 包含与不包含什么。
+    evidenceHint: 提交带注释的命令记录、提交图、两个 commit 的差异解释，以及通过项目检查的 checkpoint hash。
+    required: true
+  - id: criterion.tooling-git-basics.branch-and-conflict
+    description: 能创建实验分支、比较分支变化，并在一次受控练习中解释并解决同一行冲突。
+    evidenceHint: 在单独练习仓库保存分支图、冲突状态、人工选择依据、解决后的 diff 和合并 commit；不得只提交最终成功截图。
+    required: true
+resourceIds:
+  - resource.pro-git
+publicationStatus: published
+contentVersion: 2026.08.27
+---
+
+# Git 基础与学习项目 Checkpoint（Git Basics and Checkpoints）
+
+Git 的价值不是“把代码上传到 GitHub”，而是让每次有意义的变化都有可检查的边界。本单元只学习 Stage 0 需要的本地版本控制闭环。
+
+## 1. 这是什么
+
+- **仓库（repository）**是 Git 保存项目历史和引用的地方，通常由项目目录中的 `.git` 管理。
+- **工作树（working tree）**是你当前能编辑的文件版本。
+- **暂存区（staging area / index）**是下一次 commit 准备包含的变化。
+- **提交（commit）**是带作者、时间、说明和父提交关系的项目快照。
+- **分支（branch）**是指向某个 commit 的可移动名字，用于隔离一条实验历史。
+- **checkpoint** 是你有意选择的、通过当前验收且能够继续工作的 commit；它不是 Git 的特殊对象。
+
+GitHub 是托管与协作服务，Git 是本地版本控制工具。本单元不要求创建远程仓库。
+
+## 2. 为什么机器视觉需要它
+
+你可能先改路径检查，再换输入图，再调整参数。如果三项变化混在一个提交里，结果改变后很难归因。小步 commit 让代码、环境说明和实验结论能够对应；分支允许探索新方案，同时保留已通过的基线。
+
+## 3. 前置知识
+
+硬前置是“计算机、文件与终端”：必须知道当前仓库目录和目标文件。推荐已完成 Python 模块练习，这样仓库中有真实的源码、README 与证据，而不是为练 Git 制造空文件。
+
+## 4. 核心概念
+
+一次变化通常经历：
+
+```text
+编辑文件 → working tree 有变化
+        → git add 选择变化
+        → staging area 准备提交
+        → git commit 形成历史快照
+```
+
+常用观察命令各回答不同问题：
+
+- `git status --short`：哪些文件未跟踪、已修改或已暂存？
+- `git diff`：工作树相对暂存区改了什么？
+- `git diff --staged`：下一次 commit 准备包含什么？
+- `git log --oneline --decorate --graph`：历史和分支怎样连接？
+- `git branch --show-current`：当前在哪个分支？
+
+`git add` 不是永久保存；只有 commit 进入仓库历史。未跟踪文件也不会自动进入 checkpoint。
+
+## 5. 初学者直觉解释
+
+把工作树想成实验桌，暂存区是准备归档的托盘，commit 是贴好说明并封存的一盒材料。`git add` 是挑选放上托盘的物品，不是把整个房间拍照；分支是从某个盒子开始的一条新实验路线。
+
+## 6. 必须掌握到什么程度
+
+你需要能初始化本地仓库、读懂 `status`、分别检查未暂存和已暂存 diff、选择具体文件提交、查看历史、创建和切换基础分支，并说明某个 checkpoint 为什么可信。暂时不要求远程协作、rebase、cherry-pick、复杂恢复或 Git 内部对象。
+
+## 7. 常见误区
+
+- 把 `git add .` 当作固定动作，不检查是否把输出图、虚拟环境或隐私数据加入提交。
+- 认为 commit 会保存未跟踪或未暂存文件。
+- 提交说明写“update”“修改”，无法说明实验发生了什么。
+- 代码未运行、测试失败时就称为稳定 checkpoint。
+- 把 branch 当成文件副本；它实际是历史中的引用。
+- 遇到冲突就删除一侧或强行覆盖，没有阅读冲突两边表达的意图。
+
+## 8. Worked Example：为 Pixel Lab 建立第一个 Checkpoint
+
+在 Pixel Lab 根目录执行，并在每一步阅读输出：
+
+```powershell
+git init
+git status --short
+git add README.md requirements.txt
+git diff --staged
+git commit -m "docs: record Pixel Lab setup"
+git log --oneline --decorate --graph
+```
+
+随后改进 `src/image_io.py` 的坏路径提示：
+
+```powershell
+git status --short
+git diff -- src/image_io.py
+git add src/image_io.py
+git diff --staged
+git commit -m "feat: report resolved image path"
+```
+
+在创建 checkpoint 前先运行项目的有效输入与坏路径回归，再记录：
+
+```powershell
+git status --short
+git log -1 --oneline
+```
+
+只有检查通过、工作树状态已解释清楚的 commit 才写入 `evidence/checkpoint.txt`。工作树必须完全为空不是绝对要求，但任何剩余变化都必须说明为什么不属于该 checkpoint。
+
+## 9. Active Recall 主动回忆
+
+1. working tree、staging area 和 commit 分别保存什么？
+2. `git diff` 与 `git diff --staged` 为什么可能不同？
+3. 未跟踪文件会不会自动进入 commit？
+4. 怎样证明 checkpoint 对应的代码通过了当时的验收？
+5. 分支和目录副本最关键的区别是什么？
+6. 合并冲突表示 Git 知道什么，又不知道什么？
+
+## 10. Practice 练习
+
+### 小步历史
+
+在 Pixel Lab 中形成至少五次单一目的的 commit，例如：目录与 README、环境记录、图像输入、图像输出、坏路径证据。每次提交前保存 `status`、未暂存 diff、已暂存 diff 中真正有信息的部分，并用一句话说明为何这些文件属于同一目的。
+
+### 受控分支与冲突
+
+在单独的练习仓库中完成，避免干扰正式项目：
+
+1. 记录当前基础分支名和起点 commit。
+2. 用 `git switch -c experiment/readme-wording` 创建分支，修改 README 中一行并提交。
+3. 切回基础分支，修改同一行并提交。
+4. 合并实验分支，使用 `git status` 和文件中的冲突标记阅读双方意图。
+5. 人工写出保留两边有效信息的最终文本，`git add` 后先看 staged diff，再完成 merge commit。
+6. 用 `git log --oneline --decorate --graph --all` 解释图中的分叉和汇合。
+
+不要在真实项目上用 `reset --hard` 或强制覆盖来完成本练习。
+
+## 11. 实际使用
+
+每完成 Pixel Lab 的一个可验收增量就形成一个 commit。环境重建、有效读图、坏路径诊断和 README 交接全部通过后，将最终 commit hash 记录为 Stage 0 checkpoint。以后 Stage 2 扩展 Pixel Lab 时，从该历史继续，而不是复制出 `final-v2-really-final` 目录。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一份 Git 证据包：至少五个语义 commit 的图；一个未暂存 diff 与 staged diff 的区别说明；两个 checkpoint 的变更对照；最终 checkpoint hash 和其对应检查结果；一次受控分支冲突的现象、选择依据、解决 diff 与合并历史。仅展示“已经 commit”不能证明掌握。
+
+## 13. 后续复用与复习
+
+参数对照、数据清单、模型训练和论文实验都会依赖可追踪历史。24 小时后从一组混合变化中只暂存一个目的；7 天后仅根据 log 和 diff 找回 Pixel Lab 的 Stage 0 checkpoint，并解释 checkpoint 之后仍未提交的变化。
+
+## 14. 精选学习资源
+
+- **Pro Git, Second Edition**：先看 1.3 建立快照心智模型，再看 2.1–2.3 的仓库、记录变化与历史；分支只读 3.1–3.2。当前不需要阅读远程协作、rebase 或 Git internals。

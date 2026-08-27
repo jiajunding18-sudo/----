@@ -13,7 +13,10 @@ const conceptIds = [
   "tooling.dev-environment",
   "tooling.python-core",
   "tooling.python-modules",
+  "tooling.git-basics",
   "tooling.debugging",
+  "tooling.linux-basics",
+  "tooling.reproducibility",
 ] as const;
 const conceptIdSet = new Set<string>(conceptIds);
 
@@ -22,6 +25,10 @@ const resourceIds = [
   "resource.python-pathlib",
   "resource.python-venv",
   "resource.opencv-python-tutorials",
+  "resource.pro-git",
+  "resource.ubuntu-command-line",
+  "resource.npm-package-lock",
+  "resource.github-readme",
 ] as const;
 
 const requiredSectionHeadings = [
@@ -78,6 +85,26 @@ describe("第一批真实学习内容切片", () => {
           targetId: "tooling.debugging",
           kind: "hard",
         }),
+        expect.objectContaining({
+          prerequisiteId: "tooling.computer-files",
+          targetId: "tooling.git-basics",
+          kind: "hard",
+        }),
+        expect.objectContaining({
+          prerequisiteId: "tooling.computer-files",
+          targetId: "tooling.linux-basics",
+          kind: "hard",
+        }),
+        expect.objectContaining({
+          prerequisiteId: "tooling.python-modules",
+          targetId: "tooling.reproducibility",
+          kind: "hard",
+        }),
+        expect.objectContaining({
+          prerequisiteId: "tooling.git-basics",
+          targetId: "tooling.reproducibility",
+          kind: "hard",
+        }),
       ]),
     );
   });
@@ -101,7 +128,7 @@ describe("第一批真实学习内容切片", () => {
     });
   });
 
-  it("Pixel Lab 关联全部五个 Concept、两条替代路径和必需证据", async () => {
+  it("Pixel Lab 关联全部八个 Concept、两条替代路径和 Stage 0 证据", async () => {
     const manifest = await loadRepositoryContentManifest();
     const project = manifest.projects.find(({ id }) => id === "project.pixel-lab");
 
@@ -116,6 +143,36 @@ describe("第一批真实学习内容切片", () => {
     expect(project?.acceptanceCriteria.every(({ required }) => required)).toBe(
       true,
     );
+    expect(
+      project?.conceptRequirements.find(
+        ({ conceptId }) => conceptId === "tooling.linux-basics",
+      )?.kind,
+    ).toBe("recommended");
     expect(project?.evidenceConceptIds).toEqual(conceptIds);
+  });
+
+  it("Stage 0 保留五项真实出口证据与七天复测", async () => {
+    const manifest = await loadRepositoryContentManifest();
+    const stage = manifest.stages.find(
+      ({ id }) => id === "stage.tooling-foundations",
+    );
+
+    expect(stage?.exitCriteria.map(({ id }) => id)).toEqual([
+      "stage-criterion.tooling-foundations.rebuild-environment",
+      "stage-criterion.tooling-foundations.diagnose-failure",
+      "stage-criterion.tooling-foundations.version-small-changes",
+      "stage-criterion.tooling-foundations.explain-runtime-context",
+      "stage-criterion.tooling-foundations.readme-handoff",
+    ]);
+    expect(stage?.exitCriteria.every(({ required }) => required)).toBe(true);
+    expect(stage?.retestAfterDays).toBe(7);
+
+    const linuxBasics = manifest.concepts.find(
+      ({ id }) => id === "tooling.linux-basics",
+    );
+    expect(linuxBasics).toMatchObject({
+      targetDepth: "understand",
+      requiredness: "required",
+    });
   });
 });

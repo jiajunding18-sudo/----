@@ -1,0 +1,200 @@
+---
+schemaVersion: 1
+id: tooling.reproducibility
+slug: reproducible-learning-projects
+title: 可复现实验与环境交接
+englishTitle: Reproducible Experiments and Environment Handoff
+aliases:
+  - Reproducibility
+  - 可复现性基础
+searchKeywords:
+  - README
+  - lockfile
+  - package-lock.json
+  - requirements.txt
+  - Python version
+  - Node version
+summary: 把运行环境、依赖、输入、命令和预期结果写成可执行契约，让未来的自己或另一台电脑能够重建实验并诊断差异。
+why: “在我电脑上能跑”只描述一次本机结果；机器视觉结论必须能关联到明确代码、环境、输入和命令，才能比较与复核。
+stageId: stage.tooling-foundations
+trackIds:
+  - track.common
+order: 80
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 4
+  max: 5
+dependencies:
+  - conceptId: tooling.python-modules
+    kind: hard
+    reason: 可复现说明必须建立在输入、输出、模块边界和失败条件已经清楚的小程序上。
+  - conceptId: tooling.git-basics
+    kind: hard
+    reason: 环境记录必须与明确 commit 对应，否则无法判断重建的是哪一版代码。
+  - conceptId: tooling.debugging
+    kind: recommended
+    reason: 调试方法能帮助区分代码、解释器、依赖、工作目录和输入漂移。
+tags:
+  - 可复现性
+  - README
+  - 依赖管理
+  - lockfile
+learningOutcomes:
+  - 能记录实际使用的 Python、Node/npm 与关键依赖版本，并解释虚拟环境、依赖清单和 lockfile 各自负责什么。
+  - 能写出从干净目录开始的 README 复现步骤，并用环境诊断证据定位一次复现偏差。
+masteryCriteria:
+  - id: criterion.tooling-reproducibility.clean-rebuild
+    description: 仅依据已提交的 README、版本记录和依赖文件，在干净目录或新虚拟环境重建 Pixel Lab 并得到规定输出。
+    evidenceHint: 提交起点 commit、完整命令、解释器与依赖版本、输入来源、预期/实际输出以及总耗时；不得借用原有 .venv。
+    required: true
+  - id: criterion.tooling-reproducibility.diagnose-drift
+    description: 能制造并定位一次版本、解释器、依赖或工作目录偏差，说明 lockfile/依赖快照能控制什么以及不能控制什么。
+    evidenceHint: 保存失败现场、至少两个假设、诊断命令、根因、修复和正常案例回归；明确操作系统或硬件等未锁定边界。
+    required: true
+resourceIds:
+  - resource.python-venv
+  - resource.npm-package-lock
+  - resource.github-readme
+publicationStatus: published
+contentVersion: 2026.08.27
+---
+
+# 可复现实验与环境交接（Reproducible Experiments and Environment Handoff）
+
+可复现不是“把整个电脑复制一份”，而是让关键条件可记录、可重建、可比较，并诚实说明尚未控制的差异。
+
+## 1. 这是什么
+
+一个最小可复现实验至少要固定或记录：
+
+- **代码版本**：对应哪个 Git commit；
+- **运行时（runtime）**：Python、Node.js、npm 等实际版本；
+- **依赖**：直接依赖与实际解析版本；
+- **环境边界**：虚拟环境、操作系统、设备或其他重要条件；
+- **输入**：来源、文件名和必要的完整性说明；
+- **命令与预期输出**：从哪个目录运行、成功时看到什么；
+- **失败诊断**：不一致时先检查什么。
+
+## 2. 为什么机器视觉需要它
+
+相同源码在不同 OpenCV、NumPy、驱动、操作系统或输入文件上可能行为不同。没有版本与输入记录，就无法判断结果变化来自算法修改还是环境漂移；后续项目的指标也无法与代码 checkpoint 对应。
+
+## 3. 前置知识
+
+硬前置是 Python 模块和 Git：程序边界必须清楚，说明还要指向明确 commit。推荐已学习调试，因为重建失败通常需要区分工作目录、解释器、依赖与输入，而不是立刻重装所有软件。
+
+## 4. 核心概念
+
+### 版本与依赖不是同一件事
+
+`python --version` 或 `node --version` 记录运行时；`cv2.__version__` 记录某个包。只写“Python 3”或“OpenCV 已安装”范围过宽。
+
+### 虚拟环境不是依赖记录
+
+Python `.venv` 隔离项目包，但它通常是可重建目录，不适合作为跨机器交付物。`requirements.txt` 可以用固定版本形成当前环境快照，但仍可能受 Python 版本、操作系统和平台二进制影响。
+
+### lockfile 保存解析结果
+
+Node 项目的 `package.json` 表达项目意图和版本范围；`package-lock.json` 记录 npm 实际解析的依赖树及完整性信息，应与源码一起提交。`npm ci` 按 lockfile 做干净安装，并在 `package.json` 与 lockfile 不一致时失败。lockfile 仍不会固定 Node、操作系统或浏览器版本。
+
+### README 是可执行入口
+
+README 应让没有上下文的人知道项目做什么、需要什么、从哪里开始、运行什么、成功是什么、失败先检查什么。它不是开发日记或命令堆积。
+
+## 5. 初学者直觉解释
+
+把复现说明想成实验配方：commit 是配方版本，运行时和依赖是仪器与试剂规格，输入是样品，命令是步骤，预期输出是验收现象。只写“按以前的方法运行”无法让别人复做，也无法定位哪项条件不同。
+
+## 6. 必须掌握到什么程度
+
+你需要能为 Python 项目记录解释器与包版本、重建 venv、写清 README；能在 Node 项目中解释 `package.json` 与 `package-lock.json` 的职责，使用 `npm ci` 复现已锁定依赖；能诊断至少一次环境漂移。暂时不要求容器、跨平台构建、供应链签名或完全确定性的科学计算。
+
+## 7. 常见误区
+
+- 提交 `.venv` 或 `node_modules`，却没有可靠的重建说明。
+- 只记录直接依赖名，不记录实际版本和 Python/Node 版本。
+- 把 `pip freeze` 输出称为跨所有平台完全确定的 lockfile。
+- 删除或忽略 `package-lock.json`，再声称 npm 安装可重复。
+- README 省略工作目录、输入来源或预期输出。
+- 在原环境反复运行后说“干净复现通过”。
+- 固定随机种子后宣称所有硬件与库实现都会产生字节级相同结果。
+
+## 8. Worked Example：两种项目的复现契约
+
+### Python：Pixel Lab
+
+记录当前事实：
+
+```powershell
+.\.venv\Scripts\python.exe --version
+.\.venv\Scripts\python.exe -c "import cv2, sys; print(sys.executable); print(cv2.__version__)"
+.\.venv\Scripts\python.exe -m pip freeze
+git log -1 --oneline
+git status --short
+```
+
+README 的最小结构：
+
+```text
+目标与非目标
+已验证平台与版本
+输入来源及两条执行路径
+从干净目录创建 venv、安装 requirements.txt 的命令
+从项目根目录运行的精确命令
+预期输出文件和关键终端输出
+坏路径测试
+常见诊断：cwd、sys.executable、包版本、输入存在性
+证据对应的 Git commit
+```
+
+重建时创建新的 `.venv-retest` 或在新的项目副本中建立 `.venv`，不能继续借用原环境。
+
+### Node：读取现有网页项目的锁定信息
+
+在一个确实包含 `package.json` 与 `package-lock.json` 的项目中检查：
+
+```powershell
+node --version
+npm --version
+npm ci
+npm run check
+```
+
+记录 Node/npm 版本和 `package-lock.json` 所属 commit。不要把这组 Node 命令硬塞进纯 Python Pixel Lab；只记录项目实际使用的工具，未使用项明确写“不适用”。
+
+## 9. Active Recall 主动回忆
+
+1. 为什么 commit hash 是环境说明的一部分？
+2. `.venv` 与 `requirements.txt` 分别解决什么问题？
+3. `package.json` 和 `package-lock.json` 的职责有什么不同？
+4. lockfile 为什么仍不能固定操作系统、驱动和硬件？
+5. 怎样证明一次测试来自干净重建，而非原环境残留？
+6. README 中哪三项最能帮助定位“别人电脑不能运行”？
+
+## 10. Practice 练习
+
+1. 为 Pixel Lab 写 README 初稿，让每条命令都标明运行目录。
+2. 在新虚拟环境中只按 README 安装和运行；遇到缺步骤时先记录失败，再修改 README。
+3. 故意用系统 Python 运行一次，比较 `sys.executable` 与导入结果，完成故障卡。
+4. 检查当前 Learning OS 仓库的 `package.json` 与 `package-lock.json`：指出哪个保存脚本/直接依赖意图，哪个保存实际依赖树；只读检查，不修改依赖。
+5. 写出 Pixel Lab 未被当前记录固定的三项条件，例如操作系统、相机照片内容或底层二进制差异，并说明它们是否影响 Stage 0 结论。
+
+## 11. 实际使用
+
+Pixel Lab 的 Stage 0 出口采用干净环境交接：从指定 commit 开始，只按 README 选择手机或生成图路径，在 30 分钟内重建环境、运行有效输入和坏路径测试，并保留真实命令与输出。另一位学习者不可得时，由你在七天后使用新目录完成盲复现。
+
+## 12. Mastery Evidence 掌握证据
+
+提交两部分证据：第一部分是干净重建记录，包括 commit、版本、输入、命令、预期/实际结果和耗时；第二部分是环境漂移故障卡，包括失败现场、被证伪假设、根因和回归。再附一段边界说明：依赖记录控制了什么，没有控制什么。README 文件本身存在并不等于复现成功。
+
+## 13. 后续复用与复习
+
+批处理、训练、相机标定和工业部署都会扩展同一契约，届时再加入配置、随机种子、数据版本、设备和指标。24 小时后不看笔记列出最小复现清单；7 天后从 checkpoint 在新目录重建 Pixel Lab，按首次遗漏更新 README，但保留首次失败证据。
+
+## 14. 精选学习资源
+
+- **Python `venv` 官方文档**：复习环境创建、解释器位置和环境不可随意移动的边界。
+- **npm `package-lock.json` 官方文档**：重点看 Description，理解 lockfile 描述实际依赖树且应提交到仓库；本阶段不研究 hidden lockfile 细节。
+- **GitHub README 官方文档**：阅读 About READMEs，理解 README 是仓库入口；具体复现字段以本页的实验需求为准。

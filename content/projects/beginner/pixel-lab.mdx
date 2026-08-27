@@ -23,10 +23,22 @@ conceptRequirements:
     kind: hard
     minimumStatus: understood
     reason: 必须把图像输入边界封装成函数，并显式处理无效输入。
+  - conceptId: tooling.git-basics
+    kind: hard
+    minimumStatus: understood
+    reason: Stage 0 交接版本必须对应可检查的 commit 和小步修改历史。
   - conceptId: tooling.debugging
+    kind: hard
+    minimumStatus: understood
+    reason: Stage 0 出口必须完成路径、Python 异常和解释器/依赖三类故障诊断。
+  - conceptId: tooling.linux-basics
     kind: recommended
     minimumStatus: understood
-    reason: 推荐先掌握调试闭环，以便故意制造并解释一次坏路径失败。
+    reason: Linux 命令对照有助于后续迁移，但 Pixel Lab 的 Windows 路径不应因此被阻塞。
+  - conceptId: tooling.reproducibility
+    kind: hard
+    minimumStatus: understood
+    reason: 最终 Stage 0 增量必须能从指定 checkpoint 仅依据 README 在干净环境复现。
 estimatedHours:
   min: 12
   max: 18
@@ -39,6 +51,12 @@ resources:
     role: documentation
     required: true
   - resourceId: resource.opencv-python-tutorials
+    role: documentation
+    required: true
+  - resourceId: resource.pro-git
+    role: reference
+    required: true
+  - resourceId: resource.github-readme
     role: documentation
     required: true
 environmentRequirements:
@@ -83,34 +101,48 @@ acceptanceCriteria:
   - id: acceptance.pixel-lab.invalid-path
     description: 对不存在的输入快速失败，错误中包含解析路径，并留下假设、验证、修复和回归记录。
     required: true
+  - id: acceptance.pixel-lab.git-checkpoint
+    description: 至少五次单一目的的 commit 可由 log 与 diff 解释，最终 Stage 0 checkpoint 对应通过验收的代码与说明。
+    required: true
+  - id: acceptance.pixel-lab.stage-zero-diagnostics
+    description: 路径错误、Python 异常和依赖/解释器错误各有一张包含现象、假设、验证、修复和回归的故障卡。
+    required: true
+  - id: acceptance.pixel-lab.runtime-explanation
+    description: 能从命令输出解释工作目录、脚本、进程、解释器、包、输入与输出之间的关系。
+    required: true
   - id: acceptance.pixel-lab.reproducible-readme
-    description: README 让另一位初学者能够选择任一执行路径，从空目录重建并复现实验。
+    description: README 让另一位初学者或七天后的自己选择任一执行路径，在 30 分钟内从干净目录重建并复现实验。
     required: true
 deliverableRequirements:
   - src 下职责分离的 Python 源码、requirements.txt 与不包含虚拟环境目录的项目文件树。
   - README 记录环境创建、输入来源、运行命令、预期输出和两条执行路径。
-  - evidence 下保存有效运行记录、无效路径故障卡、输出图像和七天复测记录模板。
+  - evidence 下保存有效运行记录、三类故障卡、Git 历史与 diff、运行时关系说明、输出图像和七天复测记录。
+  - stage-0-exit 证据索引逐项关联五个 Stage 出口 criterion ID，不用文件存在或状态点击代替通过证据。
 evidenceConceptIds:
   - tooling.computer-files
   - tooling.dev-environment
   - tooling.python-core
   - tooling.python-modules
+  - tooling.git-basics
   - tooling.debugging
+  - tooling.linux-basics
+  - tooling.reproducibility
 resumeOutcome: 完成后能够在后续 NumPy 与 OpenCV 单元中复用同一项目目录、环境记录、输入边界和调试模板，而无需声称已理解图像算法。
 tags:
   - Python
   - OpenCV
+  - Git
   - 可复现性
   - 调试
 publicationStatus: published
-contentVersion: 2026.08.27
+contentVersion: 2026.08.27.2
 ---
 
 # Pixel Lab：可复现的第一次图像读写实验
 
 ## 项目目标
 
-从一个空项目目录开始，建立可重建的 Python 环境，读取一张图像，记录最基本的程序事实，保存副本；随后主动提供一个坏路径，完成一次可审计的调试闭环。
+从一个空项目目录开始，建立可重建的 Python 环境，读取一张图像，记录最基本的程序事实，保存副本；随后建立可解释的 Git 历史、完成三类故障诊断，并让另一环境只按 README 复现。
 
 本项目验证的是 **Stage 0 工具能力**。`shape` 和 `dtype` 在这里是观察值，不要求你已经理解像素矩阵、通道或图像质量。
 
@@ -126,8 +158,10 @@ contentVersion: 2026.08.27
 - `sys.executable` 能证明什么？
 - 为什么 `image is None` 必须在进入后续处理前检查？
 - 你选择手机照片路径还是生成图路径？该路径不能证明什么？
+- working tree、staging area 与 checkpoint commit 有什么区别？
+- README 必须记录哪些事实，才能区分代码错误和环境漂移？
 
-四个 hard Concept 至少达到 `understood`。`tooling.debugging` 未达到 `understood` 时可以开始，但项目的坏路径证据很可能暴露这一缺口，应返回该 Concept 补学。
+Pixel Lab 可以在学习早期逐步搭建；进行 Stage 0 最终出口演练前，七个 hard Concept 至少达到 `understood`。Linux 保持 recommended：Windows 路径可以完整通过项目验收，但需完成 Linux 命令对照以满足 Stage 0 的 U 级理解目标。
 
 ## 两条等价执行路径
 
@@ -174,6 +208,7 @@ pixel-lab/
 ├─ output/
 ├─ src/
 ├─ evidence/
+│  └─ stage-0-exit/
 ├─ README.md
 └─ requirements.txt
 ```
@@ -268,16 +303,44 @@ if __name__ == "__main__":
 
 在 `evidence/bad-path.md` 中先记录预期和实际现象，再写一个假设。用错误中的绝对路径、`Get-Location` 和目录列表验证。修正输入后重新运行有效案例，完成回归。
 
+### 6. 建立小步 Git 历史
+
+至少把“README 与目录”“环境记录”“有效图像输入”“显式失败处理”“Stage 0 证据索引”分成五次单一目的的 commit。每次先检查 `git status`、`git diff` 和 `git diff --staged`。最终有效/坏路径回归通过后，把 `git log -1 --oneline` 的结果写入 `evidence/stage-0-exit/checkpoint.txt`。
+
+### 7. 完成 Stage 0 出口演练
+
+在新的项目副本或干净工作目录中，从 checkpoint 开始计时。不得借用原 `.venv`，只依据 README：
+
+1. 30 分钟内创建虚拟环境、安装依赖、生成或准备输入、运行有效案例和坏路径案例。
+2. 保存 `cwd`、`sys.executable`、Python/OpenCV 版本、输入来源、输出位置和总耗时。
+3. 完成三张故障卡：不存在路径；一个可重复的 Python 异常；使用错误解释器或缺少依赖。每张都要有假设、验证、修复与正常案例回归。
+4. 用 `git log --oneline --decorate --graph` 与两个实际 diff 解释项目如何演进，以及哪个 commit 是本次 checkpoint。
+5. 画出“终端 → 进程 → 工作目录 → 解释器 → 包 → 脚本 → 输入/输出”的运行时关系图。
+6. 让另一位初学者只看 README 复现；若没有交接对象，七天后由自己在新目录盲复现。首次遗漏必须保留在记录中，不能修改 README 后假装第一次就成功。
+
+`evidence/stage-0-exit/index.md` 应把证据逐项关联到 Stage 的五个稳定 criterion ID。Stage 通过仍需相关 Concept 达到各自路线目标，并在首次具备资格至少七天后完成复测；项目文件齐全不会自动授予通过或 mastered。
+
+| Stage criterion ID | 必须能检查的证据 |
+|---|---|
+| `stage-criterion.tooling-foundations.rebuild-environment` | checkpoint、30 分钟计时、全新 venv、版本、输入来源、有效运行与输出 |
+| `stage-criterion.tooling-foundations.diagnose-failure` | 路径、Python 异常、依赖/解释器三张故障卡及正常案例回归 |
+| `stage-criterion.tooling-foundations.version-small-changes` | 至少五次语义 commit、分支/冲突练习、log 与两个 diff 的解释 |
+| `stage-criterion.tooling-foundations.explain-runtime-context` | 运行时关系图及逐项口头或文字说明 |
+| `stage-criterion.tooling-foundations.readme-handoff` | 交接者或七天后自己的盲复现记录、首次遗漏和修订后的复测 |
+
 ## 验收与完成标准
 
-逐项检查 frontmatter 的四个 acceptance criterion：
+逐项检查 frontmatter 的七个 acceptance criterion：
 
 1. 环境能按文字记录重建，不依赖“我电脑上原来就有”。
 2. 有效输入的来源、解析路径、`shape`、`dtype` 和输出路径均被记录，保存副本能再次读取。
 3. 无效路径快速失败，故障卡包含一个可证伪假设以及正常输入回归。
-4. 另一位初学者只看 README 能选择手机或生成图路径完成项目。
+4. 至少五次单一目的的 commit 与最终 checkpoint 能由 log 和 diff 解释。
+5. 路径、Python 异常、依赖/解释器三类故障均完成诊断闭环。
+6. 能解释完整运行时关系，而非只复述命令。
+7. 另一位初学者或七天后的自己只看 README，能选择手机或生成图路径在 30 分钟内完成干净复现。
 
-项目通过不等于五个 Concept 自动 `mastered`。每个 Concept 的证据需分别覆盖其必需标准，再由学习者手动确认。
+Stage 0 增量通过不等于八个 Concept 自动 `mastered`，也不等于跨 Stage 0–2 的 Pixel Lab 已整体完成。每个 Concept 的证据需分别覆盖其必需标准，再由学习者手动确认；Stage 2 仍会扩展数组、通道和批量 I/O 验收。
 
 ## Mastery Evidence 证据映射
 
@@ -285,13 +348,18 @@ if __name__ == "__main__":
 - **Python 核心**：对入口分支和函数返回值的逐步解释，而非只贴源码。
 - **开发环境**：重建记录、解释器与版本输出。
 - **模块与异常**：职责分离的模块、有效与无效输入对照。
+- **Git**：五次小步 commit、分支练习、diff 解释与 checkpoint hash。
 - **调试**：坏路径故障卡和修复后的回归。
+- **Linux**：Linux–PowerShell 命令对照；真实 Linux 运行只在追求 mastered 时补充，不阻塞 Stage 0。
+- **可复现性**：干净环境限时重建、README 交接、环境漂移诊断和证据边界。
 
 ## 复盘与后续复习
 
-完成当天写下最容易被环境掩盖的一处错误。24 小时后不看命令重述整个运行链；7 天后把 `.venv` 作为可重建目录重新创建，换一张输入并再次执行坏路径测试。后续 NumPy/OpenCV 学习继续复用本项目，但新增算法证据时要单独验收。
+完成当天写下最容易被环境掩盖的一处错误。24 小时后不看命令重述整个运行链；首次满足 Concept 与出口证据后等待至少 7 天，再从 checkpoint 在新目录重建环境、换一张输入、执行三类故障中的抽测并更新 `retest.md`。后续 NumPy/OpenCV 学习继续复用本项目，但新增算法证据时要单独验收。
 
 ## 精选资源使用方式
 
 - **Python `venv` 官方文档**：重建失败时核对 Windows 创建、解释器位置和激活说明。
 - **OpenCV-Python Tutorials**：只核对图像读取、写出和返回行为；本项目不要求继续浏览滤波、特征或识别章节。
+- **Pro Git**：查阅记录变化、历史与基础分支章节，核对 checkpoint 中 working tree、staging area 和 commit 的边界。
+- **GitHub README 官方文档**：核对 README 的仓库入口职责；具体复现字段以本项目验收为准。

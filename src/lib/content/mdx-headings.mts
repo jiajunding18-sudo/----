@@ -108,9 +108,45 @@ export function extractMdxHeadings(body: string) {
   return collectContentHeadings(tree);
 }
 
+function getMdxJsxHref(node: UnknownRecord) {
+  if (
+    (node.type !== "mdxJsxTextElement" && node.type !== "mdxJsxFlowElement") ||
+    node.name !== "a" ||
+    !Array.isArray(node.attributes)
+  ) {
+    return undefined;
+  }
+
+  const hrefAttribute = node.attributes.find(
+    (attribute) =>
+      isRecord(attribute) &&
+      attribute.type === "mdxJsxAttribute" &&
+      attribute.name === "href",
+  );
+  return isRecord(hrefAttribute) && typeof hrefAttribute.value === "string"
+    ? hrefAttribute.value
+    : undefined;
+}
+
+export function extractMdxLinks(body: string) {
+  const tree = headingParser.parse(body);
+  const links: string[] = [];
+
+  function visit(node: UnknownRecord) {
+    const href =
+      node.type === "link" && typeof node.url === "string"
+        ? node.url
+        : getMdxJsxHref(node);
+    if (href) links.push(href);
+    getChildren(node).forEach(visit);
+  }
+
+  if (isRecord(tree)) visit(tree);
+  return links;
+}
+
 export function remarkStableHeadingAnchors() {
   return (tree: unknown) => {
     collectContentHeadings(tree, { applyIds: true });
   };
 }
-

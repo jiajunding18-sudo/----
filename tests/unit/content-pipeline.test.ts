@@ -498,6 +498,56 @@ describe("manifest 与跨实体校验", () => {
     );
   });
 
+  it("Concept 正文内部链接只允许已发布页面与真实章节锚点", () => {
+    const source = createConcept("fixture.source", "fixture-source");
+    const target = createConcept("fixture.target", "fixture-target");
+    const sourceWithLink: LoadedConcept = {
+      ...loadedConcept(source),
+      body: "# Source\n\n[进入目标](/knowledge/fixture-target/#section-真实章节)",
+    };
+    const targetWithHeading: LoadedConcept = {
+      ...loadedConcept(target),
+      body: "# Target\n\n## 真实章节",
+    };
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({ concepts: [sourceWithLink, targetWithHeading] }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("Concept 正文链接拒绝 planned/draft 页面与不存在的锚点", () => {
+    const source = createConcept("fixture.source", "fixture-source");
+    const draftTarget = createConcept("fixture.draft", "fixture-draft", {
+      publicationStatus: "draft",
+    });
+    const invalidTarget = createConcept("fixture.target", "fixture-target");
+    const sourceWithInvalidLinks: LoadedConcept = {
+      ...loadedConcept(source),
+      body: [
+        "# Source",
+        "",
+        "[草稿](/knowledge/fixture-draft/)",
+        "[坏锚点](/knowledge/fixture-target/#section-not-found)",
+      ].join("\n"),
+    };
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [
+            sourceWithInvalidLinks,
+            loadedConcept(draftTarget),
+            loadedConcept(invalidTarget),
+          ],
+        }),
+      ),
+    ).toThrow(
+      /内部链接不得指向 draft 内容[\s\S]*内部链接引用不存在的章节锚点/,
+    );
+  });
+
   it("hard dependency 环会失败并输出完整环路径", () => {
     const alpha = createConcept("fixture.alpha", "fixture-alpha", {
       dependencies: [

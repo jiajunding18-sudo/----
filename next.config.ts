@@ -12,8 +12,10 @@ const withMDX = createMDX({
       "remark-frontmatter",
       "remark-mdx-frontmatter",
       "remark-gfm",
+      "remark-math",
       stableHeadingPluginPath,
     ],
+    rehypePlugins: ["rehype-highlight", "rehype-katex"],
   },
 });
 

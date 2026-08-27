@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
 
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

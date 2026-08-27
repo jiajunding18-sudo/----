@@ -8,6 +8,7 @@ import type {
 
 import type { ContentValidationIssue } from "./content-errors";
 import { throwIfContentIssues } from "./content-errors";
+import { extractMdxHeadings, extractMdxLinks } from "./mdx-headings.mjs";
 import type {
   ContentCatalogInput,
   LoadedConcept,
@@ -280,6 +281,92 @@ function validateConceptReferences({
         issues,
         "Mastery criterion",
       );
+    });
+  });
+}
+
+function decodeAnchor(anchor: string) {
+  try {
+    return decodeURIComponent(anchor);
+  } catch {
+    return anchor;
+  }
+}
+
+function validateConceptBodyLinks(
+  concepts: readonly LoadedConcept[],
+  issues: ContentValidationIssue[],
+) {
+  const conceptBySlug = new Map(
+    concepts.map((concept) => [concept.meta.slug, concept] as const),
+  );
+  const headingAnchorsBySlug = new Map(
+    concepts.map((concept) => [
+      concept.meta.slug,
+      new Set(extractMdxHeadings(concept.body).map(({ anchor }) => anchor)),
+    ] as const),
+  );
+
+  concepts.forEach((concept) => {
+    extractMdxLinks(concept.body).forEach((href, index) => {
+      let target: LoadedConcept | undefined = concept;
+      let anchor: string | undefined;
+
+      if (href.startsWith("#")) {
+        anchor = href.slice(1);
+      } else if (href === "/knowledge" || href === "/knowledge/") {
+        return;
+      } else if (href.startsWith("/knowledge/")) {
+        const match = href.match(/^\/knowledge\/([^/?#]+)\/?(?:#([^?]+))?$/u);
+        if (!match) {
+          issues.push({
+            sourcePath: concept.sourcePath,
+            fieldPath: `<mdx>.links.${index}`,
+            entityId: concept.meta.id,
+            slug: concept.meta.slug,
+            message: `Concept 内部链接格式无效："${href}"`,
+          });
+          return;
+        }
+        target = conceptBySlug.get(match[1]);
+        anchor = match[2];
+        if (!target) {
+          issues.push({
+            sourcePath: concept.sourcePath,
+            fieldPath: `<mdx>.links.${index}`,
+            entityId: concept.meta.id,
+            slug: concept.meta.slug,
+            message: `Concept 内部链接引用不存在的已发布页面："${href}"`,
+          });
+          return;
+        }
+        if (target.meta.publicationStatus !== "published") {
+          issues.push({
+            sourcePath: concept.sourcePath,
+            fieldPath: `<mdx>.links.${index}`,
+            entityId: concept.meta.id,
+            slug: concept.meta.slug,
+            message: `Concept 内部链接不得指向 ${target.meta.publicationStatus} 内容："${href}"`,
+          });
+          return;
+        }
+      } else {
+        return;
+      }
+
+      if (
+        target &&
+        anchor &&
+        !headingAnchorsBySlug.get(target.meta.slug)?.has(decodeAnchor(anchor))
+      ) {
+        issues.push({
+          sourcePath: concept.sourcePath,
+          fieldPath: `<mdx>.links.${index}`,
+          entityId: concept.meta.id,
+          slug: concept.meta.slug,
+          message: `Concept 内部链接引用不存在的章节锚点："${href}"`,
+        });
+      }
     });
   });
 }
@@ -791,6 +878,7 @@ export function validateContentCatalog(
     resourceIds,
     issues,
   });
+  validateConceptBodyLinks(input.concepts, issues);
   validateProjectReferences({
     projects: input.projects,
     conceptIds,

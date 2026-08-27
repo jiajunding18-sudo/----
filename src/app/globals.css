@@ -70,9 +70,11 @@ dialog:focus-visible {
 }
 
 .learning-document {
+  width: min(100%, 48rem);
+  max-width: 100%;
   color: var(--color-ink);
-  font-size: 1rem;
-  line-height: 1.85;
+  font-size: clamp(1rem, 0.98rem + 0.1vw, 1.0625rem);
+  line-height: 1.82;
   overflow-wrap: anywhere;
 }
 
@@ -82,28 +84,61 @@ dialog:focus-visible {
 
 .learning-document h1 {
   margin: 0;
-  font-size: clamp(2rem, 6vw, 3rem);
+  font-size: clamp(1.9rem, 5vw, 2.5rem);
   font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1.16;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .learning-document h2 {
-  margin-top: 3rem;
+  margin-top: 3.25rem;
   padding-top: 0.25rem;
   scroll-margin-top: 6rem;
-  font-size: 1.5rem;
+  font-size: clamp(1.35rem, 1.27rem + 0.35vw, 1.55rem);
   font-weight: 650;
   letter-spacing: -0.02em;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .learning-document h3 {
-  margin-top: 2rem;
+  margin-top: 2.25rem;
   scroll-margin-top: 6rem;
-  font-size: 1.125rem;
+  font-size: 1.15rem;
   font-weight: 650;
   line-height: 1.5;
+}
+
+.learning-document h2[data-learning-section] {
+  border-top: 2px solid var(--color-border);
+  padding-top: 1.35rem;
+}
+
+.learning-document h2[data-learning-section]::before {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--color-accent);
+  content: "学习环节";
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.learning-document h2[data-learning-section="example"]::before {
+  content: "Worked example · 示例";
+}
+
+.learning-document h2[data-learning-section="recall"]::before {
+  content: "Active recall · 主动回忆";
+}
+
+.learning-document h2[data-learning-section="practice"]::before {
+  content: "Practice · 练习";
+}
+
+.learning-document h2[data-learning-section="evidence"]::before {
+  content: "Mastery evidence · 掌握证据";
 }
 
 .learning-document h2:target,
@@ -133,15 +168,17 @@ dialog:focus-visible {
 .learning-document p,
 .learning-document ul,
 .learning-document ol,
-.learning-document pre,
-.learning-document table,
-.learning-document blockquote {
-  margin-top: 1rem;
+.learning-document blockquote,
+.learning-document figure,
+.learning-document .code-block,
+.learning-document .table-scroll-container,
+.learning-document .katex-display {
+  margin-top: 1.15rem;
 }
 
 .learning-document ul,
 .learning-document ol {
-  padding-left: 1.5rem;
+  padding-left: 1.6rem;
 }
 
 .learning-document ul {
@@ -153,14 +190,21 @@ dialog:focus-visible {
 }
 
 .learning-document li + li {
-  margin-top: 0.45rem;
+  margin-top: 0.5rem;
 }
 
 .learning-document a {
   color: var(--color-accent);
   font-weight: 600;
+  overflow-wrap: anywhere;
   text-decoration: underline;
   text-underline-offset: 0.2em;
+}
+
+.learning-document .external-link-mark {
+  margin-left: 0.18em;
+  font-size: 0.78em;
+  text-decoration: none;
 }
 
 .learning-document strong {
@@ -174,32 +218,130 @@ dialog:focus-visible {
   padding: 0.12rem 0.3rem;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.88em;
+  overflow-wrap: anywhere;
 }
 
-.learning-document pre {
+.learning-document .code-block {
+  min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-sidebar);
+  box-shadow: var(--shadow-subtle);
+  overflow: hidden;
+}
+
+.learning-document .code-block-toolbar {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+  padding: 0.4rem 0.65rem 0.4rem 0.9rem;
+  color: var(--color-sidebar-muted);
+}
+
+.learning-document .code-language-label {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.learning-document .code-copy-button {
+  min-height: 2rem;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  color: #eef5f0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.learning-document .code-copy-button:hover {
+  border-color: rgb(255 255 255 / 48%);
+  background: rgb(255 255 255 / 8%);
+}
+
+.learning-document pre {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  overflow-x: auto;
   padding: 1rem;
   color: #f4f7f5;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.875rem;
   line-height: 1.7;
+  overflow-wrap: normal;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.learning-document pre code {
+  font: inherit;
+}
+
+.learning-document .hljs-comment,
+.learning-document .hljs-quote {
+  color: #aab8af;
+  font-style: italic;
+}
+
+.learning-document .hljs-keyword,
+.learning-document .hljs-selector-tag,
+.learning-document .hljs-built_in,
+.learning-document .hljs-name {
+  color: #ff9dcb;
+}
+
+.learning-document .hljs-string,
+.learning-document .hljs-attr,
+.learning-document .hljs-template-tag,
+.learning-document .hljs-template-variable {
+  color: #a5d6ff;
+}
+
+.learning-document .hljs-number,
+.learning-document .hljs-literal,
+.learning-document .hljs-variable,
+.learning-document .hljs-params {
+  color: #79c0ff;
+}
+
+.learning-document .hljs-title,
+.learning-document .hljs-title.class_,
+.learning-document .hljs-title.function_ {
+  color: #d2a8ff;
+}
+
+.learning-document .hljs-meta,
+.learning-document .hljs-symbol,
+.learning-document .hljs-bullet {
+  color: #ffa657;
 }
 
 .learning-document blockquote {
   border-left: 3px solid var(--color-accent);
-  padding-left: 1rem;
+  padding: 0.1rem 0 0.1rem 1rem;
   color: var(--color-muted);
 }
 
-.learning-document table {
-  display: block;
+.learning-document .table-scroll-container {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+}
+
+.learning-document table {
+  width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
@@ -207,7 +349,8 @@ dialog:focus-visible {
 .learning-document th,
 .learning-document td {
   min-width: 9rem;
-  border: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   padding: 0.65rem 0.75rem;
   text-align: left;
   vertical-align: top;
@@ -216,6 +359,55 @@ dialog:focus-visible {
 .learning-document th {
   background: var(--color-surface-subtle);
   font-weight: 650;
+}
+
+.learning-document tr:last-child td {
+  border-bottom: 0;
+}
+
+.learning-document th:last-child,
+.learning-document td:last-child {
+  border-right: 0;
+}
+
+.learning-document img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+  border-radius: 0.35rem;
+}
+
+.learning-document figure {
+  max-width: 100%;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.learning-document figcaption {
+  margin-top: 0.6rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.learning-document .katex {
+  font-size: 1.04em;
+}
+
+.learning-document .katex-display {
+  max-width: 100%;
+  margin-bottom: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.45rem 0.1rem;
+}
+
+.learning-document .katex-display > .katex {
+  display: inline-block;
+  min-width: max-content;
 }
 
 .mobile-navigation-dialog {

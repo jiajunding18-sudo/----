@@ -150,6 +150,7 @@ function createStage(
     order: 0,
     title: "测试 Stage",
     summary: "内容管线测试 checkpoint。",
+    contentStatus: "planned",
     trackIds: ["track.common"],
     categoryExitForTrackIds: ["track.common"],
     outcomes: ["验证 manifest。"],
@@ -189,7 +190,7 @@ function createCatalogInput({
   concepts,
   projects = [],
   tracks = [createTrack()],
-  stages = [createStage()],
+  stages,
   resources = [createResource()],
 }: {
   readonly concepts: readonly LoadedConcept[];
@@ -198,7 +199,20 @@ function createCatalogInput({
   readonly stages?: readonly StageDefinition[];
   readonly resources?: readonly Resource[];
 }): ContentCatalogInput {
-  return { concepts, projects, tracks, stages, resources };
+  const resolvedStages =
+    stages ??
+    [
+      createStage({
+        contentStatus: concepts.some(
+          ({ meta }) =>
+            meta.stageId === "stage.fixture" &&
+            meta.publicationStatus === "published",
+        )
+          ? "available"
+          : "planned",
+      }),
+    ];
+  return { concepts, projects, tracks, stages: resolvedStages, resources };
 }
 
 function toMdx(frontmatter: object, body = "# Fixture body") {
@@ -372,6 +386,65 @@ describe("manifest 与跨实体校验", () => {
     );
   });
 
+  it("重复 Track ID 会失败", () => {
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [],
+          tracks: [
+            createTrack(),
+            trackDefinitionSchema.parse({
+              ...createTrack(),
+              title: "重复 Track",
+              order: 10,
+            }),
+          ],
+        }),
+      ),
+    ).toThrow(/Track at index 1 ID "track\.common" .* 重复/);
+  });
+
+  it("重复 Stage checkpoint ID 会失败", () => {
+    const duplicateStage = createStage({
+      order: 10,
+      exitCriteria: [
+        {
+          id: "criterion.fixture-stage-exit-duplicate",
+          description: "独立的测试出口。",
+          required: true,
+          when: { kind: "always" },
+        },
+      ],
+    });
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [],
+          stages: [createStage(), duplicateStage],
+        }),
+      ),
+    ).toThrow(/Stage at index 1 ID "stage\.fixture" .* 重复/);
+  });
+
+  it("出口 criterion ID 必须在全局唯一", () => {
+    const secondStage = createStage({
+      id: "stage.fixture-second",
+      order: 10,
+    });
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [],
+          stages: [createStage(), secondStage],
+        }),
+      ),
+    ).toThrow(
+      /Stage exit criterion ID "criterion\.fixture-stage-exit" .* 重复/,
+    );
+  });
+
   it("重复 canonical slug 会失败", () => {
     const first = createConcept("fixture.first", "duplicate-slug");
     const second = createConcept("fixture.second", "duplicate-slug", {
@@ -496,6 +569,129 @@ describe("manifest 与跨实体校验", () => {
         createCatalogInput({ concepts: [loadedConcept(concept)] }),
       ),
     ).toThrow(/stageId .* Stage 引用不存在的 ID "stage\.missing"/);
+  });
+
+  it("Stage 引用不存在的 Track 会失败", () => {
+    const stage = createStage({
+      trackIds: ["track.missing"],
+      categoryExitForTrackIds: ["track.missing"],
+    });
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({ concepts: [], stages: [stage] }),
+      ),
+    ).toThrow(/trackIds\.0 .* Stage Track 引用不存在的 ID "track\.missing"/);
+  });
+
+  it("空 allOf 不是合法 entryGate", () => {
+    expect(() =>
+      stageDefinitionSchema.parse({
+        ...createStage(),
+        entryGate: { kind: "allOf", gates: [] },
+      }),
+    ).toThrow(/"entryGate"[\s\S]*"gates"/);
+  });
+
+  it("entryGate 引用不存在的 checkpoint 会失败", () => {
+    const stage = createStage({
+      entryGate: { kind: "checkpoint", stageId: "stage.missing" },
+    });
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({ concepts: [], stages: [stage] }),
+      ),
+    ).toThrow(/entryGate\.stageId .* Checkpoint 引用不存在的 ID "stage\.missing"/);
+  });
+
+  it("含 Track 条件的 checkpoint 环会失败", () => {
+    const alpha = createStage({
+      id: "stage.alpha",
+      order: 0,
+      entryGate: { kind: "checkpoint", stageId: "stage.beta" },
+      exitCriteria: [
+        {
+          id: "criterion.stage-alpha",
+          description: "Alpha 出口。",
+          required: true,
+          when: { kind: "always" },
+        },
+      ],
+    });
+    const beta = createStage({
+      id: "stage.beta",
+      order: 10,
+      entryGate: {
+        kind: "track-goal-checkpoint",
+        stageId: "stage.alpha",
+        trackId: "track.common",
+        minimumTrackGoal: "master",
+      },
+      exitCriteria: [
+        {
+          id: "criterion.stage-beta",
+          description: "Beta 出口。",
+          required: true,
+          when: { kind: "always" },
+        },
+      ],
+    });
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({ concepts: [], stages: [alpha, beta] }),
+      ),
+    ).toThrow(/Stage entryGate 形成有向环/);
+  });
+
+  it("孤立 checkpoint 和没有 Stage 的 Track 会失败", () => {
+    const isolatedStage = createStage({
+      categoryExitForTrackIds: [],
+    });
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({ concepts: [], stages: [isolatedStage] }),
+      ),
+    ).toThrow(/形成孤立 checkpoint/);
+
+    const orphanTrack = trackDefinitionSchema.parse({
+      id: "track.orphan",
+      order: 10,
+      title: "孤立 Track",
+      summary: "用于校验孤立 Track。",
+      kind: "common",
+      defaultGoal: "master",
+    });
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [],
+          tracks: [createTrack(), orphanTrack],
+        }),
+      ),
+    ).toThrow(/没有任何 Stage 引用，形成孤立 Track/);
+  });
+
+  it("contentStatus 必须与已发布 Concept 一致", () => {
+    const concept = createConcept("fixture.published", "fixture-published");
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [loadedConcept(concept)],
+          stages: [createStage({ contentStatus: "planned" })],
+        }),
+      ),
+    ).toThrow(/planned，但存在 1 个已发布 Concept/);
+
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [],
+          stages: [createStage({ contentStatus: "available" })],
+        }),
+      ),
+    ).toThrow(/available，但没有已发布 Concept/);
   });
 
   it("交叉校验 Project 知识要求和 Stage 项目门槛", () => {

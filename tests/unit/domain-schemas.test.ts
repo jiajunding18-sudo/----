@@ -68,6 +68,7 @@ const validStage = {
   order: 20,
   title: "Stage 2",
   summary: "图像计算基础。",
+  contentStatus: "available",
   trackIds: ["track.common"],
   categoryExitForTrackIds: ["track.common"],
   outcomes: ["能检查图像数据契约。"],

@@ -488,6 +488,140 @@ function validateTrackGroups(
   });
 }
 
+function validateCatalogOrders({
+  stages,
+  tracks,
+  issues,
+}: {
+  readonly stages: readonly StageDefinition[];
+  readonly tracks: readonly TrackDefinition[];
+  readonly issues: ContentValidationIssue[];
+}) {
+  const stageOrders = new Map<number, StageDefinition>();
+  stages.forEach((stage, index) => {
+    const existing = stageOrders.get(stage.order);
+    if (existing) {
+      issues.push({
+        sourcePath: "content/catalog/stages.ts",
+        fieldPath: `${index}.order`,
+        entityId: stage.id,
+        message: `Stage order ${stage.order} 与 "${existing.id}" 重复，推荐展示位置不唯一`,
+      });
+      return;
+    }
+    stageOrders.set(stage.order, stage);
+  });
+
+  const trackOrders = new Map<number, TrackDefinition>();
+  tracks.forEach((track, index) => {
+    const existing = trackOrders.get(track.order);
+    if (existing) {
+      issues.push({
+        sourcePath: "content/catalog/tracks.ts",
+        fieldPath: `${index}.order`,
+        entityId: track.id,
+        message: `Track order ${track.order} 与 "${existing.id}" 重复，推荐展示位置不唯一`,
+      });
+      return;
+    }
+    trackOrders.set(track.order, track);
+  });
+}
+
+function validateStageContentStatus(
+  stages: readonly StageDefinition[],
+  concepts: readonly LoadedConcept[],
+  issues: ContentValidationIssue[],
+) {
+  const publishedConceptCountByStage = new Map<string, number>();
+  concepts.forEach((concept) => {
+    if (concept.meta.publicationStatus !== "published") {
+      return;
+    }
+    publishedConceptCountByStage.set(
+      concept.meta.stageId,
+      (publishedConceptCountByStage.get(concept.meta.stageId) ?? 0) + 1,
+    );
+  });
+
+  stages.forEach((stage, index) => {
+    const publishedConceptCount =
+      publishedConceptCountByStage.get(stage.id) ?? 0;
+    if (stage.contentStatus === "available" && publishedConceptCount === 0) {
+      issues.push({
+        sourcePath: "content/catalog/stages.ts",
+        fieldPath: `${index}.contentStatus`,
+        entityId: stage.id,
+        message: `Stage "${stage.id}" 标记为 available，但没有已发布 Concept`,
+      });
+    }
+    if (stage.contentStatus === "planned" && publishedConceptCount > 0) {
+      issues.push({
+        sourcePath: "content/catalog/stages.ts",
+        fieldPath: `${index}.contentStatus`,
+        entityId: stage.id,
+        message: `Stage "${stage.id}" 标记为 planned，但存在 ${publishedConceptCount} 个已发布 Concept`,
+      });
+    }
+  });
+}
+
+function validateRouteConnectivity({
+  stages,
+  tracks,
+  concepts,
+  issues,
+}: {
+  readonly stages: readonly StageDefinition[];
+  readonly tracks: readonly TrackDefinition[];
+  readonly concepts: readonly LoadedConcept[];
+  readonly issues: ContentValidationIssue[];
+}) {
+  const referencedCheckpointIds = new Set<string>();
+  stages.forEach((stage) => {
+    if (!stage.entryGate) {
+      return;
+    }
+    visitCheckpointGate(stage.entryGate, "entryGate", (gate) => {
+      if (gate.kind === "checkpoint" || gate.kind === "track-goal-checkpoint") {
+        referencedCheckpointIds.add(gate.stageId);
+      }
+    });
+  });
+
+  const publishedConceptStageIds = new Set(
+    concepts
+      .filter(({ meta }) => meta.publicationStatus === "published")
+      .map(({ meta }) => meta.stageId),
+  );
+  stages.forEach((stage, index) => {
+    if (
+      stage.categoryExitForTrackIds.length === 0 &&
+      !referencedCheckpointIds.has(stage.id) &&
+      !publishedConceptStageIds.has(stage.id)
+    ) {
+      issues.push({
+        sourcePath: "content/catalog/stages.ts",
+        fieldPath: `${index}.id`,
+        entityId: stage.id,
+        message:
+          "Stage 既不是分类出口，也没有已发布 Concept 或下游 entryGate 引用，形成孤立 checkpoint",
+      });
+    }
+  });
+
+  tracks.forEach((track, index) => {
+    if (!stages.some((stage) => stage.trackIds.includes(track.id))) {
+      issues.push({
+        sourcePath: "content/catalog/tracks.ts",
+        fieldPath: `${index}.id`,
+        entityId: track.id,
+        message: `Track "${track.id}" 没有任何 Stage 引用，形成孤立 Track`,
+      });
+    }
+  });
+}
+
 function validateHardDependencyCycle(
   concepts: readonly LoadedConcept[],
   dependencies: readonly Dependency[],
@@ -614,14 +748,26 @@ export function validateContentCatalog(
       `Track at index ${index}`,
     ),
   );
-  input.stages.forEach((stage, index) =>
+  input.stages.forEach((stage, index) => {
     registerUniqueIdentity(
       globalIds,
       catalogIdentity(stage.id, "content/catalog/stages.ts"),
       issues,
       `Stage at index ${index}`,
-    ),
-  );
+    );
+    stage.exitCriteria.forEach((criterion, criterionIndex) =>
+      registerUniqueIdentity(
+        globalIds,
+        {
+          id: criterion.id,
+          sourcePath: "content/catalog/stages.ts",
+          fieldPath: `${index}.exitCriteria.${criterionIndex}.id`,
+        },
+        issues,
+        "Stage exit criterion",
+      ),
+    );
+  });
   input.resources.forEach((resource, index) =>
     registerUniqueIdentity(
       globalIds,
@@ -661,6 +807,18 @@ export function validateContentCatalog(
   });
   validateResourceReferences(input.resources, resourceIds, issues);
   validateTrackGroups(input.tracks, issues);
+  validateCatalogOrders({
+    stages: input.stages,
+    tracks: input.tracks,
+    issues,
+  });
+  validateStageContentStatus(input.stages, input.concepts, issues);
+  validateRouteConnectivity({
+    stages: input.stages,
+    tracks: input.tracks,
+    concepts: input.concepts,
+    issues,
+  });
   validateHardDependencyCycle(input.concepts, dependencies, issues);
   validateStageGateCycle(input.stages, issues);
 

@@ -390,6 +390,7 @@ interface StageDefinition {
   order: number;
   title: string;
   summary: string;
+  contentStatus: "available" | "planned";
   trackIds: TrackId[];
   categoryExitForTrackIds: TrackId[];
   outcomes: string[];
@@ -510,6 +511,8 @@ interface ProjectMeta {
 概念之间的 `hard` 前置统一由 `understood` 或 `mastered` 满足；项目可以通过 `minimumStatus` 对个别知识要求 `mastered`。项目完成不能自动把关联概念设为 `mastered`，只能成为用户可选择引用的证据候选。
 
 Stage→Track 关系只维护在 `StageDefinition.trackIds`；`TrackDefinition` 的阶段列表按 `stage.order` 派生，不双向保存。`categoryExitForTrackIds` 必须是 `trackIds` 的子集。资源关联也只从 `ConceptMeta.resourceIds` 与 `ProjectMeta.resources` 单向维护，`Resource` 不保存反向实体数组；Resources 页面和搜索索引使用构建期反向索引。
+
+`StageDefinition.contentStatus` 只表示 checkpoint 内容是否已展开：`available` 必须至少有一个已发布 Concept，`planned` 不得包含已发布 Concept。该字段不是用户进度，也不代替 `ConceptMeta.publicationStatus`；高级分支仍由 Track 种类与 Stage→Track 关系表达。
 
 这里的 `StageDefinition` 表示可执行 checkpoint，而不是把数字分类强行当作线性阶段。单波次分类只有一个 checkpoint；Stage 1/4/6/7 分别可有 A/B/C checkpoint，共享 `categoryOrder`，`ConceptMeta.stageId` 指向精确 checkpoint。`categoryExitForTrackIds` 标记它在哪些 Track 中是分类出口；非空的分类出口按 `ROADMAP.md` 配置 7 天复测，纯中间 checkpoint 可省略复测。
 

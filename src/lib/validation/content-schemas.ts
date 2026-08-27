@@ -295,6 +295,7 @@ export const stageDefinitionSchema = z
     order: z.number().int().nonnegative(),
     title: trimmedTextSchema,
     summary: trimmedTextSchema,
+    contentStatus: z.enum(["available", "planned"]),
     trackIds: uniqueSemanticIdArraySchema.min(1),
     categoryExitForTrackIds: uniqueSemanticIdArraySchema,
     outcomes: uniqueTextArraySchema.min(1),

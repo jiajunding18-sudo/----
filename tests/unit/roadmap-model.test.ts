@@ -19,9 +19,14 @@ const stageZeroConceptIds = [
 describe("Roadmap manifest 派生视图", () => {
   it("从正式 manifest 派生 Stage 0、推荐顺序、依赖、项目和出口", () => {
     const roadmap = buildRoadmapView(contentManifest);
-    const stageZero = roadmap.stages[0];
+    const stageZero = roadmap.stages.find(
+      ({ stage }) => stage.id === "stage.tooling-foundations",
+    );
+    if (!stageZero) {
+      throw new Error("Roadmap 缺少 Stage 0");
+    }
 
-    expect(roadmap.stages).toHaveLength(1);
+    expect(roadmap.stages).toHaveLength(17);
     expect(stageZero.stage.id).toBe("stage.tooling-foundations");
     expect(stageZero.concepts.map(({ concept }) => concept.id)).toEqual(
       stageZeroConceptIds,
@@ -60,8 +65,9 @@ describe("Roadmap manifest 派生视图", () => {
     const emptyStage = stageDefinitionSchema.parse({
       ...contentManifest.stages[0],
       id: "stage.future-fixture",
-      order: 100,
+      order: 1_000,
       title: "测试空 Stage",
+      contentStatus: "planned",
     });
     const fixtureManifest = {
       ...contentManifest,

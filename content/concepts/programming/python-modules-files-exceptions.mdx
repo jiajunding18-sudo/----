@@ -1,0 +1,161 @@
+---
+schemaVersion: 1
+id: tooling.python-modules
+slug: python-modules-files-exceptions
+title: Python 函数、模块、文件与异常
+englishTitle: Python Functions, Modules, Files, and Exceptions
+aliases:
+  - Python 程序组织
+  - Python Program Structure
+searchKeywords:
+  - import
+  - pathlib
+  - 文件读写
+  - 异常处理
+summary: 把一段能运行的脚本拆成职责明确的函数与模块，并让文件输入失败以可理解的异常显现。
+why: 视觉实验需要反复读写数据和复用处理步骤；清晰边界与明确失败比把所有代码堆在一个文件更容易验证。
+stageId: stage.tooling-foundations
+trackIds:
+  - track.common
+order: 40
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 6
+  max: 8
+dependencies:
+  - conceptId: tooling.python-core
+    kind: hard
+    reason: 组织模块、文件操作和异常之前，必须能读写函数、条件与基本数据结构。
+tags:
+  - Python
+  - 模块
+  - 文件输入输出
+  - 异常
+learningOutcomes:
+  - 能按读取、处理、输出职责拆分函数和模块，并解释 import 与程序入口。
+  - 能在文件边界检查输入，保留有用错误上下文，而不是吞掉异常。
+masteryCriteria:
+  - id: criterion.tooling-python-modules.structure-program
+    description: 将单文件练习重构为至少两个职责明确的模块，保持可验证输出不变。
+    evidenceHint: 提交重构前后结构、函数输入输出说明和同一测试输入的结果对照。
+    required: true
+  - id: criterion.tooling-python-modules.handle-invalid-input
+    description: 对不存在或无效的输入文件给出包含解析路径和原因的可行动错误。
+    evidenceHint: 提交有效输入与两类无效输入的运行记录，并解释哪些异常被处理、哪些继续上抛。
+    required: true
+resourceIds:
+  - resource.python-tutorial
+  - resource.python-pathlib
+publicationStatus: published
+contentVersion: 2026.08.27
+---
+
+# Python 函数、模块、文件与异常（Functions, Modules, Files, and Exceptions）
+
+这一单元把“会写语句”推进到“能维护实验”：边界清楚，失败可见，结果可复查。
+
+## 1. 这是什么
+
+函数用参数与返回值声明一个小任务；模块（module）是可导入的 `.py` 文件；`import` 让代码复用模块中的名称；文件输入输出（I/O）连接程序与持久数据；异常（exception）让无法正常完成的操作沿调用链报告原因。
+
+## 2. 为什么机器视觉需要它
+
+读图、预处理、测量、可视化和保存结果是不同职责。若全部混在顶层代码中，替换一张图就可能改坏处理逻辑；若捕获所有错误后只打印“失败”，则路径、格式和权限问题会被混成同一种现象。
+
+## 3. 前置知识
+
+硬前置是 Python 核心语法：参数、条件和返回值必须先能理解。路径知识会帮助你解释文件边界，但本页仍会使用 `Path` 明示解析位置。
+
+## 4. 核心概念
+
+- 一个函数应有可以一句话说明的职责，并通过参数接收变化的信息。
+- 导入模块时，Python 会执行其顶层语句；把实际运行入口放入 `main()` 可减少意外副作用。
+- `if __name__ == "__main__":` 表示“这个文件被直接运行时才启动入口”。
+- 文件打开应明确文本/二进制模式与编码。
+- 异常信息应加入当前层知道的上下文，但不要用空 `except` 吞掉所有失败。
+
+## 5. 初学者直觉解释
+
+把程序想成实验流水线：每个函数是一站，标签写清输入与产出；模块是一组相关工位；异常是带着样本编号和故障位置的停线报告。只说“出错了”无法维修，悄悄跳过更会污染结果。
+
+## 6. 必须掌握到什么程度
+
+你应能把约 30 行顶层脚本拆成 2–3 个函数和两个模块，读取一个文本文件，对不存在与空文件产生不同、清楚的失败，并保持正常输入结果不变。暂时不要求包发布、异步 I/O 或自定义异常体系。
+
+## 7. 常见误区
+
+- 函数只读取全局变量，表面拆分却没有明确输入。
+- 模块导入时立即执行整个实验。
+- `except Exception: pass` 让程序看似成功，实则丢失数据。
+- 捕获异常后只写“读取失败”，不保留路径与原始原因。
+- 用异常代替普通分支，或反过来在不可恢复的输入错误后继续计算。
+
+## 8. Worked Example：可诊断的输入模块
+
+建立 `input_files.py`：
+
+```python
+from pathlib import Path
+
+
+def read_nonempty_text(path_text: str) -> str:
+    path = Path(path_text).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"输入文件不存在：{path}")
+
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        raise ValueError(f"输入文件为空：{path}")
+    return text
+```
+
+建立 `main.py`：
+
+```python
+from input_files import read_nonempty_text
+
+
+def main() -> None:
+    note = read_nonempty_text("experiment-note.txt")
+    print("记录字符数：", len(note))
+
+
+if __name__ == "__main__":
+    main()
+```
+
+这里“文件不存在”和“内容为空”是不同事实。函数补充了解析后的路径，然后让异常保留 traceback；入口不假装能够从坏输入继续实验。
+
+## 9. Active Recall 主动回忆
+
+1. 参数和全局变量在依赖可见性上有何不同？
+2. 为什么模块顶层不应直接启动整个实验？
+3. `FileNotFoundError` 与空文件的 `ValueError` 分别表达什么？
+4. 捕获异常后，什么情况下应继续，什么情况下应停止？
+5. `return` 的值如何跨函数边界传递？
+
+## 10. Practice 练习
+
+1. 先把示例写在一个文件中，再重构成两个模块；用同一输入比较输出。
+2. 分别创建正常、空白、不存在的输入，先预测异常类型，再运行。
+3. 增加 `output` 目录写入摘要，使用 `Path.mkdir(..., exist_ok=True)` 明确创建位置。
+4. 把路径错误信息改成只写“失败”，比较两版对排错的帮助，再恢复有上下文版本。
+
+## 11. 实际使用
+
+Pixel Lab 将把图像读取封装为函数，入口只负责选择输入与输出。OpenCV 对某些坏路径可能返回 `None` 而不是抛异常，因此边界函数还要主动验证返回值，并将其转换为可行动错误。
+
+## 12. Mastery Evidence 掌握证据
+
+提交重构前后的文件树、函数职责表、正常输入结果对照、不存在与无效输入的原始 traceback，以及你对“为什么在这一层检查”的解释。必须证明结构改善没有改变正确输入的结果。
+
+## 13. 后续复用与复习
+
+图像加载器、配置文件、数据集类和推理流水线都会复用这些边界。次日从空文件写出带 `main()` 的两模块程序；7 天后更换文件格式并重新判断应在哪一层验证输入。
+
+## 14. 精选学习资源
+
+- **The Python Tutorial**：看第 6 章 Modules、第 7.2 节 Reading and Writing Files、第 8 章 Errors and Exceptions。边看边把官方小例子改成有明确输入文件的版本。
+- **Python `pathlib` 官方文档**：复习 Basic use，并查 `Path.resolve()`、`exists()`、`read_text()`、`write_text()` 与 `mkdir()`；只查本练习用到的条目。

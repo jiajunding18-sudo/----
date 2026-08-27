@@ -1,0 +1,297 @@
+---
+schemaVersion: 1
+id: project.pixel-lab
+slug: pixel-lab
+title: Pixel Lab：可复现的第一次图像读写实验
+level: beginner
+trackIds:
+  - track.common
+conceptRequirements:
+  - conceptId: tooling.computer-files
+    kind: hard
+    minimumStatus: understood
+    reason: 必须能解释工作目录、输入路径和输出位置。
+  - conceptId: tooling.dev-environment
+    kind: hard
+    minimumStatus: understood
+    reason: 必须能证明项目使用的解释器与 OpenCV 依赖。
+  - conceptId: tooling.python-core
+    kind: hard
+    minimumStatus: understood
+    reason: 必须能读写函数、条件和基本输出，不把示例当作黑箱。
+  - conceptId: tooling.python-modules
+    kind: hard
+    minimumStatus: understood
+    reason: 必须把图像输入边界封装成函数，并显式处理无效输入。
+  - conceptId: tooling.debugging
+    kind: recommended
+    minimumStatus: understood
+    reason: 推荐先掌握调试闭环，以便故意制造并解释一次坏路径失败。
+estimatedHours:
+  min: 12
+  max: 18
+techStack:
+  - Python
+  - OpenCV
+  - venv
+resources:
+  - resourceId: resource.python-venv
+    role: documentation
+    required: true
+  - resourceId: resource.opencv-python-tutorials
+    role: documentation
+    required: true
+environmentRequirements:
+  - id: environment.pixel-lab.python
+    kind: software
+    label: Python 与项目内 venv
+    required: true
+    details: 能使用 py 或 python 创建虚拟环境，并能打印项目解释器的完整路径。
+  - id: environment.pixel-lab.opencv
+    kind: software
+    label: opencv-python
+    required: true
+    details: 安装在项目虚拟环境中，运行时记录实际 cv2 版本。
+  - id: environment.pixel-lab.phone-camera
+    kind: hardware
+    label: 手机或普通摄像头
+    required: false
+    details: 只用于取得一张普通照片；没有设备时使用项目提供的 PGM 生成脚本。
+executionPaths:
+  - id: execution.pixel-lab.phone-photo
+    title: 手机或普通摄像头照片
+    mode: consumer-hardware
+    requirementIds:
+      - environment.pixel-lab.python
+      - environment.pixel-lab.opencv
+      - environment.pixel-lab.phone-camera
+    evidenceBoundary: 该路径只证明可复现的文件读写与错误处理，不证明相机、曝光或图像质量知识已经掌握。
+  - id: execution.pixel-lab.generated-image
+    title: 程序生成的 PGM 测试图
+    mode: simulation
+    requirementIds:
+      - environment.pixel-lab.python
+      - environment.pixel-lab.opencv
+    evidenceBoundary: 该路径证明相同的软件、路径和调试能力；不产生真实相机采集或成像条件方面的证据。
+acceptanceCriteria:
+  - id: acceptance.pixel-lab.environment-rebuild
+    description: 从新建虚拟环境按记录安装依赖，并输出解释器、Python 与 OpenCV 版本。
+    required: true
+  - id: acceptance.pixel-lab.valid-image
+    description: 对一张明确来源的有效输入，记录解析路径、shape、dtype，并成功写出可再次读取的副本。
+    required: true
+  - id: acceptance.pixel-lab.invalid-path
+    description: 对不存在的输入快速失败，错误中包含解析路径，并留下假设、验证、修复和回归记录。
+    required: true
+  - id: acceptance.pixel-lab.reproducible-readme
+    description: README 让另一位初学者能够选择任一执行路径，从空目录重建并复现实验。
+    required: true
+deliverableRequirements:
+  - src 下职责分离的 Python 源码、requirements.txt 与不包含虚拟环境目录的项目文件树。
+  - README 记录环境创建、输入来源、运行命令、预期输出和两条执行路径。
+  - evidence 下保存有效运行记录、无效路径故障卡、输出图像和七天复测记录模板。
+evidenceConceptIds:
+  - tooling.computer-files
+  - tooling.dev-environment
+  - tooling.python-core
+  - tooling.python-modules
+  - tooling.debugging
+resumeOutcome: 完成后能够在后续 NumPy 与 OpenCV 单元中复用同一项目目录、环境记录、输入边界和调试模板，而无需声称已理解图像算法。
+tags:
+  - Python
+  - OpenCV
+  - 可复现性
+  - 调试
+publicationStatus: published
+contentVersion: 2026.08.27
+---
+
+# Pixel Lab：可复现的第一次图像读写实验
+
+## 项目目标
+
+从一个空项目目录开始，建立可重建的 Python 环境，读取一张图像，记录最基本的程序事实，保存副本；随后主动提供一个坏路径，完成一次可审计的调试闭环。
+
+本项目验证的是 **Stage 0 工具能力**。`shape` 和 `dtype` 在这里是观察值，不要求你已经理解像素矩阵、通道或图像质量。
+
+## 为什么做这个项目
+
+“OpenCV 成功显示一张图”容易被偶然的本机环境和路径掩盖。这个项目要求同时保留输入来源、解释器、依赖、运行命令、失败证据和输出，因此下一位学习者或未来的你才能判断实验是否真的可复现。
+
+## 前置检查
+
+开始前，用自己的话回答：
+
+- 相对路径从哪里解析？
+- `sys.executable` 能证明什么？
+- 为什么 `image is None` 必须在进入后续处理前检查？
+- 你选择手机照片路径还是生成图路径？该路径不能证明什么？
+
+四个 hard Concept 至少达到 `understood`。`tooling.debugging` 未达到 `understood` 时可以开始，但项目的坏路径证据很可能暴露这一缺口，应返回该 Concept 补学。
+
+## 两条等价执行路径
+
+### A. 手机或普通摄像头照片
+
+拍摄任意静物，把原文件复制为 `images/input.jpg`。在 README 记录设备类型、拍摄日期和“未做图像质量评价”。无需购买任何设备，也不需要 RAW 格式。
+
+### B. 程序生成的 PGM 图
+
+没有可用相机时，新建 `src/make_test_image.py`：
+
+```python
+from pathlib import Path
+
+
+def main() -> None:
+    width = 64
+    height = 64
+    pixels = bytes(
+        220 if (x // 8 + y // 8) % 2 == 0 else 40
+        for y in range(height)
+        for x in range(width)
+    )
+    header = f"P5\n{width} {height}\n255\n".encode("ascii")
+    output = Path("images/input.pgm")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(header + pixels)
+    print("generated:", output.resolve())
+
+
+if __name__ == "__main__":
+    main()
+```
+
+PGM 是简单的灰度图文件；这里使用它只是为了产生无需下载、可重复创建的有效输入。
+
+## 实施步骤
+
+### 1. 建立可读目录
+
+```text
+pixel-lab/
+├─ images/
+├─ output/
+├─ src/
+├─ evidence/
+├─ README.md
+└─ requirements.txt
+```
+
+不要把 `.venv`、真实私密照片或临时缓存当成交付物。
+
+### 2. 创建并记录环境
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install opencv-python
+.\.venv\Scripts\python.exe -m pip freeze > requirements.txt
+.\.venv\Scripts\python.exe -c "import cv2, sys; print(sys.executable); print(sys.version); print(cv2.__version__)"
+```
+
+把最后一条命令与输出复制到 `evidence/environment.txt`。不手工改版本输出。
+
+### 3. 编写输入边界
+
+新建 `src/image_io.py`：
+
+```python
+from pathlib import Path
+
+import cv2
+
+
+def load_image(path_text: str):
+    path = Path(path_text).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"输入图像不存在：{path}")
+
+    image = cv2.imread(str(path))
+    if image is None:
+        raise ValueError(f"OpenCV 无法解码图像：{path}")
+    return path, image
+
+
+def save_image(path_text: str, image) -> Path:
+    path = Path(path_text).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(path), image):
+        raise OSError(f"OpenCV 无法写入图像：{path}")
+    return path
+```
+
+### 4. 编写入口并观察事实
+
+新建 `src/main.py`：
+
+```python
+import sys
+
+import cv2
+
+from image_io import load_image, save_image
+
+
+def main() -> None:
+    input_name = sys.argv[1] if len(sys.argv) > 1 else "images/input.jpg"
+    input_path, image = load_image(input_name)
+    output_path = save_image("output/copy.png", image)
+    _, saved = load_image(str(output_path))
+
+    print("opencv:", cv2.__version__)
+    print("input:", input_path)
+    print("shape:", image.shape)
+    print("dtype:", image.dtype)
+    print("output:", output_path)
+    print("saved shape:", saved.shape)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+手机照片路径运行：
+
+```powershell
+.\.venv\Scripts\python.exe src\main.py images\input.jpg
+```
+
+生成图路径先运行生成脚本，再指定 `images\input.pgm`。保留完整命令与输出。
+
+### 5. 主动制造失败
+
+运行：
+
+```powershell
+.\.venv\Scripts\python.exe src\main.py images\does-not-exist.jpg
+```
+
+在 `evidence/bad-path.md` 中先记录预期和实际现象，再写一个假设。用错误中的绝对路径、`Get-Location` 和目录列表验证。修正输入后重新运行有效案例，完成回归。
+
+## 验收与完成标准
+
+逐项检查 frontmatter 的四个 acceptance criterion：
+
+1. 环境能按文字记录重建，不依赖“我电脑上原来就有”。
+2. 有效输入的来源、解析路径、`shape`、`dtype` 和输出路径均被记录，保存副本能再次读取。
+3. 无效路径快速失败，故障卡包含一个可证伪假设以及正常输入回归。
+4. 另一位初学者只看 README 能选择手机或生成图路径完成项目。
+
+项目通过不等于五个 Concept 自动 `mastered`。每个 Concept 的证据需分别覆盖其必需标准，再由学习者手动确认。
+
+## Mastery Evidence 证据映射
+
+- **文件与终端**：项目树、两种工作目录运行对比、输入输出关系图。
+- **Python 核心**：对入口分支和函数返回值的逐步解释，而非只贴源码。
+- **开发环境**：重建记录、解释器与版本输出。
+- **模块与异常**：职责分离的模块、有效与无效输入对照。
+- **调试**：坏路径故障卡和修复后的回归。
+
+## 复盘与后续复习
+
+完成当天写下最容易被环境掩盖的一处错误。24 小时后不看命令重述整个运行链；7 天后把 `.venv` 作为可重建目录重新创建，换一张输入并再次执行坏路径测试。后续 NumPy/OpenCV 学习继续复用本项目，但新增算法证据时要单独验收。
+
+## 精选资源使用方式
+
+- **Python `venv` 官方文档**：重建失败时核对 Windows 创建、解释器位置和激活说明。
+- **OpenCV-Python Tutorials**：只核对图像读取、写出和返回行为；本项目不要求继续浏览滤波、特征或识别章节。

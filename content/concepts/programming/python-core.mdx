@@ -1,0 +1,155 @@
+---
+schemaVersion: 1
+id: tooling.python-core
+slug: python-core
+title: Python 核心语法
+englishTitle: Python Core Syntax
+aliases:
+  - Python 编程基础
+  - Python Basics
+searchKeywords:
+  - 变量
+  - 数据类型
+  - 列表
+  - 字典
+  - 条件循环
+summary: 用变量、基本类型、容器、条件、循环和函数表达一个可检查的数据处理过程，而不是只会逐行照抄代码。
+why: Python 是本路线主要实验语言；机器视觉代码本质上仍由数据、条件、重复处理和可复用函数组成。
+stageId: stage.tooling-foundations
+trackIds:
+  - track.common
+order: 30
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 8
+  max: 10
+dependencies:
+  - conceptId: tooling.computer-files
+    kind: recommended
+    reason: 先理解文件和进程，能更清楚地区分源码与程序运行时的数据。
+tags:
+  - Python
+  - 编程基础
+learningOutcomes:
+  - 能选择合适的基本类型、列表和字典表达一小批图像记录。
+  - 能用条件、循环和函数完成可解释的数据汇总，并预测关键中间值。
+masteryCriteria:
+  - id: criterion.tooling-python-core.write-data-script
+    description: 独立编写函数处理至少三条图像记录，输出可核对的分类与统计结果。
+    evidenceHint: 提交源码、手算预期、实际输出及两者对照；至少更换一组输入复测。
+    required: true
+  - id: criterion.tooling-python-core.explain-control-flow
+    description: 能逐步解释变量、分支、循环和 return 如何改变程序状态与结果。
+    evidenceHint: 选择一次循环画变量追踪表，并解释边界输入会经过哪条分支。
+    required: true
+resourceIds:
+  - resource.python-tutorial
+publicationStatus: published
+contentVersion: 2026.08.27
+---
+
+# Python 核心语法（Python Core Syntax）
+
+本单元只学习足够表达小型实验的数据与流程。目标是**先预测，再运行，再解释差异**。
+
+## 1. 这是什么
+
+Python 源码由表达式和语句组成。变量给对象起名字；类型决定值能参与哪些操作；列表（list）保存有顺序的一组值；字典（dict）用键查值；`if` 选择分支；`for` 重复处理；函数（function）把输入变成明确的返回值。
+
+## 2. 为什么机器视觉需要它
+
+图像以后会表现为数组，但实验仍要保存文件名、曝光时间、类别与测量值，遍历样本，检查条件并汇总结果。若不理解基本控制流，调用再高级的视觉库也无法判断结果是否可信。
+
+## 3. 前置知识
+
+没有硬前置。推荐先学习“计算机、文件与终端”，以便清楚源码文件与运行中对象的区别。
+
+## 4. 核心概念
+
+- `int`、`float`、`str`、`bool` 分别表达整数、近似实数、文本和真假。
+- 赋值 `name = value` 让名字引用一个对象，不是数学等式。
+- 列表适合按顺序遍历；字典适合描述一条记录的命名字段。
+- `if / elif / else` 只执行首个为真的分支。
+- `for item in items` 逐个绑定元素；循环体用缩进表示边界。
+- 函数的参数是输入，`return` 是输出；打印只是观察，不等于返回。
+
+## 5. 初学者直觉解释
+
+把一条图像记录想成贴有标签的样品袋：字典的键是标签，列表是一排样品袋。循环把袋子逐个放到工作台，条件决定放入哪个篮子，函数则是一套可以重复执行且输入输出明确的操作规程。
+
+## 6. 必须掌握到什么程度
+
+你应能不看范例写出十几到几十行脚本：创建数据、封装函数、遍历记录、进行条件判断并返回汇总；还能用纸笔追踪一次循环。暂时不要求类、装饰器、生成器或复杂算法技巧。
+
+## 7. 常见误区
+
+- 用 `=` 比较两个值；比较相等应使用 `==`。
+- 把 `print(result)` 当成函数已经 `return result`。
+- 修改代码直到“没有报错”，却不先写预期结果。
+- 对浮点数要求任意计算都精确相等；多数测量需要合理容差。
+- 用一个含义不清的列表同时保存文件名、亮度和标签。
+
+## 8. Worked Example：汇总曝光记录
+
+先手算：下面三条记录有两条亮度低于 80，平均亮度是 80。
+
+```python
+records = [
+    {"name": "desk.jpg", "brightness": 62},
+    {"name": "window.jpg", "brightness": 135},
+    {"name": "book.jpg", "brightness": 43},
+]
+
+
+def summarize(items, dark_threshold):
+    total = 0
+    dark_names = []
+
+    for item in items:
+        brightness = item["brightness"]
+        total = total + brightness
+        if brightness < dark_threshold:
+            dark_names.append(item["name"])
+
+    average = total / len(items)
+    return {"average": average, "dark_names": dark_names}
+
+
+result = summarize(records, dark_threshold=80)
+print(result)
+```
+
+追踪第一轮：`item` 指向 `desk.jpg`，`total` 从 0 变为 62，条件为真，`dark_names` 变为 `['desk.jpg']`。若实际输出与手算不同，先找第一处不一致，而不是猜最终答案。
+
+## 9. Active Recall 主动回忆
+
+1. 列表和字典分别解决什么问题？
+2. `print` 和 `return` 有何不同？
+3. 循环一次后，哪些变量改变了？
+4. 把阈值从 80 改成 43，哪几条记录进入 `dark_names`？为什么？
+5. 空列表会让示例在哪一步失败？
+
+## 10. Practice 练习
+
+1. 为每条记录加入 `exposure_ms`，写函数返回曝光时间最长的文件名。
+2. 为 `summarize` 增加空列表处理：先写期望行为，再选择返回值或错误提示。
+3. 换成四条自造记录，手算平均值与分类，再运行对照。
+4. 画一张包含每轮 `item`、`total`、条件结果和 `dark_names` 的追踪表。
+
+## 11. 实际使用
+
+把手机拍摄的三张照片名称和你人工给出的“偏暗/正常”观察写成记录。此处不计算真实像素亮度；重点是先把实验对象和判断规则表达清楚，避免把人工标签伪装成算法测量。
+
+## 12. Mastery Evidence 掌握证据
+
+证据应包含：未经逐行复制独立写出的汇总函数；至少两组输入的手算预期；运行输出；一次边界输入；一张循环追踪表；以及对 `return`、分支顺序和数据结构选择的解释。只展示“代码能跑”不足以证明掌握。
+
+## 13. 后续复用与复习
+
+NumPy 数组处理、OpenCV 批量读图、数据集划分和模型评估都会复用这些结构。次日从空文件重写示例；7 天后把记录字段换掉但保留处理结构，确认你掌握的是模式而非答案。
+
+## 14. 精选学习资源
+
+- **The Python Tutorial**：先读第 3 章的数字、文本和列表，再读第 4 章的 `if`、`for` 与函数，以及第 5 章的字典和循环技巧。官方教程说明它并非专为完全零编程经验者设计，因此要配合本页的手算与小步练习，不要直接连续通读。

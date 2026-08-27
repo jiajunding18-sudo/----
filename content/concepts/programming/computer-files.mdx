@@ -1,0 +1,162 @@
+---
+schemaVersion: 1
+id: tooling.computer-files
+slug: computer-files-and-terminal
+title: 计算机、文件与终端
+englishTitle: Computer, Files, and Terminal
+aliases:
+  - 文件系统与命令行
+  - Filesystem and Command Line
+searchKeywords:
+  - 工作目录
+  - 绝对路径
+  - 相对路径
+  - PowerShell
+summary: 建立程序、进程、文件、目录、路径和终端的最小心智模型，知道命令究竟在哪里运行、读写了什么。
+why: 机器视觉实验会同时涉及代码、图像、模型和输出；路径或工作目录理解错误，会让正确算法表现得像是失效。
+stageId: stage.tooling-foundations
+trackIds:
+  - track.common
+order: 10
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 3
+  max: 4
+dependencies: []
+tags:
+  - 编程基础
+  - 文件系统
+  - 终端
+learningOutcomes:
+  - 区分程序、进程、文件和目录，并说明当前工作目录如何影响相对路径。
+  - 能在终端中定位、创建和检查实验目录，不依赖记忆猜测文件位置。
+masteryCriteria:
+  - id: criterion.tooling-computer-files.navigate-paths
+    description: 能从两个不同工作目录定位同一文件，并正确解释所用绝对路径与相对路径。
+    evidenceHint: 保存命令记录、目录树和两种路径的逐步解释；记录一次失败定位及修正。
+    required: true
+  - id: criterion.tooling-computer-files.explain-process-context
+    description: 能说明一个 Python 进程从哪里启动、读哪个输入、把输出写到哪里。
+    evidenceHint: 画一张包含终端、进程、当前工作目录、输入文件和输出文件的关系图。
+    required: true
+resourceIds:
+  - resource.python-pathlib
+publicationStatus: published
+contentVersion: 2026.08.27
+---
+
+# 计算机、文件与终端（Computer, Files, and Terminal）
+
+本单元的产出不是背命令，而是形成一张可验证的“运行现场图”：**谁在运行、从哪里运行、读什么、写到哪里**。
+
+## 1. 这是什么
+
+- **程序（program）**是保存在文件中的指令，例如 `inspect_image.py`。
+- **进程（process）**是程序的一次实际运行；同一程序运行两次，就是两个不同进程。
+- **文件（file）**保存字节，扩展名只提示格式，不保证内容正确。
+- **目录（directory）**组织文件与其他目录。
+- **路径（path）**描述位置。绝对路径从盘符或根开始；相对路径从当前工作目录开始。
+- **终端（terminal）**显示文字输入输出；PowerShell 是在终端中解释命令的 shell。
+
+## 2. 为什么机器视觉需要它
+
+一段读图代码可能完全正确，却因为工作目录不同而找不到 `input.jpg`；输出也可能成功写入，只是写到了你没有查看的目录。以后数据集、标注、模型权重和实验结果都会依赖可靠的路径管理。
+
+## 3. 前置知识
+
+无硬前置。你只需要能使用键盘、在文件资源管理器中创建目录，并愿意把“我觉得文件在这里”改成“我用命令确认文件在这里”。
+
+## 4. 核心概念
+
+假设当前工作目录是 `D:\vision-lab`：
+
+- `D:\vision-lab\images\cup.jpg` 是绝对路径。
+- `images\cup.jpg` 是从当前目录出发的相对路径。
+- `.` 表示当前目录，`..` 表示父目录。
+- 当前工作目录属于进程的运行上下文，不等于脚本文件所在目录。
+
+路径解析可以写成：`目标位置 = 当前工作目录 + 相对路径`。这不是简单的字符串相加，而是由操作系统按路径规则解析。
+
+## 5. 初学者直觉解释
+
+把绝对路径想成完整邮寄地址，把相对路径想成“从我现在站的位置向右走两间”。后一句只有知道起点才有意义。终端提示符告诉你当前“站在哪里”；运行程序前先确认起点，比反复修改文件名更可靠。
+
+## 6. 必须掌握到什么程度
+
+你需要能够：读取终端中的当前位置；用目录树描述实验材料；从两个工作目录推导同一文件的相对路径；解释脚本位置与工作目录为何可能不同。暂时不需要学习权限、文件系统实现或复杂 shell 脚本。
+
+## 7. 常见误区
+
+- “脚本旁边的文件总能用文件名读到”：相对路径通常从工作目录解析。
+- “有 `.jpg` 后缀就是有效图像”：后缀不能验证文件内容。
+- “命令没报错，所以输出就在我想的目录”：必须打印或检查解析后的路径。
+- 在代码中手工拼接 `"folder\\" + name`：跨平台时优先使用 `pathlib.Path`。
+
+## 8. Worked Example：建立可解释的实验目录
+
+在 PowerShell 中运行：
+
+```powershell
+Get-Location
+New-Item -ItemType Directory -Path pixel-lab
+Set-Location pixel-lab
+New-Item -ItemType Directory -Path images, output
+Get-ChildItem
+```
+
+再创建 `where_am_i.py`：
+
+```python
+from pathlib import Path
+
+input_path = Path("images") / "cup.jpg"
+
+print("当前工作目录：", Path.cwd())
+print("输入的绝对位置：", input_path.resolve())
+print("输入是否存在：", input_path.exists())
+```
+
+先在 `pixel-lab` 中运行，再回到父目录运行 `python pixel-lab\where_am_i.py`。脚本没有移动，但当前工作目录和解析结果改变了；这就是可观察证据。
+
+## 9. Active Recall 主动回忆
+
+合上本页，用自己的话回答：
+
+1. 程序和进程有什么不同？
+2. 为什么脚本路径不能自动决定相对输入路径？
+3. 看到“文件不存在”时，应先打印哪两个事实？
+4. 绝对路径一直更好吗？它牺牲了什么可移植性？
+
+答不出时只回看对应段落，不要整页重读。
+
+## 10. Practice 练习
+
+1. 在 `pixel-lab` 下建立 `images`、`src`、`output` 三个目录，并画出目录树。
+2. 把脚本放进 `src`，从项目根目录和 `src` 目录分别运行；预测并记录 `Path.cwd()`。
+3. 让路径检查故意失败一次。先写下原因假设，再用 `resolve()` 和 `exists()` 验证。
+4. 写一句规则：今后截图报错时，必须同时记录哪些路径事实？
+
+## 11. 实际使用
+
+把一张手机照片复制到 `images`，不要改代码里的文件名来碰运气。先用目录列表确认真实名称，再让脚本打印解析路径与存在性。这就是 Pixel Lab 的第一段可复现实验记录。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一个小证据包：
+
+- 目录树与一张“终端 → 进程 → 工作目录 → 输入/输出”的关系图；
+- 从两个工作目录运行同一脚本的命令及输出；
+- 一次失败路径的原始现象、原因、验证命令和修正结果；
+- 口头或文字解释，而不仅是“最终运行成功”。
+
+只有证据覆盖 frontmatter 中两项必需标准，并由你手动确认后，才适合标记为 `mastered`。
+
+## 13. 后续复用与复习
+
+NumPy 文件、OpenCV 图像、数据集、模型权重和实验报告都会再次使用路径模型。24 小时后不看笔记重建目录；7 天后从父目录再次运行脚本，并解释为何仍能或不能找到输入。
+
+## 14. 精选学习资源
+
+- **Python `pathlib` 官方文档**：先看页面开头的 `Path` 选择说明和 **Basic use**；只练习 `Path.cwd()`、`resolve()`、`exists()`、`mkdir()` 与 `/` 连接路径。它用于核对接口，不要求通读全部 API。

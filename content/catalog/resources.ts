@@ -1,3 +1,88 @@
 import type { Resource } from "../../src/types";
 
-export const resources: readonly Resource[] = [];
+export const resources: readonly Resource[] = [
+  {
+    id: "resource.python-tutorial",
+    title: "The Python Tutorial",
+    authorOrOrganization: "Python Software Foundation",
+    type: "official-doc",
+    level: "beginner",
+    priority: "essential",
+    language: "en",
+    reason:
+      "Python 官方对解释器、核心语法、函数、模块、文件和异常的权威说明，适合在中文讲解与练习之后核对概念。",
+    recommendedParts: [
+      "第 3 章 An Informal Introduction to Python",
+      "第 4 章 More Control Flow Tools",
+      "第 5 章 Data Structures",
+      "第 6 至 8 章 Modules、Input and Output、Errors and Exceptions",
+    ],
+    aliases: ["Python 官方教程"],
+    verification: "verified",
+    url: "https://docs.python.org/3/tutorial/",
+    verifiedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-27",
+  },
+  {
+    id: "resource.python-pathlib",
+    title: "pathlib — Object-oriented filesystem paths",
+    authorOrOrganization: "Python Software Foundation",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason:
+      "官方文档展示了跨平台路径对象的基本用法，可避免把 Windows 路径长期当作容易出错的字符串拼接。",
+    recommendedParts: [
+      "页面开头的类选择说明",
+      "Basic use",
+      "Path.resolve、Path.exists 与 Path.mkdir 的条目",
+    ],
+    aliases: ["Python pathlib 文档"],
+    verification: "verified",
+    url: "https://docs.python.org/3/library/pathlib.html",
+    verifiedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-27",
+  },
+  {
+    id: "resource.python-venv",
+    title: "venv — Creation of virtual environments",
+    authorOrOrganization: "Python Software Foundation",
+    type: "official-doc",
+    level: "beginner",
+    priority: "essential",
+    language: "en",
+    reason:
+      "Python 标准库对虚拟环境创建、激活和解释器位置的规范说明，是建立可复现实验环境的直接依据。",
+    recommendedParts: [
+      "Creating virtual environments",
+      "How venvs work",
+      "Windows PowerShell activation command table",
+    ],
+    aliases: ["Python venv 文档"],
+    verification: "verified",
+    url: "https://docs.python.org/3/library/venv.html",
+    verifiedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-27",
+  },
+  {
+    id: "resource.opencv-python-tutorials",
+    title: "OpenCV-Python Tutorials",
+    authorOrOrganization: "OpenCV",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason:
+      "OpenCV 官方 Python 教程提供安装和图像入门接口的权威入口；本切片只使用读写图像相关部分，不提前学习图像算法。",
+    recommendedParts: [
+      "Introduction to OpenCV",
+      "Gui Features in OpenCV 中的 Getting Started with Images",
+    ],
+    aliases: ["OpenCV Python 官方教程"],
+    verification: "verified",
+    url: "https://docs.opencv.org/4.x/d6/d00/tutorial_py_root.html",
+    verifiedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-27",
+  },
+];

@@ -17,6 +17,47 @@ const stageZeroConceptIds = [
 ] as const;
 
 describe("Roadmap manifest 派生视图", () => {
+  it("按正式 Track 关系派生全局路线，并保留 entryGate 的 allOf / anyOf 语义", () => {
+    const roadmap = buildRoadmapView(contentManifest);
+
+    expect(roadmap.tracks.map(({ track }) => track.id)).toEqual([
+      "track.common",
+      "track.industrial-3d",
+      "track.computational-imaging",
+    ]);
+    expect(roadmap.availableStages.map(({ stage }) => stage.id)).toEqual([
+      "stage.tooling-foundations",
+    ]);
+    expect(roadmap.plannedStageCount).toBe(16);
+    expect(
+      roadmap.tracks.find(({ track }) => track.id === "track.common")?.stages,
+    ).toHaveLength(14);
+    expect(
+      roadmap.tracks.find(({ track }) => track.id === "track.industrial-3d")
+        ?.stages.map(({ stage }) => stage.id),
+    ).toEqual(["stage.industrial-3d", "stage.capstone"]);
+    expect(
+      roadmap.tracks.find(
+        ({ track }) => track.id === "track.computational-imaging",
+      )?.stages.map(({ stage }) => stage.id),
+    ).toEqual([
+      "stage.imaging-quality-advanced",
+      "stage.computational-imaging",
+      "stage.capstone",
+    ]);
+
+    const industrial3d = roadmap.stages.find(
+      ({ stage }) => stage.id === "stage.industrial-3d",
+    );
+    const capstone = roadmap.stages.find(
+      ({ stage }) => stage.id === "stage.capstone",
+    );
+    expect(industrial3d?.entryGate?.kind).toBe("allOf");
+    expect(industrial3d?.entryGateSummary).toContain("全部满足");
+    expect(capstone?.entryGate?.kind).toBe("allOf");
+    expect(capstone?.entryGateSummary).toContain("满足其中一项");
+  });
+
   it("从正式 manifest 派生 Stage 0、推荐顺序、依赖、项目和出口", () => {
     const roadmap = buildRoadmapView(contentManifest);
     const stageZero = roadmap.stages.find(

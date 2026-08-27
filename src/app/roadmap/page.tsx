@@ -26,7 +26,7 @@ export default function RoadmapPage() {
   return (
     <div className="max-w-5xl">
       <PageHeader
-        description="从正式内容系统查看 Stage 目标、推荐顺序、真实依赖、验证项目与出口标准。"
+        description="从正式内容系统查看大学阶段的公共主干、高级分支、entryGate，以及已发布 Stage 的 Concept、项目与出口标准。"
         title="Roadmap"
       />
 

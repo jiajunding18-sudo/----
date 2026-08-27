@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ContentState } from "@/components/content/content-state";
 
 import type { RoadmapStageView, RoadmapView } from "./roadmap-model";
+import { RoadmapOverview } from "./roadmap-overview";
 
 const depthLabels = {
   master: { code: "M", label: "必须掌握" },
@@ -285,18 +286,37 @@ export function RoadmapViewContent({ roadmap }: { readonly roadmap: RoadmapView 
           如何阅读这条路线
         </h2>
         <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
-          当前 manifest 包含 {roadmap.stages.length} 个正式 Stage、{roadmap.publishedConceptCount} 个已发布 Concept 和 {roadmap.publishedProjectCount} 个已发布 Project。Stage 负责组织目标，Concept 的 hard dependency 才决定必须先学什么；recommended dependency 不阻塞开始。
+          当前 manifest 包含 {roadmap.tracks.length} 个正式 Track、{roadmap.stages.length} 个 Stage checkpoint、{roadmap.publishedConceptCount} 个已发布 Concept 和 {roadmap.publishedProjectCount} 个已发布 Project；其中 {roadmap.plannedStageCount} 个 Stage 仍是已规划状态。Stage 负责组织目标，Concept 的 hard dependency 才决定必须先学什么；recommended dependency 不阻塞开始。
         </p>
       </section>
 
-      <div className="mt-10 space-y-8">
-        {roadmap.stages.map((stage, stageIndex) => (
-          <article
-            aria-labelledby={`${stage.stage.id}-title`}
-            className="border-t border-[var(--color-border)] pt-8 first:border-t-0 first:pt-0"
-            data-stage-id={stage.stage.id}
-            key={stage.stage.id}
+      <RoadmapOverview roadmap={roadmap} />
+
+      <section aria-labelledby="available-stage-details" className="mt-12">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold tracking-[0.14em] text-[var(--color-accent)] uppercase">
+            Published stage details
+          </p>
+          <h2
+            className="mt-2 text-3xl font-semibold tracking-[-0.03em]"
+            id="available-stage-details"
           >
+            已发布 Stage 详细路线
+          </h2>
+          <p className="mt-4 leading-7 text-[var(--color-muted)]">
+            这里只展开已有正式 Concept 的 Stage。规划中的 Stage 保留在上方全局路线，不用空白课程或占位正文伪装发布状态。
+          </p>
+        </div>
+
+        <div className="mt-10 space-y-8">
+          {roadmap.availableStages.map((stage, stageIndex) => (
+            <article
+              aria-labelledby={`${stage.stage.id}-title`}
+              className="border-t border-[var(--color-border)] pt-8 first:border-t-0 first:pt-0"
+              data-stage-id={stage.stage.id}
+              id={`${stage.stage.id}-detail`}
+              key={stage.stage.id}
+            >
             <p className="text-sm font-semibold text-[var(--color-accent)]">
               {stage.tracks.map(({ title }) => title).join(" / ")}
             </p>
@@ -342,23 +362,9 @@ export function RoadmapViewContent({ roadmap }: { readonly roadmap: RoadmapView 
                 <StageExit stage={stage} />
               </div>
             </details>
-          </article>
-        ))}
-      </div>
-
-      <section
-        aria-labelledby="future-stages-title"
-        className="mt-12 border-t border-[var(--color-border)] pt-8"
-      >
-        <p className="text-xs font-semibold tracking-[0.14em] text-[var(--color-accent)] uppercase">
-          Future stages
-        </p>
-        <h2 className="mt-2 text-xl font-semibold" id="future-stages-title">
-          后续路线尚未展开
-        </h2>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--color-muted)]">
-          后续 Stage 只有在正式 StageDefinition 与已校验内容进入 manifest 后才会出现在这里；当前页面不会用假课程或占位节点补齐长期路线。
-        </p>
+            </article>
+          ))}
+        </div>
       </section>
     </>
   );

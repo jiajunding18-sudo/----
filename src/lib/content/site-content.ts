@@ -168,6 +168,8 @@ export function getProgressCatalog(): ProgressCatalog {
         required,
       })),
     })),
+    projectIds: contentManifest.projects.map(({ id }) => id),
+    stageIds: contentManifest.stages.map(({ id }) => id),
     tracks: contentManifest.tracks.map((track) => ({
       id: track.id,
       kind: track.kind,

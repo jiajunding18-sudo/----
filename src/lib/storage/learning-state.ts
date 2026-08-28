@@ -7,6 +7,7 @@ import type { LearningStateV1, TrackDefinition } from "@/types";
 export const LEARNING_STATE_APP_ID = "machine-vision-learning-os" as const;
 export const LEARNING_STATE_SCHEMA_VERSION = 1 as const;
 export const LEARNING_STATE_STORAGE_KEY = "mv-learning-os:learning-state";
+export const LEARNING_STATE_RECOVERY_KEY_PREFIX = "mv-learning-os:recovery:";
 
 export const persistedEnvelopeV1Schema = z.strictObject({
   app: z.literal(LEARNING_STATE_APP_ID),
@@ -18,6 +19,18 @@ export const persistedEnvelopeV1Schema = z.strictObject({
 });
 
 export type PersistedEnvelopeV1 = z.infer<typeof persistedEnvelopeV1Schema>;
+
+export const exportEnvelopeV1Schema = z.strictObject({
+  app: z.literal(LEARNING_STATE_APP_ID),
+  schemaVersion: z.literal(LEARNING_STATE_SCHEMA_VERSION),
+  contentVersion: trimmedTextSchema,
+  revision: z.number().int().nonnegative(),
+  savedAt: utcTimestampSchema,
+  exportedAt: utcTimestampSchema,
+  payload: learningStateV1Schema,
+});
+
+export type ExportEnvelopeV1 = z.infer<typeof exportEnvelopeV1Schema>;
 
 export function createInitialLearningState(
   tracks: readonly Pick<TrackDefinition, "id" | "defaultGoal" | "kind">[],
@@ -58,6 +71,24 @@ export function createPersistedEnvelope(
     contentVersion,
     revision,
     savedAt,
+    payload,
+  });
+}
+
+export function createExportEnvelope(
+  payload: LearningStateV1,
+  contentVersion: string,
+  revision: number,
+  savedAt: string,
+  exportedAt: string,
+): ExportEnvelopeV1 {
+  return exportEnvelopeV1Schema.parse({
+    app: LEARNING_STATE_APP_ID,
+    schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
+    contentVersion,
+    revision,
+    savedAt,
+    exportedAt,
     payload,
   });
 }

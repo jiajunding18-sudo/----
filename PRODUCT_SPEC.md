@@ -600,8 +600,10 @@ Stage 9/10 的出口标准与项目门槛也使用同一 Track 目标：副修 `
 
 导出 JSON 至少包含：
 
+- `app` 应用标识；
 - `schemaVersion`；
 - `contentVersion`；
+- 当前本地状态的 `revision` 与 `savedAt`；
 - `exportedAt`；
 - 用户偏好；
 - 全部进度记录；

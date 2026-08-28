@@ -1,5 +1,6 @@
 import { migratePersistedEnvelope } from "./migrations";
 import {
+  LEARNING_STATE_RECOVERY_KEY_PREFIX,
   LEARNING_STATE_STORAGE_KEY,
   persistedEnvelopeV1Schema,
   type PersistedEnvelopeV1,
@@ -21,6 +22,8 @@ export type StorageLoadResult =
 export interface LearningStateStorageAdapter {
   load(): Promise<StorageLoadResult>;
   save(value: PersistedEnvelopeV1): Promise<void>;
+  saveRecovery(value: PersistedEnvelopeV1): Promise<string>;
+  saveRawRecovery(raw: string, timestamp: string): Promise<string>;
   clear(): Promise<void>;
 }
 
@@ -39,6 +42,21 @@ export class LearningStateStorageError extends Error {
 
 function getBrowserStorage(): StringStorage | undefined {
   return typeof window === "undefined" ? undefined : window.localStorage;
+}
+
+function recoveryKey(
+  storage: StringStorage,
+  timestamp: string,
+  kind: "state" | "raw",
+) {
+  const base = `${LEARNING_STATE_RECOVERY_KEY_PREFIX}${timestamp}:${kind}`;
+  let candidate = base;
+  let suffix = 1;
+  while (storage.getItem(candidate) !== null) {
+    candidate = `${base}:${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
 }
 
 export class LocalStorageLearningStateAdapter
@@ -126,6 +144,53 @@ export class LocalStorageLearningStateAdapter
       if (error instanceof LearningStateStorageError) throw error;
       throw new LearningStateStorageError(
         `保存浏览器本地学习数据失败：${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    }
+  }
+
+  async saveRecovery(value: PersistedEnvelopeV1): Promise<string> {
+    const parsed = persistedEnvelopeV1Schema.safeParse(value);
+    if (!parsed.success) {
+      throw new LearningStateStorageError(
+        `拒绝备份未通过校验的学习数据：${parsed.error.message}`,
+      );
+    }
+
+    try {
+      const storage = this.getStorage();
+      if (!storage) {
+        throw new LearningStateStorageError("当前环境没有可用的浏览器本地存储。");
+      }
+      const key = recoveryKey(storage, parsed.data.savedAt, "state");
+      storage.setItem(key, JSON.stringify(parsed.data));
+      return key;
+    } catch (error) {
+      if (error instanceof LearningStateStorageError) throw error;
+      throw new LearningStateStorageError(
+        `创建恢复快照失败：${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    }
+  }
+
+  async saveRawRecovery(raw: string, timestamp: string): Promise<string> {
+    try {
+      const storage = this.getStorage();
+      if (!storage) {
+        throw new LearningStateStorageError("当前环境没有可用的浏览器本地存储。");
+      }
+      const key = recoveryKey(storage, timestamp, "raw");
+      storage.setItem(key, raw);
+      return key;
+    } catch (error) {
+      if (error instanceof LearningStateStorageError) throw error;
+      throw new LearningStateStorageError(
+        `保留原始损坏数据失败：${
           error instanceof Error ? error.message : String(error)
         }`,
         { cause: error },

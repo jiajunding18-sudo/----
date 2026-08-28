@@ -3,7 +3,9 @@ import { z } from "zod";
 import {
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_SCHEMA_VERSION,
+  exportEnvelopeV1Schema,
   persistedEnvelopeV1Schema,
+  type ExportEnvelopeV1,
   type PersistedEnvelopeV1,
 } from "./learning-state";
 
@@ -90,6 +92,7 @@ export function applySequentialMigrations<Value>(options: {
 // v1 is the first persisted schema. Future versions add one validated vN →
 // vN+1 entry here; no fictional historical migration is registered.
 const persistedMigrations = new Map<number, SequentialMigration>();
+const exportMigrations = new Map<number, SequentialMigration>();
 
 export function migratePersistedEnvelope(
   input: unknown,
@@ -109,5 +112,26 @@ export function migratePersistedEnvelope(
     targetVersion: LEARNING_STATE_SCHEMA_VERSION,
     targetSchema: persistedEnvelopeV1Schema,
     migrations: persistedMigrations,
+  });
+}
+
+export function migrateExportEnvelope(
+  input: unknown,
+): MigrationResult<ExportEnvelopeV1> {
+  const header = envelopeHeaderSchema.safeParse(input);
+  if (!header.success) {
+    return {
+      ok: false,
+      reason: "corrupt",
+      message: `无法识别 Learning State 备份 envelope：${header.error.message}`,
+    };
+  }
+
+  return applySequentialMigrations({
+    input,
+    inputVersion: header.data.schemaVersion,
+    targetVersion: LEARNING_STATE_SCHEMA_VERSION,
+    targetSchema: exportEnvelopeV1Schema,
+    migrations: exportMigrations,
   });
 }

@@ -852,6 +852,8 @@ interface ExportEnvelopeV1 {
   app: "machine-vision-learning-os";
   schemaVersion: 1;
   contentVersion: string;
+  revision: number;
+  savedAt: string;
   exportedAt: string;
   payload: LearningStateV1;
 }
@@ -904,7 +906,7 @@ LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` �
 
 ### 9.4 导入、导出和损坏恢复
 
-- 导出使用 `ExportEnvelopeV1`，文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
+- 导出使用 `ExportEnvelopeV1`，其中 `revision` 与 `savedAt` 记录被导出状态的本地持久化位置，`exportedAt` 记录备份生成时间；文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
 - 导入先解析、识别 app、迁移、Zod 校验，再显示 `ImportReport`；用户确认前不得写入主 storage key。
 - 默认 `merge`：`UserPreferences` 整体按 `updatedAt` 选择；Concept、Project 与 StageCheckpoint 记录按其 Record key 和 `updatedAt` 合并，不能按状态高低合并，因此用户主动降级会被保留；证据、交付物和日志再按自身稳定 ID 与 `updatedAt` 合并。
 - 可选 `replace`：完全替换现有用户状态。提交前必须先成功生成可下载的 `ExportEnvelopeV1` 或写入独立 recovery key，再进行二次确认；备份生成/持久化失败时 action 必须拒绝替换。

@@ -31,6 +31,8 @@ const catalog: ProgressCatalog = {
       ],
     },
   ],
+  projectIds: ["project.fixture"],
+  stageIds: ["stage.test"],
   tracks: [
     { id: "track.common", kind: "common", defaultGoal: "master" },
     {
@@ -203,6 +205,23 @@ describe("LocalStorage adapter 与 hydration", () => {
     storage.setItem(LEARNING_STATE_STORAGE_KEY, "value");
     await new LocalStorageLearningStateAdapter(() => storage).clear();
     expect(storage.getItem(LEARNING_STATE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("同一时间戳的 recovery snapshot 使用不同 key，不覆盖先前快照", async () => {
+    const storage = new MemoryStorage();
+    const adapter = new LocalStorageLearningStateAdapter(() => storage);
+    const envelope = createPersistedEnvelope(
+      createInitialLearningState(catalog.tracks, timestamp),
+      "2026.08.28",
+      1,
+      timestamp,
+    );
+    const firstKey = await adapter.saveRecovery(envelope);
+    const secondKey = await adapter.saveRecovery(envelope);
+
+    expect(secondKey).not.toBe(firstKey);
+    expect(storage.getItem(firstKey)).toBe(JSON.stringify(envelope));
+    expect(storage.getItem(secondKey)).toBe(JSON.stringify(envelope));
   });
 });
 

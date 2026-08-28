@@ -28,6 +28,8 @@ export interface ProgressConceptDefinition {
 
 export interface ProgressCatalog {
   readonly concepts: readonly ProgressConceptDefinition[];
+  readonly projectIds: readonly string[];
+  readonly stageIds: readonly string[];
   readonly tracks: readonly Pick<
     TrackDefinition,
     "id" | "kind" | "defaultGoal" | "exclusiveMasteryGroup"
@@ -372,6 +374,8 @@ export function summarizeStageProgress(
 export interface LearningStateCatalogInspection {
   readonly errors: string[];
   readonly orphanConceptIds: string[];
+  readonly orphanProjectIds: string[];
+  readonly orphanStageIds: string[];
   readonly orphanTrackIds: string[];
 }
 
@@ -381,12 +385,20 @@ export function inspectLearningStateAgainstCatalog(
 ): LearningStateCatalogInspection {
   const conceptsById = new Map(catalog.concepts.map((concept) => [concept.id, concept]));
   const tracksById = new Map(catalog.tracks.map((track) => [track.id, track]));
+  const projectIds = new Set(catalog.projectIds);
+  const stageIds = new Set(catalog.stageIds);
   const errors: string[] = [];
   const orphanConceptIds = Object.keys(state.conceptProgress).filter(
     (conceptId) => !conceptsById.has(conceptId),
   );
   const orphanTrackIds = Object.keys(state.preferences.trackGoals).filter(
     (trackId) => !tracksById.has(trackId),
+  );
+  const orphanProjectIds = Object.keys(state.projectProgress).filter(
+    (projectId) => !projectIds.has(projectId),
+  );
+  const orphanStageIds = Object.keys(state.stageCheckpoints).filter(
+    (stageId) => !stageIds.has(stageId),
   );
 
   for (const [conceptId, progress] of Object.entries(state.conceptProgress)) {
@@ -438,5 +450,11 @@ export function inspectLearningStateAgainstCatalog(
     }
   }
 
-  return { errors, orphanConceptIds, orphanTrackIds };
+  return {
+    errors,
+    orphanConceptIds,
+    orphanProjectIds,
+    orphanStageIds,
+    orphanTrackIds,
+  };
 }

@@ -11,10 +11,17 @@ import {
   type ProgressMutationResult,
 } from "./progress-domain";
 import {
+  createLearningBackup,
   createInitialLearningState,
   createPersistedEnvelope,
+  getLearningBackupFileName,
+  prepareLearningStateImport,
+  type ExportEnvelopeV1,
+  type ImportMode,
   type LearningStateStorageAdapter,
   LocalStorageLearningStateAdapter,
+  type PreparedLearningStateImport,
+  type PrepareImportResult,
 } from "@/lib/storage";
 import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
 import type { LearningStateV1, MasteryEvidence } from "@/types";
@@ -34,6 +41,30 @@ export type LearningStoreActionResult =
       readonly message: string;
     };
 
+export type DataManagementActionResult =
+  | { readonly ok: true; readonly recoveryKey?: string }
+  | {
+      readonly ok: false;
+      readonly code:
+        | "confirmation-required"
+        | "invalid-import"
+        | "recovery-failed"
+        | "save-failed";
+      readonly message: string;
+    };
+
+export type BackupCreationResult =
+  | {
+      readonly ok: true;
+      readonly envelope: ExportEnvelopeV1;
+      readonly filename: string;
+      readonly json: string;
+    }
+  | {
+      readonly ok: false;
+      readonly message: string;
+    };
+
 export interface LearningStoreState {
   readonly learningState: LearningStateV1;
   readonly hydrated: boolean;
@@ -41,8 +72,11 @@ export interface LearningStoreState {
   readonly persistenceMessage?: string;
   readonly rawRecoveryData?: string;
   readonly orphanConceptIds: readonly string[];
+  readonly orphanProjectIds: readonly string[];
+  readonly orphanStageIds: readonly string[];
   readonly orphanTrackIds: readonly string[];
   readonly revision: number;
+  readonly savedAt?: string;
   hydrate: () => Promise<void>;
   startConcept: (conceptId: string) => Promise<LearningStoreActionResult>;
   markUnderstood: (conceptId: string) => Promise<LearningStoreActionResult>;
@@ -58,6 +92,16 @@ export interface LearningStoreState {
     conceptId: string,
     targetStatus: "not_started" | "learning" | "understood",
   ) => Promise<LearningStoreActionResult>;
+  createBackup: (localDate: string) => BackupCreationResult;
+  recordBackupCreated: (timestamp: string) => Promise<DataManagementActionResult>;
+  prepareImport: (raw: string, mode: ImportMode) => PrepareImportResult;
+  applyImport: (
+    prepared: PreparedLearningStateImport,
+    userConfirmed: boolean,
+  ) => Promise<DataManagementActionResult>;
+  resetLearningData: (
+    userConfirmed: boolean,
+  ) => Promise<DataManagementActionResult>;
 }
 
 export type LearningStoreApi = StoreApi<LearningStoreState>;
@@ -90,6 +134,7 @@ export function createLearningStore({
     async function persist(nextState: LearningStateV1) {
       const current = get();
       const nextRevision = current.revision + 1;
+      const timestamp = now();
       set({ learningState: nextState });
 
       try {
@@ -98,11 +143,12 @@ export function createLearningStore({
             nextState,
             contentVersion,
             nextRevision,
-            now(),
+            timestamp,
           ),
         );
         set({
           revision: nextRevision,
+          savedAt: timestamp,
           persistenceStatus: "ready",
           persistenceMessage: undefined,
         });
@@ -112,6 +158,77 @@ export function createLearningStore({
           persistenceMessage:
             error instanceof Error ? error.message : String(error),
         });
+      }
+    }
+
+    async function persistAtomically(
+      nextState: LearningStateV1,
+    ): Promise<DataManagementActionResult> {
+      const parsed = learningStateV1Schema.safeParse(nextState);
+      if (!parsed.success) {
+        return {
+          ok: false,
+          code: "invalid-import",
+          message: `拒绝写入未通过校验的学习数据：${parsed.error.message}`,
+        };
+      }
+
+      const timestamp = now();
+      const nextRevision = get().revision + 1;
+      try {
+        await adapter.save(
+          createPersistedEnvelope(
+            parsed.data,
+            contentVersion,
+            nextRevision,
+            timestamp,
+          ),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set({ persistenceStatus: "error", persistenceMessage: message });
+        return { ok: false, code: "save-failed", message };
+      }
+
+      const inspection = inspectLearningStateAgainstCatalog(parsed.data, catalog);
+      set({
+        learningState: parsed.data,
+        persistenceStatus: "ready",
+        persistenceMessage: undefined,
+        rawRecoveryData: undefined,
+        orphanConceptIds: inspection.orphanConceptIds,
+        orphanProjectIds: inspection.orphanProjectIds,
+        orphanStageIds: inspection.orphanStageIds,
+        orphanTrackIds: inspection.orphanTrackIds,
+        revision: nextRevision,
+        savedAt: timestamp,
+      });
+      return { ok: true };
+    }
+
+    async function preserveCurrentData(): Promise<DataManagementActionResult> {
+      const current = get();
+      const timestamp = now();
+      try {
+        const recoveryKey = current.rawRecoveryData
+          ? await adapter.saveRawRecovery(current.rawRecoveryData, timestamp)
+          : await adapter.saveRecovery(
+              createPersistedEnvelope(
+                current.learningState,
+                contentVersion,
+                Math.max(1, current.revision),
+                current.savedAt ?? timestamp,
+              ),
+            );
+        return { ok: true, recoveryKey };
+      } catch (error) {
+        return {
+          ok: false,
+          code: "recovery-failed",
+          message: `未能创建恢复快照，操作已取消：${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
       }
     }
 
@@ -145,6 +262,8 @@ export function createLearningStore({
       hydrated: false,
       persistenceStatus: "pending",
       orphanConceptIds: [],
+      orphanProjectIds: [],
+      orphanStageIds: [],
       orphanTrackIds: [],
       revision: 0,
 
@@ -159,6 +278,8 @@ export function createLearningStore({
             persistenceMessage: loaded.message,
             rawRecoveryData: loaded.raw,
             orphanConceptIds: [],
+            orphanProjectIds: [],
+            orphanStageIds: [],
             orphanTrackIds: [],
             revision: 0,
           });
@@ -173,6 +294,8 @@ export function createLearningStore({
             persistenceMessage: undefined,
             rawRecoveryData: undefined,
             orphanConceptIds: [],
+            orphanProjectIds: [],
+            orphanStageIds: [],
             orphanTrackIds: [],
             revision: 0,
           });
@@ -191,6 +314,8 @@ export function createLearningStore({
             persistenceMessage: `本地学习数据引用校验失败：${inspection.errors.join("；")}`,
             rawRecoveryData: loaded.raw ?? JSON.stringify(loaded.value),
             orphanConceptIds: inspection.orphanConceptIds,
+            orphanProjectIds: inspection.orphanProjectIds,
+            orphanStageIds: inspection.orphanStageIds,
             orphanTrackIds: inspection.orphanTrackIds,
             revision: 0,
           });
@@ -204,8 +329,11 @@ export function createLearningStore({
           persistenceMessage: undefined,
           rawRecoveryData: undefined,
           orphanConceptIds: inspection.orphanConceptIds,
+          orphanProjectIds: inspection.orphanProjectIds,
+          orphanStageIds: inspection.orphanStageIds,
           orphanTrackIds: inspection.orphanTrackIds,
           revision: loaded.value.revision,
+          savedAt: loaded.value.savedAt,
         });
       },
 
@@ -266,6 +394,115 @@ export function createLearningStore({
             now(),
           ),
         );
+      },
+
+      createBackup: (localDate) => {
+        const current = get();
+        try {
+          const exportedAt = now();
+          const backup = createLearningBackup({
+            state: current.learningState,
+            contentVersion,
+            revision: current.revision,
+            savedAt: current.savedAt ?? exportedAt,
+            exportedAt,
+          });
+          return {
+            ok: true,
+            ...backup,
+            filename: getLearningBackupFileName(localDate),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            message: `生成备份失败：${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          };
+        }
+      },
+
+      recordBackupCreated: async (timestamp) => {
+        const current = get().learningState;
+        const nextState = learningStateV1Schema.parse({
+          ...current,
+          preferences: {
+            ...current.preferences,
+            lastBackupAt: timestamp,
+            updatedAt: timestamp,
+          },
+        });
+        return persistAtomically(nextState);
+      },
+
+      prepareImport: (raw, mode) =>
+        prepareLearningStateImport({
+          raw,
+          currentState: get().learningState,
+          catalog,
+          mode,
+        }),
+
+      applyImport: async (prepared, userConfirmed) => {
+        if (!userConfirmed) {
+          return {
+            ok: false,
+            code: "confirmation-required",
+            message: "请先明确确认导入操作。",
+          };
+        }
+
+        const refreshed = prepareLearningStateImport({
+          raw: JSON.stringify(prepared.envelope),
+          currentState: get().learningState,
+          catalog,
+          mode: prepared.preview.mode,
+        });
+        if (!refreshed.ok) {
+          return { ok: false, code: "invalid-import", message: refreshed.message };
+        }
+
+        if (
+          refreshed.value.preview.mode === "replace" ||
+          get().persistenceStatus === "blocked"
+        ) {
+          const recovery = await preserveCurrentData();
+          if (!recovery.ok) return recovery;
+          const saved = await persistAtomically(refreshed.value.nextState);
+          return saved.ok ? { ...saved, recoveryKey: recovery.recoveryKey } : saved;
+        }
+
+        return persistAtomically(refreshed.value.nextState);
+      },
+
+      resetLearningData: async (userConfirmed) => {
+        if (!userConfirmed) {
+          return {
+            ok: false,
+            code: "confirmation-required",
+            message: "请先明确确认清空学习记录。",
+          };
+        }
+
+        const recovery = await preserveCurrentData();
+        if (!recovery.ok) return recovery;
+        const timestamp = now();
+        const current = get().learningState;
+        const nextState = learningStateV1Schema.parse({
+          ...current,
+          preferences: {
+            ...current.preferences,
+            currentConceptId: undefined,
+            primaryProjectId: undefined,
+            updatedAt: timestamp,
+          },
+          conceptProgress: {},
+          projectProgress: {},
+          stageCheckpoints: {},
+          studyLogs: [],
+        });
+        const saved = await persistAtomically(nextState);
+        return saved.ok ? { ...saved, recoveryKey: recovery.recoveryKey } : saved;
       },
     };
   });

@@ -31,7 +31,12 @@ const catalog: ProgressCatalog = {
       publicationStatus: "published",
       dependencies: [],
       masteryCriteria: [
-        { id: "criterion.concept-foundation.explain", required: true },
+        {
+          id: "criterion.concept-foundation.explain",
+          description: "解释基础概念",
+          evidenceHint: "保存书面解释。",
+          required: true,
+        },
       ],
     },
   ],
@@ -156,14 +161,36 @@ describe("Learning OS JSON 备份", () => {
     });
   });
 
-  it("导出 → reset → 导入后可恢复原状态并在刷新后读取", async () => {
+  it("导出 → reset → 导入后可恢复 mastered、Evidence 与确认快照", async () => {
     const storage = new MemoryStorage();
     const source = makeStore(storage);
     await source.getState().hydrate();
     await source.getState().startConcept("concept.foundation");
+    await source.getState().markUnderstood("concept.foundation");
+    await source.getState().addEvidence("concept.foundation", {
+      id: "evidence.concept-foundation.explain",
+      conceptId: "concept.foundation",
+      criterionIds: ["criterion.concept-foundation.explain"],
+      kind: "written-explanation",
+      title: "基础概念解释",
+      note: "保存了逐步解释和一组反例。",
+      result: "passed",
+      completedAt: later,
+      createdAt: later,
+      updatedAt: later,
+    });
+    await source.getState().confirmMastery("concept.foundation", true);
     const backup = source.getState().createBackup("2026-08-28");
     expect(backup.ok).toBe(true);
     if (!backup.ok) return;
+    expect(backup.envelope.payload.conceptProgress["concept.foundation"]).toMatchObject({
+      status: "mastered",
+      evidence: [{ id: "evidence.concept-foundation.explain" }],
+      masteryConfirmation: {
+        criterionIds: ["criterion.concept-foundation.explain"],
+        evidenceIds: ["evidence.concept-foundation.explain"],
+      },
+    });
 
     expect((await source.getState().resetLearningData(true)).ok).toBe(true);
     expect(source.getState().learningState.conceptProgress).toEqual({});
@@ -177,7 +204,13 @@ describe("Learning OS JSON 备份", () => {
     await refreshed.getState().hydrate();
     expect(
       refreshed.getState().learningState.conceptProgress["concept.foundation"],
-    ).toMatchObject({ status: "learning" });
+    ).toMatchObject({
+      status: "mastered",
+      evidence: [{ id: "evidence.concept-foundation.explain" }],
+      masteryConfirmation: {
+        evidenceIds: ["evidence.concept-foundation.explain"],
+      },
+    });
   });
 
   it.each([

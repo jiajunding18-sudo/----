@@ -22,6 +22,8 @@ export interface ProgressConceptDefinition {
   }[];
   readonly masteryCriteria: readonly {
     readonly id: string;
+    readonly description: string;
+    readonly evidenceHint: string;
     readonly required: boolean;
   }[];
 }

@@ -27,7 +27,12 @@ const catalog: ProgressCatalog = {
       publicationStatus: "published",
       dependencies: [],
       masteryCriteria: [
-        { id: "criterion.concept-foundation.explain", required: true },
+        {
+          id: "criterion.concept-foundation.explain",
+          description: "解释基础概念",
+          evidenceHint: "保存书面解释。",
+          required: true,
+        },
       ],
     },
   ],

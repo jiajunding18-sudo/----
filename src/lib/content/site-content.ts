@@ -163,8 +163,10 @@ export function getProgressCatalog(): ProgressCatalog {
         conceptId,
         kind,
       })),
-      masteryCriteria: concept.masteryCriteria.map(({ id, required }) => ({
+      masteryCriteria: concept.masteryCriteria.map(({ id, description, evidenceHint, required }) => ({
         id,
+        description,
+        evidenceHint,
         required,
       })),
     })),
@@ -180,6 +182,10 @@ export function getProgressCatalog(): ProgressCatalog {
           : undefined,
     })),
   };
+}
+
+export function getProgressConceptDefinition(conceptId: string) {
+  return getProgressCatalog().concepts.find(({ id }) => id === conceptId);
 }
 
 export function getCurrentContentVersion() {

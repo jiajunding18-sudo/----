@@ -10,6 +10,7 @@ import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content"
 import {
   getPublishedConceptBySlug,
   getPublishedConceptSlugs,
+  getProgressConceptDefinition,
   getResources,
   loadConceptContent,
 } from "@/lib/content/site-content";
@@ -50,6 +51,10 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
     notFound();
   }
   const resources = getResources(concept.resourceIds);
+  const progressConcept = getProgressConceptDefinition(concept.id);
+  if (!progressConcept) {
+    notFound();
+  }
   const ConceptContent = contentModule.default;
 
   return (
@@ -69,13 +74,15 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
           />
           <ConceptNavigation concept={knowledgeConcept} />
           <ConceptProgressPanel
-            conceptId={concept.id}
-            hardPrerequisites={knowledgeConcept.prerequisites
-              .filter(({ kind }) => kind === "hard")
-              .map(({ concept: prerequisite }) => ({
+            concept={progressConcept}
+            prerequisites={knowledgeConcept.prerequisites.map(
+              ({ concept: prerequisite, kind }) => ({
                 id: prerequisite.id,
                 title: prerequisite.title,
-              }))}
+                href: prerequisite.href,
+                kind,
+              }),
+            )}
           />
           <ConceptTableOfContents headings={concept.headings} variant="mobile" />
           <div className="learning-document">

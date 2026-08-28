@@ -29,8 +29,18 @@ function concept(
     publicationStatus: "published",
     dependencies,
     masteryCriteria: [
-      { id: `criterion.${id}.explain`, required: true },
-      { id: `criterion.${id}.apply`, required: true },
+      {
+        id: `criterion.${id}.explain`,
+        description: "能够解释核心概念",
+        evidenceHint: "保存一份可检查的解释。",
+        required: true,
+      },
+      {
+        id: `criterion.${id}.apply`,
+        description: "能够完成代表性练习",
+        evidenceHint: "保存输入、输出与核对过程。",
+        required: true,
+      },
     ],
   };
 }

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ConceptStatusLabel } from "@/features/progress/concept-status-label";
+
 import type {
   KnowledgeConceptRelation,
   KnowledgeConceptView,
@@ -95,9 +97,12 @@ function KnowledgeConceptList({
                     {item.concept.englishTitle}
                   </p>
                 </div>
-                <span className="w-fit rounded-full bg-[var(--color-accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-accent)]">
-                  available · 正式内容
-                </span>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <ConceptStatusLabel conceptId={item.concept.id} />
+                  <span className="w-fit rounded-full bg-[var(--color-accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-accent)]">
+                    available · 正式内容
+                  </span>
+                </div>
               </div>
 
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--color-muted)]">

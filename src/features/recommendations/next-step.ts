@@ -5,6 +5,10 @@ import {
   hasReachedRequiredStatus,
   type RequiredConceptStatus,
 } from "@/features/progress/progress-domain";
+import {
+  getStageReadiness,
+  type StageReadiness,
+} from "@/features/progress/stage-readiness";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type {
   ConceptMeta,
@@ -72,6 +76,8 @@ interface RecommendationContext {
   readonly state: LearningStateV1;
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
   readonly conceptsById: ReadonlyMap<string, DeepReadonly<ConceptMeta>>;
+  readonly stagesById: ReadonlyMap<string, DeepReadonly<StageDefinition>>;
+  readonly stageReadiness: Map<string, StageReadiness>;
   readonly compareConcepts: (
     left: DeepReadonly<ConceptMeta>,
     right: DeepReadonly<ConceptMeta>,
@@ -130,8 +136,32 @@ function createContext(
     state,
     concepts,
     conceptsById: new Map(concepts.map((concept) => [concept.id, concept])),
+    stagesById: new Map(catalog.stages.map((stage) => [stage.id, stage])),
+    stageReadiness: new Map(),
     compareConcepts,
   };
+}
+
+function isConceptStageEntryReady(
+  context: RecommendationContext,
+  concept: DeepReadonly<ConceptMeta>,
+) {
+  const stage = context.stagesById.get(concept.stageId);
+  if (!stage) return false;
+
+  let readiness = context.stageReadiness.get(stage.id);
+  if (!readiness) {
+    readiness = getStageReadiness(
+      stage,
+      context.catalog.stages,
+      context.catalog.concepts,
+      context.catalog.projects,
+      context.catalog.tracks,
+      context.state,
+    );
+    context.stageReadiness.set(stage.id, readiness);
+  }
+  return readiness.entryReady;
 }
 
 function getUnmetRecommendedDependencies(
@@ -217,6 +247,7 @@ function findFirstExecutableHardPrerequisite(
       prerequisite.id,
     );
     if (hasReachedRequiredStatus(status, "understood")) continue;
+    if (!isConceptStageEntryReady(context, prerequisite)) continue;
 
     const readiness = getConceptReadiness(
       prerequisite,
@@ -263,6 +294,7 @@ function getContinueLearningStep(
   );
 
   for (const concept of learningConcepts) {
+    if (!isConceptStageEntryReady(context, concept)) continue;
     const readiness = getConceptReadiness(
       concept,
       context.state.conceptProgress,
@@ -368,6 +400,7 @@ function getProjectGapStep(
     );
 
   for (const { concept, requirement } of unmetRequirements) {
+    if (!isConceptStageEntryReady(context, concept)) continue;
     const readiness = getConceptReadiness(
       concept,
       context.state.conceptProgress,
@@ -403,6 +436,7 @@ function getNextUnlockedConceptStep(
       candidate.requiredness === "required" &&
       getConceptStatus(context.state.conceptProgress, candidate.id) ===
         "not_started" &&
+      isConceptStageEntryReady(context, candidate) &&
       getConceptReadiness(
         candidate,
         context.state.conceptProgress,

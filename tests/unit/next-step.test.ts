@@ -30,6 +30,7 @@ function stage(
   id = "stage.available",
   order = 0,
   contentStatus: StageDefinition["contentStatus"] = "available",
+  entryGate?: StageDefinition["entryGate"],
 ): StageDefinition {
   return {
     id,
@@ -43,6 +44,7 @@ function stage(
     outcomes: ["完成测试路线"],
     estimatedHours: { min: 1, max: 2 },
     projectGates: [],
+    entryGate,
     exitCriteria: [
       {
         id: `stage-criterion.${id}.complete`,
@@ -474,6 +476,109 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
         state: personalState,
       }),
     ).toEqual(baseline);
+  });
+
+  it("Stage entryGate 未满足时不推荐其 Concept，满足后即可推荐", () => {
+    const sourceStage = stage("stage.source", 0);
+    const gatedStage = stage("stage.gated", 10, "available", {
+      kind: "checkpoint",
+      stageId: sourceStage.id,
+    });
+    const source = concept("concept.source", {
+      stageId: sourceStage.id,
+      targetDepth: "understand",
+    });
+    const gated = concept("concept.gated", { stageId: gatedStage.id });
+    const sourceUnderstood = state({
+      [source.id]: conceptProgress("understood", source.id),
+    });
+
+    expect(
+      getNextStep({
+        catalog: catalog([source, gated], [], [sourceStage, gatedStage]),
+        state: sourceUnderstood,
+      }),
+    ).toMatchObject({ kind: "empty", reasonCode: "no-actionable-concept" });
+
+    const gateSatisfied: LearningStateV1 = {
+      ...sourceUnderstood,
+      stageCheckpoints: {
+        [sourceStage.id]: {
+          criterionEvidence: {
+            [`stage-criterion.${sourceStage.id}.complete`]: [
+              "evidence.stage-source.complete",
+            ],
+          },
+          updatedAt: timestamp,
+        },
+      },
+    };
+    expect(
+      getNextStep({
+        catalog: catalog([source, gated], [], [sourceStage, gatedStage]),
+        state: gateSatisfied,
+      }),
+    ).toMatchObject({
+      kind: "recommendation",
+      targetId: gated.id,
+      reasonCode: "next-unlocked",
+    });
+  });
+
+  it("Project gap 不跨越未满足的 Stage entryGate", () => {
+    const sourceStage = stage("stage.source", 0);
+    const gatedStage = stage("stage.gated", 10, "available", {
+      kind: "checkpoint",
+      stageId: sourceStage.id,
+    });
+    const source = concept("concept.source", {
+      stageId: sourceStage.id,
+      targetDepth: "understand",
+    });
+    const gated = concept("concept.gated", { stageId: gatedStage.id });
+    const currentProject = project("published", [hardRequirement(gated.id)]);
+    const result = getNextStep({
+      catalog: catalog(
+        [source, gated],
+        [currentProject],
+        [sourceStage, gatedStage],
+      ),
+      state: state({
+        [source.id]: conceptProgress("understood", source.id),
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "empty",
+      reasonCode: "no-actionable-concept",
+    });
+    expect(result).not.toMatchObject({ targetId: gated.id });
+  });
+
+  it("后续 gate 变化时不继续推荐已处于 learning 的非法 Stage Concept", () => {
+    const sourceStage = stage("stage.source", 0);
+    const gatedStage = stage("stage.gated", 10, "available", {
+      kind: "checkpoint",
+      stageId: sourceStage.id,
+    });
+    const source = concept("concept.source", {
+      stageId: sourceStage.id,
+      targetDepth: "understand",
+    });
+    const gated = concept("concept.gated", { stageId: gatedStage.id });
+    const result = getNextStep({
+      catalog: catalog([source, gated], [], [sourceStage, gatedStage]),
+      state: state({
+        [gated.id]: conceptProgress("learning", gated.id),
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "recommendation",
+      targetId: source.id,
+      reasonCode: "next-unlocked",
+    });
+    expect(result).not.toMatchObject({ targetId: gated.id });
   });
 
   it("全部 published Concept 达到路线目标且无 Project gap 时返回明确 empty state", () => {

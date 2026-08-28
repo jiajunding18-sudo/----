@@ -3,7 +3,9 @@ import Link from "next/link";
 
 import { ContentState } from "@/components/content/content-state";
 import { PageHeader } from "@/components/shell/page-header";
-import { StageProgressSummary } from "@/features/progress/stage-progress-summary";
+import { readKnowledgeView } from "@/features/knowledge/knowledge-content";
+import { ProgressOverview } from "@/features/progress/progress-overview";
+import { buildProgressOverviewView } from "@/features/progress/progress-overview-model";
 import {
   getProgressCatalog,
   readStageZeroSlice,
@@ -15,8 +17,12 @@ export const metadata: Metadata = {
 
 export default function DashboardPage() {
   const content = readStageZeroSlice();
-  if (content.status === "error") {
-    console.error("Dashboard 读取内容失败", content.error);
+  const knowledge = readKnowledgeView();
+  if (content.status === "error" || knowledge.status === "error") {
+    console.error(
+      "Dashboard 读取内容失败",
+      content.status === "error" ? content.error : knowledge.error,
+    );
     return (
       <div className="max-w-3xl">
         <PageHeader description="查看当前已发布的学习路线。" title="Dashboard" />
@@ -30,6 +36,7 @@ export default function DashboardPage() {
 
   const { concepts, project, stage } = content.value;
   const progressCatalog = getProgressCatalog();
+  const progressOverview = buildProgressOverviewView(knowledge.value);
 
   return (
     <div className="max-w-5xl">
@@ -38,10 +45,7 @@ export default function DashboardPage() {
           title="Dashboard"
         />
 
-        <StageProgressSummary
-          concepts={progressCatalog.concepts}
-          stageId={stage.id}
-        />
+        <ProgressOverview catalog={progressCatalog} overview={progressOverview} />
 
         <section aria-labelledby="current-route-title" className="mt-10">
           <p className="text-xs font-semibold tracking-[0.14em] text-[var(--color-accent)] uppercase">

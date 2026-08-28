@@ -750,6 +750,9 @@ interface ProgressSummary {
     | { kind: "stage-category"; categoryOrder: StageCategoryOrder }
     | { kind: "track"; trackId: TrackId };
   total: number;
+  notStarted: number;
+  learning: number;
+  understoodOnly: number;
   started: number;
   understood: number;
   mastered: number;
@@ -817,7 +820,7 @@ type RecommendationResult =
   | { kind: "route-complete"; primary?: RecommendationTask };
 ```
 
-`summarizeProgress` 先按 scope 筛选 `published + required` 概念并按稳定 ID 去重；`total === 0` 时三个 ratio 都返回 `null`，UI 显示“暂无必修内容”，不得伪装成 0% 或 100%。
+`summarizeProgress` 先按 scope 筛选 `published + required` 概念并按稳定 ID 去重；`notStarted`、`learning`、`understoodOnly`、`mastered` 是四种互斥状态计数，`started`、`understood`、`mastered` 分别表达累计接触、理解与掌握。`total === 0` 时三个 ratio 都返回 `null`，UI 显示“暂无必修内容”，不得伪装成 0% 或 100%。
 
 推荐服务必须按 `PRODUCT_SPEC.md` 的确定顺序解析 `activeStageId`，并输出一个主任务和最多三个备选。每个概念候选先按推荐上下文计算 `requiredStatus`：普通路线使用 `getRouteRequiredStatus(concept, tracks, preferences)`，主项目缺口再以 `minimumStatus` 提高门槛；达到该门槛的候选必须排除。候选所属 Stage 的 `entryGate` 必须先满足；未满足时沿 gate 返回第一个未通过 checkpoint 的可执行知识或项目，不能把 Stage 11 内容提前推荐。排序严格遵循：当前焦点且状态为 `learning` → 其他学习中节点 → 主项目的必需知识或首个可执行前置 → 当前阶段必修 → 当前重点方向必修 → 选修；同层再按 recommended 缺口、可用时间、路线优先级、`hard` 子图拓扑顺序和稳定 ID 排序。recommended 缺口只能成为提示或备选补充任务，不能抢占已就绪主任务。没有显式主项目时按 `updatedAt` 降序选择进行中项目，并以稳定 `Project.id` 字典序打破同时间戳平局。没有普通候选时依次处理数据/门槛错误、未满足的阶段入口、阶段项目、下一阶段、综合项目/周回顾和选修内容。v1 不使用 AI、随机数或黑盒评分。
 

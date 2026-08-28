@@ -9,7 +9,7 @@ import {
 } from "@/lib/content/site-content";
 
 describe("DashboardPage", () => {
-  it("展示真实 Stage 0 静态结构与分离的三类本地进度", async () => {
+  it("展示正式 Progress 总览、继续学习空状态与分离的三类 Stage 进度", async () => {
     render(
       <LearningStoreProvider
         catalog={getProgressCatalog()}
@@ -25,7 +25,15 @@ describe("DashboardPage", () => {
         name: "Dashboard",
       }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Stage 0 本地进度")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "当前没有正在学习的知识点。这里不会自动指定下一项。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "学习进度总览" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Stage 学习情况" }))
+      .toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "浏览 8 个 Concept" }),
     ).toBeInTheDocument();
@@ -34,6 +42,7 @@ describe("DashboardPage", () => {
     expect(
       screen.queryByRole("heading", { name: /今日推荐/ }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "学习中" })).toBeInTheDocument();
+    expect(screen.queryByText(/总进度/)).not.toBeInTheDocument();
   });
 });

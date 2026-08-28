@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ContentState } from "@/components/content/content-state";
+import { ConceptStatusLabel } from "@/features/progress/concept-status-label";
 
 import type { RoadmapStageView, RoadmapView } from "./roadmap-model";
 import { RoadmapOverview } from "./roadmap-overview";
@@ -80,9 +81,12 @@ function ConceptRoute({ stage }: { readonly stage: RoadmapStageView }) {
                         {concept.englishTitle}
                       </p>
                     </div>
-                    <span className="inline-flex shrink-0 rounded-full bg-[var(--color-accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-accent)]">
-                      {depth.code} · {depth.label}
-                    </span>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                      <ConceptStatusLabel conceptId={concept.id} />
+                      <span className="inline-flex rounded-full bg-[var(--color-accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-accent)]">
+                        {depth.code} · {depth.label}
+                      </span>
+                    </div>
                   </div>
 
                   <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--color-muted)]">

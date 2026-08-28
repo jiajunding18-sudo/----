@@ -153,23 +153,33 @@ export function getPublishedProjectSlugs() {
 
 export function getProgressCatalog(): ProgressCatalog {
   return {
-    concepts: contentManifest.concepts.map((concept) => ({
-      id: concept.id,
-      stageId: concept.stageId,
-      trackIds: concept.trackIds,
-      requiredness: concept.requiredness,
-      publicationStatus: concept.publicationStatus,
-      dependencies: concept.dependencies.map(({ conceptId, kind }) => ({
-        conceptId,
-        kind,
-      })),
-      masteryCriteria: concept.masteryCriteria.map(({ id, description, evidenceHint, required }) => ({
-        id,
-        description,
-        evidenceHint,
-        required,
-      })),
-    })),
+    concepts: contentManifest.concepts.map((concept) => {
+      const stage = contentManifest.stages.find(({ id }) => id === concept.stageId);
+      if (!stage) {
+        throw new SiteContentError(
+          `Concept ${concept.id} 引用了不存在的 Stage ${concept.stageId}`,
+        );
+      }
+
+      return {
+        id: concept.id,
+        stageId: concept.stageId,
+        stageCategoryOrder: stage.categoryOrder,
+        trackIds: concept.trackIds,
+        requiredness: concept.requiredness,
+        publicationStatus: concept.publicationStatus,
+        dependencies: concept.dependencies.map(({ conceptId, kind }) => ({
+          conceptId,
+          kind,
+        })),
+        masteryCriteria: concept.masteryCriteria.map(({ id, description, evidenceHint, required }) => ({
+          id,
+          description,
+          evidenceHint,
+          required,
+        })),
+      };
+    }),
     projectIds: contentManifest.projects.map(({ id }) => id),
     stageIds: contentManifest.stages.map(({ id }) => id),
     tracks: contentManifest.tracks.map((track) => ({

@@ -7,7 +7,9 @@ import {
   getConceptReadiness,
   getConceptStatus,
   markConceptUnderstood,
+  selectConceptIdsByStatus,
   startConcept,
+  summarizeProgress,
   summarizeStageProgress,
   type ProgressConceptDefinition,
 } from "@/features/progress/progress-domain";
@@ -24,6 +26,7 @@ function concept(
   return {
     id,
     stageId: "stage.test",
+    stageCategoryOrder: 0,
     trackIds: ["track.common"],
     requiredness: "required",
     publicationStatus: "published",
@@ -277,7 +280,11 @@ describe("Stage 三类派生进度", () => {
     };
 
     expect(summarizeStageProgress(concepts, progress, "stage.test")).toEqual({
+      scope: { kind: "stage", stageId: "stage.test" },
       total: 3,
+      notStarted: 0,
+      learning: 1,
+      understoodOnly: 1,
       started: 3,
       understood: 2,
       mastered: 1,
@@ -285,5 +292,112 @@ describe("Stage 三类派生进度", () => {
       understandingRatio: 2 / 3,
       masteryRatio: 1 / 3,
     });
+  });
+
+  it("分别保留四种精确状态，并按稳定 ID 去重", () => {
+    const concepts = [
+      foundation,
+      foundation,
+      hardDependent,
+      recommendedDependent,
+      concept("concept.not-started"),
+    ];
+    const learning = requireProgress(startConcept(undefined, firstTimestamp));
+    const understood = understoodProgress(recommendedDependent);
+    const mastered = {
+      ...understoodProgress(),
+      status: "mastered",
+    } as ConceptProgress;
+
+    expect(
+      summarizeProgress(
+        concepts,
+        {
+          [foundation.id]: learning,
+          [recommendedDependent.id]: understood,
+          [hardDependent.id]: mastered,
+        },
+        { kind: "route" },
+      ),
+    ).toMatchObject({
+      scope: { kind: "route" },
+      total: 4,
+      notStarted: 1,
+      learning: 1,
+      understoodOnly: 1,
+      mastered: 1,
+      started: 3,
+      understood: 2,
+    });
+  });
+
+  it("没有正式必修 Concept 时返回 null 比率，不制造 0% 或 100%", () => {
+    expect(
+      summarizeStageProgress([foundation], {}, "stage.planned"),
+    ).toEqual({
+      scope: { kind: "stage", stageId: "stage.planned" },
+      total: 0,
+      notStarted: 0,
+      learning: 0,
+      understoodOnly: 0,
+      started: 0,
+      understood: 0,
+      mastered: 0,
+      coverageRatio: null,
+      understandingRatio: null,
+      masteryRatio: null,
+    });
+  });
+
+  it("通用 selector 支持 Stage category 与 Track scope", () => {
+    const otherCategory = {
+      ...concept("concept.other-category"),
+      stageCategoryOrder: 1,
+      trackIds: ["track.other"],
+    };
+    const concepts = [foundation, hardDependent, otherCategory];
+
+    expect(
+      summarizeProgress(concepts, {}, {
+        kind: "stage-category",
+        categoryOrder: 0,
+      }).total,
+    ).toBe(2);
+    expect(
+      summarizeProgress(concepts, {}, {
+        kind: "track",
+        trackId: "track.other",
+      }).total,
+    ).toBe(1);
+  });
+
+  it("按精确状态筛选正式 Concept ID，并保持输入顺序与去重", () => {
+    const learning = requireProgress(startConcept(undefined, firstTimestamp));
+    const understood = understoodProgress(recommendedDependent);
+    const ids = [
+      foundation.id,
+      recommendedDependent.id,
+      "concept.added-later",
+      foundation.id,
+    ];
+    const progress = {
+      [foundation.id]: learning,
+      [recommendedDependent.id]: understood,
+    };
+
+    expect(selectConceptIdsByStatus(ids, progress, "all")).toEqual([
+      foundation.id,
+      recommendedDependent.id,
+      "concept.added-later",
+    ]);
+    expect(selectConceptIdsByStatus(ids, progress, "learning")).toEqual([
+      foundation.id,
+    ]);
+    expect(selectConceptIdsByStatus(ids, progress, "understood")).toEqual([
+      recommendedDependent.id,
+    ]);
+    expect(selectConceptIdsByStatus(ids, progress, "not_started")).toEqual([
+      "concept.added-later",
+    ]);
   });
 });

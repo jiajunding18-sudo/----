@@ -13,6 +13,7 @@ import type {
 export interface ProgressConceptDefinition {
   readonly id: string;
   readonly stageId: string;
+  readonly stageCategoryOrder: number;
   readonly trackIds: readonly string[];
   readonly requiredness: "required" | "optional";
   readonly publicationStatus: "draft" | "published" | "hidden" | "retired";
@@ -336,7 +337,11 @@ export function downgradeConcept(
 }
 
 export interface ProgressSummary {
+  readonly scope: ProgressSummaryScope;
   readonly total: number;
+  readonly notStarted: number;
+  readonly learning: number;
+  readonly understoodOnly: number;
   readonly started: number;
   readonly understood: number;
   readonly mastered: number;
@@ -345,25 +350,67 @@ export interface ProgressSummary {
   readonly masteryRatio: number | null;
 }
 
-export function summarizeStageProgress(
+export type ProgressStatusFilter = LearningStatus | "all";
+
+export type ProgressSummaryScope =
+  | { readonly kind: "route" }
+  | { readonly kind: "stage"; readonly stageId: string }
+  | { readonly kind: "stage-category"; readonly categoryOrder: number }
+  | { readonly kind: "track"; readonly trackId: string };
+
+export function selectConceptIdsByStatus(
+  conceptIds: readonly string[],
+  progress: Readonly<Record<string, ConceptProgress>>,
+  status: ProgressStatusFilter,
+): string[] {
+  const seen = new Set<string>();
+
+  return conceptIds.filter((conceptId) => {
+    if (seen.has(conceptId)) return false;
+    seen.add(conceptId);
+    return status === "all" || getConceptStatus(progress, conceptId) === status;
+  });
+}
+
+export function summarizeProgress(
   concepts: readonly ProgressConceptDefinition[],
   progress: Readonly<Record<string, ConceptProgress>>,
-  stageId: string,
+  scope: ProgressSummaryScope,
 ): ProgressSummary {
-  const scoped = concepts.filter(
-    (concept) =>
-      concept.stageId === stageId &&
-      concept.publicationStatus === "published" &&
-      concept.requiredness === "required",
-  );
+  const seen = new Set<string>();
+  const scoped = concepts.filter((concept) => {
+    const inScope =
+      scope.kind === "route" ||
+      (scope.kind === "stage" && concept.stageId === scope.stageId) ||
+      (scope.kind === "stage-category" &&
+        concept.stageCategoryOrder === scope.categoryOrder) ||
+      (scope.kind === "track" && concept.trackIds.includes(scope.trackId));
+    if (
+      concept.publicationStatus !== "published" ||
+      concept.requiredness !== "required" ||
+      !inScope ||
+      seen.has(concept.id)
+    ) {
+      return false;
+    }
+    seen.add(concept.id);
+    return true;
+  });
   const statuses = scoped.map(({ id }) => getConceptStatus(progress, id));
   const total = statuses.length;
-  const started = statuses.filter((status) => status !== "not_started").length;
-  const understood = statuses.filter(satisfiesHardPrerequisite).length;
+  const notStarted = statuses.filter((status) => status === "not_started").length;
+  const learning = statuses.filter((status) => status === "learning").length;
+  const understoodOnly = statuses.filter((status) => status === "understood").length;
   const mastered = statuses.filter((status) => status === "mastered").length;
+  const started = learning + understoodOnly + mastered;
+  const understood = understoodOnly + mastered;
 
   return {
+    scope,
     total,
+    notStarted,
+    learning,
+    understoodOnly,
     started,
     understood,
     mastered,
@@ -371,6 +418,14 @@ export function summarizeStageProgress(
     understandingRatio: total === 0 ? null : understood / total,
     masteryRatio: total === 0 ? null : mastered / total,
   };
+}
+
+export function summarizeStageProgress(
+  concepts: readonly ProgressConceptDefinition[],
+  progress: Readonly<Record<string, ConceptProgress>>,
+  stageId: string,
+): ProgressSummary {
+  return summarizeProgress(concepts, progress, { kind: "stage", stageId });
 }
 
 export interface LearningStateCatalogInspection {

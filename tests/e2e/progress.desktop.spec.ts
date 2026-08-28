@@ -177,6 +177,141 @@ test("完整 mastered 状态与 Evidence 可经 Export → Reset → Import 恢�
   await expect(progress.locator("[data-saved-evidence]")).toContainText(
     "Python 数据处理与控制流证据",
   );
+  await page.goto("/");
+  await expect(page.locator('[data-overview-status-count="mastered"]')).toHaveText("1");
+  await expect(page.locator('[data-stage-metric="started"]')).toHaveText("1 / 8");
+  await expect(page.locator('[data-stage-metric="understood"]')).toHaveText("1 / 8");
+  await expect(page.locator('[data-stage-metric="mastered"]')).toHaveText("1 / 8");
+  await page.locator('[data-progress-filter="mastered"]').click();
+  await expect(page.locator("[data-progress-concept-results]")).toContainText(
+    "Python 核心语法",
+  );
+  expect(browserErrors).toEqual([]);
+});
+
+test("新用户看到正式总览、planned Stage 和非推荐式空状态", async ({ page }) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/");
+  const overview = page.locator("[data-progress-overview]");
+
+  await expect(overview.locator('[data-overview-status-count="not_started"]')).toHaveText("8");
+  await expect(overview.locator('[data-overview-status-count="learning"]')).toHaveText("0");
+  await expect(overview.locator('[data-overview-status-count="understood"]')).toHaveText("0");
+  await expect(overview.locator('[data-overview-status-count="mastered"]')).toHaveText("0");
+  await expect(overview.locator("[data-no-continuing-concepts]")).toContainText(
+    "当前没有正在学习的知识点",
+  );
+  await expect(overview.getByRole("link", { name: "浏览 Roadmap" })).toBeVisible();
+  await expect(overview.getByRole("link", { name: "浏览 Knowledge" })).toBeVisible();
+
+  const stage = overview.locator('[data-stage-progress="stage.tooling-foundations"]');
+  await expect(stage.locator('[data-stage-status="not_started"]')).toHaveText("8");
+  await expect(stage.locator('[data-stage-metric="started"]')).toHaveText("0 / 8");
+  await expect(stage.locator('[data-stage-metric="understood"]')).toHaveText("0 / 8");
+  await expect(stage.locator('[data-stage-metric="mastered"]')).toHaveText("0 / 8");
+  await expect(stage).not.toContainText("%");
+  await expect(overview.locator("[data-planned-stages]")).toContainText(
+    "已规划 · 正式学习内容尚未展开",
+  );
+
+  const learningFilter = overview.locator('[data-progress-filter="learning"]');
+  await learningFilter.focus();
+  await page.keyboard.press("Enter");
+  await expect(learningFilter).toHaveAttribute("aria-pressed", "true");
+  await expect(overview.locator("[data-progress-filter-empty]")).toContainText(
+    "当前没有处于“学习中”状态",
+  );
+  await expect(page.getByText(/今日任务|建议你接下来学习/)).toHaveCount(0);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test("Dashboard、Knowledge 与 Roadmap 使用同一状态并在刷新后保持", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+
+  await page.goto("/knowledge/computer-files-and-terminal/");
+  let progress = page.locator("[data-concept-progress]");
+  await progress.getByRole("button", { name: "开始学习" }).click();
+  await progress.getByRole("button", { name: "确认已理解" }).click();
+  await saveEvidenceForEveryCriterion(page);
+  await progress
+    .getByRole("checkbox", { name: /主动确认自己能够独立达到全部必需掌握标准/ })
+    .check();
+  await progress.getByRole("button", { name: "确认已掌握" }).click();
+
+  await page.goto("/knowledge/python-core/");
+  progress = page.locator("[data-concept-progress]");
+  await progress.getByRole("button", { name: "开始学习" }).click();
+  await progress.getByRole("button", { name: "确认已理解" }).click();
+
+  await page.goto("/knowledge/development-environment/");
+  progress = page.locator("[data-concept-progress]");
+  await progress.getByRole("button", { name: "开始学习" }).click();
+
+  await page.goto("/");
+  const overview = page.locator("[data-progress-overview]");
+  await expect(overview.locator('[data-overview-status-count="not_started"]')).toHaveText("5");
+  await expect(overview.locator('[data-overview-status-count="learning"]')).toHaveText("1");
+  await expect(overview.locator('[data-overview-status-count="understood"]')).toHaveText("1");
+  await expect(overview.locator('[data-overview-status-count="mastered"]')).toHaveText("1");
+  await expect(overview.locator("[data-continue-learning-list]")).toContainText(
+    "开发环境与依赖管理",
+  );
+  const stage = overview.locator('[data-stage-progress="stage.tooling-foundations"]');
+  await expect(stage.locator('[data-stage-metric="started"]')).toHaveText("3 / 8");
+  await expect(stage.locator('[data-stage-metric="understood"]')).toHaveText("2 / 8");
+  await expect(stage.locator('[data-stage-metric="mastered"]')).toHaveText("1 / 8");
+
+  await overview.locator('[data-progress-filter="understood"]').click();
+  await expect(overview.locator("[data-progress-concept-results]")).toContainText(
+    "Python 核心语法",
+  );
+  await expect(overview.locator("[data-progress-concept-results]")).not.toContainText(
+    "计算机、文件与终端",
+  );
+  await overview.locator('[data-progress-filter="mastered"]').click();
+  await expect(overview.locator("[data-progress-concept-results]")).toContainText(
+    "计算机、文件与终端",
+  );
+
+  await page.reload();
+  await expect(page.locator('[data-overview-status-count="learning"]')).toHaveText("1");
+  await expect(page.locator('[data-stage-metric="understood"]')).toHaveText("2 / 8");
+
+  await page.goto("/knowledge/");
+  const knowledgeLearning = page.locator('[data-knowledge-status-filter="learning"]');
+  await expect(knowledgeLearning).toBeEnabled();
+  await knowledgeLearning.click();
+  await expect(page.locator("[data-knowledge-results]")).toContainText(
+    "开发环境与依赖管理",
+  );
+  await expect(page.locator("[data-knowledge-concept-id]")).toHaveCount(1);
+  await expect(
+    page.locator('[data-knowledge-concept-id="tooling.python-core"]'),
+  ).toHaveCount(0);
+  await page.locator('[data-knowledge-status-filter="mastered"]').click();
+  await expect(
+    page.locator('[data-knowledge-concept-id="tooling.computer-files"]'),
+  ).toBeVisible();
+  await expect(page.locator("[data-knowledge-concept-id]")).toHaveCount(1);
+
+  await page.goto("/roadmap/");
+  await expect(
+    page.locator('[data-concept-id="tooling.computer-files"] [data-concept-status="mastered"]'),
+  ).toHaveText("已掌握");
+  await expect(
+    page.locator('[data-concept-id="tooling.python-core"] [data-concept-status="understood"]'),
+  ).toHaveText("已理解");
+  await expect(
+    page.locator('[data-concept-id="tooling.dev-environment"] [data-concept-status="learning"]'),
+  ).toHaveText("学习中");
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
   expect(browserErrors).toEqual([]);
 });
 

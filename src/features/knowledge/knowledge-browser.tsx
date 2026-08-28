@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { ConceptStatusLabel } from "@/features/progress/concept-status-label";
+import { useLearningStore } from "@/features/progress/learning-store-provider";
+import {
+  selectConceptIdsByStatus,
+  type ProgressStatusFilter,
+} from "@/features/progress/progress-domain";
 
 import type {
   KnowledgeConceptRelation,
@@ -16,6 +21,17 @@ const depthLabels = {
   understand: "理解即可",
   advanced: "后期深入",
 } as const;
+
+const statusFilters: readonly {
+  readonly value: ProgressStatusFilter;
+  readonly label: string;
+}[] = [
+  { value: "all", label: "全部状态" },
+  { value: "not_started", label: "未开始" },
+  { value: "learning", label: "学习中" },
+  { value: "understood", label: "已理解" },
+  { value: "mastered", label: "已掌握" },
+];
 
 function PrerequisiteSummary({
   prerequisites,
@@ -147,18 +163,33 @@ function KnowledgeConceptList({
 export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeView }) {
   const [stageId, setStageId] = useState("all");
   const [trackId, setTrackId] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<ProgressStatusFilter>("all");
+  const hydrated = useLearningStore(({ hydrated }) => hydrated);
+  const progress = useLearningStore(
+    ({ learningState }) => learningState.conceptProgress,
+  );
   const selectedStage = knowledge.stages.find(({ id }) => id === stageId);
   const selectedTrack = knowledge.tracks.find(({ id }) => id === trackId);
-  const visibleConcepts = knowledge.concepts.filter(
-    ({ stage, tracks }) =>
-      (stageId === "all" || stage.id === stageId) &&
-      (trackId === "all" || tracks.some(({ id }) => id === trackId)),
+  const statusConceptIds = new Set(
+    selectConceptIdsByStatus(
+      knowledge.concepts.map(({ concept }) => concept.id),
+      progress,
+      statusFilter,
+    ),
   );
-  const isAll = stageId === "all" && trackId === "all";
+  const visibleConcepts = knowledge.concepts.filter(
+    ({ concept, stage, tracks }) =>
+      (stageId === "all" || stage.id === stageId) &&
+      (trackId === "all" || tracks.some(({ id }) => id === trackId)) &&
+      statusConceptIds.has(concept.id),
+  );
+  const isAll =
+    stageId === "all" && trackId === "all" && statusFilter === "all";
 
   function resetFilters() {
     setStageId("all");
     setTrackId("all");
+    setStatusFilter("all");
   }
 
   return (
@@ -229,6 +260,34 @@ export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeV
             </select>
           </label>
         </div>
+
+        <fieldset className="mt-5">
+          <legend className="text-sm font-semibold">按学习状态浏览</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {statusFilters.map((filter) => (
+              <button
+                aria-pressed={statusFilter === filter.value}
+                className={`min-h-10 rounded-md border px-4 text-sm font-semibold ${
+                  statusFilter === filter.value
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:border-[var(--color-accent)]"
+                }`}
+                data-knowledge-status-filter={filter.value}
+                disabled={!hydrated}
+                key={filter.value}
+                onClick={() => setStatusFilter(filter.value)}
+                type="button"
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          {!hydrated ? (
+            <p className="mt-2 text-xs text-[var(--color-muted)]" role="status">
+              正在恢复本地学习状态…
+            </p>
+          ) : null}
+        </fieldset>
       </nav>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -258,7 +317,9 @@ export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeV
               ? `「${selectedStage.title}」路线已规划，但正式学习内容尚未展开。`
               : selectedTrack?.publishedConceptCount === 0
                 ? `「${selectedTrack.title}」路线已规划，但目前没有已发布 Concept。`
-                : "当前 Stage 与 Track 组合没有共同的已发布 Concept；调整一个筛选条件或返回全部知识。"}
+                : statusFilter !== "all"
+                  ? `当前范围没有处于“${statusFilters.find(({ value }) => value === statusFilter)?.label}”的正式 Concept；调整状态筛选或返回全部知识。`
+                  : "当前 Stage 与 Track 组合没有共同的已发布 Concept；调整一个筛选条件或返回全部知识。"}
           </p>
           <button
             className="mt-5 min-h-10 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm font-semibold text-[var(--color-accent)] hover:border-[var(--color-accent)]"

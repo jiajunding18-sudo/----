@@ -26,6 +26,7 @@ const catalog: ProgressCatalog = {
     {
       id: "concept.foundation",
       stageId: "stage.test",
+      stageCategoryOrder: 0,
       trackIds: ["track.common"],
       requiredness: "required",
       publicationStatus: "published",

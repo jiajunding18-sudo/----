@@ -58,12 +58,16 @@ const catalog: ProgressCatalog = {
 
 class MemoryStorage implements StringStorage {
   readonly values = new Map<string, string>();
+  failMainSave = false;
 
   getItem(key: string) {
     return this.values.get(key) ?? null;
   }
 
   setItem(key: string, value: string) {
+    if (key === LEARNING_STATE_STORAGE_KEY && this.failMainSave) {
+      throw new Error("main save failed");
+    }
     this.values.set(key, value);
   }
 
@@ -102,6 +106,89 @@ describe("LocalStorage adapter 与 hydration", () => {
         },
       },
     });
+  });
+
+  it("个人笔记、收藏与自评难度写入同一 v1 envelope 并在刷新后恢复", async () => {
+    const storage = new MemoryStorage();
+    const firstStore = makeStore(storage);
+    await firstStore.getState().hydrate();
+
+    expect(
+      await firstStore
+        .getState()
+        .updateConceptNote("concept.foundation", "我的基础概念笔记"),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(
+      await firstStore
+        .getState()
+        .setConceptFavorite("concept.foundation", true),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(
+      await firstStore
+        .getState()
+        .setConceptUserDifficulty("concept.foundation", 4),
+    ).toMatchObject({ ok: true, changed: true });
+
+    expect(
+      firstStore.getState().learningState.conceptProgress["concept.foundation"],
+    ).toMatchObject({
+      status: "not_started",
+      note: "我的基础概念笔记",
+      favorite: true,
+      userDifficulty: 4,
+    });
+
+    const persisted = JSON.parse(
+      storage.getItem(LEARNING_STATE_STORAGE_KEY) ?? "null",
+    );
+    expect(persisted).toMatchObject({
+      schemaVersion: 1,
+      payload: {
+        schemaVersion: 1,
+        conceptProgress: {
+          "concept.foundation": {
+            note: "我的基础概念笔记",
+            favorite: true,
+            userDifficulty: 4,
+          },
+        },
+      },
+    });
+
+    const refreshedStore = makeStore(storage);
+    await refreshedStore.getState().hydrate();
+    expect(
+      refreshedStore.getState().learningState.conceptProgress[
+        "concept.foundation"
+      ],
+    ).toMatchObject({
+      status: "not_started",
+      note: "我的基础概念笔记",
+      favorite: true,
+      userDifficulty: 4,
+    });
+  });
+
+  it("个人数据持久化失败时明确报错且不伪装为已保存", async () => {
+    const storage = new MemoryStorage();
+    const store = makeStore(storage);
+    await store.getState().hydrate();
+    storage.failMainSave = true;
+
+    expect(
+      await store
+        .getState()
+        .updateConceptNote("concept.foundation", "不能被静默丢失"),
+    ).toMatchObject({
+      ok: false,
+      code: "persistence-error",
+      message: expect.stringContaining("当前学习数据没有改变"),
+    });
+    expect(store.getState()).toMatchObject({
+      persistenceStatus: "error",
+      learningState: { conceptProgress: {} },
+    });
+    expect(storage.getItem(LEARNING_STATE_STORAGE_KEY)).toBeNull();
   });
 
   it("坏 JSON 不抛出，并保留 raw 诊断信息", async () => {

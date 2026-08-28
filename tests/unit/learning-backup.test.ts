@@ -214,6 +214,87 @@ describe("Learning OS JSON 备份", () => {
     });
   });
 
+  it("导出 → reset → 导入后完整恢复笔记、收藏与自评难度", async () => {
+    const storage = new MemoryStorage();
+    const source = makeStore(storage);
+    await source.getState().hydrate();
+    await source
+      .getState()
+      .updateConceptNote("concept.foundation", "备份里的个人笔记");
+    await source.getState().setConceptFavorite("concept.foundation", true);
+    await source.getState().setConceptUserDifficulty("concept.foundation", 5);
+
+    const backup = source.getState().createBackup("2026-08-28");
+    expect(backup.ok).toBe(true);
+    if (!backup.ok) return;
+    expect(
+      backup.envelope.payload.conceptProgress["concept.foundation"],
+    ).toMatchObject({
+      status: "not_started",
+      note: "备份里的个人笔记",
+      favorite: true,
+      userDifficulty: 5,
+    });
+
+    expect((await source.getState().resetLearningData(true)).ok).toBe(true);
+    expect(source.getState().learningState.conceptProgress).toEqual({});
+
+    const prepared = source.getState().prepareImport(backup.json, "replace");
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect((await source.getState().applyImport(prepared.value, true)).ok).toBe(
+      true,
+    );
+
+    const refreshed = makeStore(storage);
+    await refreshed.getState().hydrate();
+    expect(
+      refreshed.getState().learningState.conceptProgress["concept.foundation"],
+    ).toMatchObject({
+      status: "not_started",
+      note: "备份里的个人笔记",
+      favorite: true,
+      userDifficulty: 5,
+    });
+  });
+
+  it("缺少可选 userDifficulty 的旧正式 v1 备份仍可安全恢复", () => {
+    const oldV1State = learningStateWithConcept();
+    const oldV1Json = createLearningBackup({
+      state: oldV1State,
+      contentVersion: "2026.08.28",
+      revision: 2,
+      savedAt: early,
+      exportedAt: later,
+    }).json;
+    const result = prepareLearningStateImport({
+      raw: oldV1Json,
+      currentState: createInitialLearningState(catalog.tracks, later),
+      catalog,
+      mode: "replace",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        nextState: {
+          conceptProgress: {
+            "concept.foundation": {
+              note: "已理解",
+              favorite: false,
+            },
+          },
+        },
+      },
+    });
+    if (result.ok) {
+      expect(
+        result.value.nextState.conceptProgress["concept.foundation"]
+          .userDifficulty,
+      ).toBeUndefined();
+    }
+  });
+
   it.each([
     ["非法 JSON", "{broken", "invalid-json"],
     [

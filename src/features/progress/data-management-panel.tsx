@@ -391,7 +391,7 @@ export function DataManagementPanel() {
           Reset · 清空学习记录
         </h2>
         <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">
-          清空 Concept、Project、Stage checkpoint 与 Study Log；课程正文、manifest 和路线设置不会被删除。
+          清空 Concept 状态、证据、个人笔记、收藏、自评难度，以及 Project、Stage checkpoint 与 Study Log；课程正文、manifest 和路线设置不会被删除。
         </p>
         {!resetOpen ? (
           <button
@@ -404,7 +404,7 @@ export function DataManagementPanel() {
         ) : (
           <div className="mt-5 rounded-lg border border-red-300 bg-red-50 p-5">
             <p className="text-sm font-semibold leading-6 text-red-900">
-              当前浏览器中的学习记录将被清空。继续前会先创建独立恢复快照；若快照失败，清空不会执行。
+              当前浏览器中的学习记录和 Concept 个人数据将被清空。继续前会先创建独立恢复快照；若快照失败，清空不会执行。
             </p>
             <label className="mt-4 flex gap-3 text-sm leading-6 text-red-900">
               <input

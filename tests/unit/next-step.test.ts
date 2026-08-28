@@ -451,6 +451,31 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
     expect(JSON.stringify(input)).toBe(snapshot);
   });
 
+  it("个人笔记、收藏与自评难度不改变 NextStep 派生结果", () => {
+    const target = concept("concept.target");
+    const currentProject = project("published", [hardRequirement(target.id)]);
+    const baseState = state();
+    const baseline = getNextStep({
+      catalog: catalog([target], [currentProject]),
+      state: baseState,
+    });
+    const personalState = state({
+      [target.id]: {
+        ...conceptProgress("not_started", target.id),
+        note: "只属于我的笔记",
+        favorite: true,
+        userDifficulty: 5,
+      },
+    });
+
+    expect(
+      getNextStep({
+        catalog: catalog([target], [currentProject]),
+        state: personalState,
+      }),
+    ).toEqual(baseline);
+  });
+
   it("全部 published Concept 达到路线目标且无 Project gap 时返回明确 empty state", () => {
     const first = concept("concept.first", { order: 10 });
     const second = concept("concept.second", { order: 20 });

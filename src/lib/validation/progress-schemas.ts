@@ -88,12 +88,20 @@ export const masteryConfirmationSchema = z.strictObject({
   statementVersion: z.literal(1),
 });
 
+export const userDifficultySchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+
 export const conceptProgressSchema = z
   .strictObject({
     status: learningStatusSchema,
     note: z.string(),
     favorite: z.boolean(),
-    userDifficulty: z.number().int().min(1).max(5).optional(),
+    userDifficulty: userDifficultySchema.optional(),
     startedAt: utcTimestampSchema.optional(),
     understoodAt: utcTimestampSchema.optional(),
     firstMasteredAt: utcTimestampSchema.optional(),
@@ -353,6 +361,7 @@ export const learningStateV1Schema = z.strictObject({
 export type EvidenceKind = z.infer<typeof evidenceKindSchema>;
 export type MasteryEvidence = z.infer<typeof masteryEvidenceSchema>;
 export type MasteryConfirmation = z.infer<typeof masteryConfirmationSchema>;
+export type UserDifficulty = z.infer<typeof userDifficultySchema>;
 export type ConceptProgress = z.infer<typeof conceptProgressSchema>;
 export type ProjectProgress = z.infer<typeof projectProgressSchema>;
 export type StudyLog = z.infer<typeof studyLogSchema>;

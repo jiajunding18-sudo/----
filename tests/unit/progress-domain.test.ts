@@ -10,9 +10,12 @@ import {
   hasReachedRequiredStatus,
   markConceptUnderstood,
   selectConceptIdsByStatus,
+  setConceptFavorite,
+  setConceptUserDifficulty,
   startConcept,
   summarizeProgress,
   summarizeStageProgress,
+  updateConceptNote,
   type ProgressConceptDefinition,
 } from "@/features/progress/progress-domain";
 import type { ConceptProgress, MasteryEvidence } from "@/types";
@@ -148,6 +151,57 @@ describe("Concept progress 状态规则", () => {
         secondTimestamp,
       ),
     ).toMatchObject({ ok: true, progress: { status: "understood" } });
+  });
+
+  it("个人笔记、收藏与自评难度不改变 Progress 或 prerequisite readiness", () => {
+    const withNote = requireProgress(
+      updateConceptNote(undefined, "需要再练习相对路径。", firstTimestamp),
+    );
+    const favorited = requireProgress(
+      setConceptFavorite(withNote, true, secondTimestamp),
+    );
+    const withDifficulty = requireProgress(
+      setConceptUserDifficulty(favorited, 4, thirdTimestamp),
+    );
+
+    expect(withDifficulty).toMatchObject({
+      status: "not_started",
+      note: "需要再练习相对路径。",
+      favorite: true,
+      userDifficulty: 4,
+      evidence: [],
+    });
+    expect(
+      getConceptReadiness(hardDependent, {
+        [foundation.id]: withDifficulty,
+      }),
+    ).toEqual({
+      ready: false,
+      missingHard: [foundation.id],
+      missingRecommended: [],
+    });
+  });
+
+  it("修改个人字段会保留已理解状态、证据和正式时间戳", () => {
+    const understood = understoodProgress();
+    const withNote = requireProgress(
+      updateConceptNote(understood, "个人补充", thirdTimestamp),
+    );
+    const favorited = requireProgress(
+      setConceptFavorite(withNote, true, thirdTimestamp),
+    );
+    const clearedDifficulty = requireProgress(
+      setConceptUserDifficulty(favorited, undefined, thirdTimestamp),
+    );
+
+    expect(clearedDifficulty).toMatchObject({
+      status: "understood",
+      startedAt: firstTimestamp,
+      understoodAt: secondTimestamp,
+      note: "个人补充",
+      favorite: true,
+    });
+    expect(clearedDifficulty.userDifficulty).toBeUndefined();
   });
 
   it("understood 未满足时不能 mastered", () => {

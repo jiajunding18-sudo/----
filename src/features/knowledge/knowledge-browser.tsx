@@ -15,6 +15,7 @@ import type {
   KnowledgeConceptView,
   KnowledgeView,
 } from "./knowledge-model";
+import type { ConceptProgress, UserDifficulty } from "@/types";
 
 const depthLabels = {
   master: "必须掌握",
@@ -32,6 +33,14 @@ const statusFilters: readonly {
   { value: "understood", label: "已理解" },
   { value: "mastered", label: "已掌握" },
 ];
+
+const userDifficultyLabels: Readonly<Record<UserDifficulty, string>> = {
+  1: "很容易",
+  2: "较容易",
+  3: "适中",
+  4: "较难",
+  5: "很难",
+};
 
 function PrerequisiteSummary({
   prerequisites,
@@ -79,26 +88,32 @@ function PrerequisiteSummary({
 
 function KnowledgeConceptList({
   concepts,
+  hydrated,
+  progress,
 }: {
   readonly concepts: readonly KnowledgeConceptView[];
+  readonly hydrated: boolean;
+  readonly progress: Readonly<Record<string, ConceptProgress>>;
 }) {
   return (
     <ol
       className="mt-6 divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]"
       data-knowledge-results
     >
-      {concepts.map((item) => (
-        <li
-          className="py-6"
-          data-concept-order={item.concept.order}
-          data-knowledge-concept-id={item.concept.id}
-          key={item.concept.id}
-        >
-          <article className="grid min-w-0 gap-4 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
-            <p className="text-sm font-semibold tabular-nums text-[var(--color-accent)]">
-              {String(item.recommendedSequence).padStart(2, "0")}
-            </p>
-            <div className="min-w-0">
+      {concepts.map((item) => {
+        const personal = progress[item.concept.id];
+        return (
+          <li
+            className="py-6"
+            data-concept-order={item.concept.order}
+            data-knowledge-concept-id={item.concept.id}
+            key={item.concept.id}
+          >
+            <article className="grid min-w-0 gap-4 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
+              <p className="text-sm font-semibold tabular-nums text-[var(--color-accent)]">
+                {String(item.recommendedSequence).padStart(2, "0")}
+              </p>
+              <div className="min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-xl font-semibold tracking-[-0.02em]">
@@ -115,6 +130,23 @@ function KnowledgeConceptList({
                 </div>
                 <div className="flex flex-wrap justify-end gap-2">
                   <ConceptStatusLabel conceptId={item.concept.id} />
+                  {hydrated && personal?.favorite ? (
+                    <span
+                      className="w-fit rounded-full border border-[var(--color-accent)] px-3 py-1 text-xs font-semibold text-[var(--color-accent)]"
+                      data-knowledge-favorite="true"
+                    >
+                      已收藏
+                    </span>
+                  ) : null}
+                  {hydrated && personal?.userDifficulty ? (
+                    <span
+                      className="w-fit rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-semibold text-[var(--color-muted)]"
+                      data-knowledge-user-difficulty={personal.userDifficulty}
+                    >
+                      个人难度 {personal.userDifficulty} ·{" "}
+                      {userDifficultyLabels[personal.userDifficulty]}
+                    </span>
+                  ) : null}
                   <span className="w-fit rounded-full bg-[var(--color-accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-accent)]">
                     available · 正式内容
                   </span>
@@ -151,19 +183,25 @@ function KnowledgeConceptList({
                 </div>
               </dl>
 
-              <PrerequisiteSummary prerequisites={item.prerequisites} />
-            </div>
-          </article>
-        </li>
-      ))}
+                <PrerequisiteSummary prerequisites={item.prerequisites} />
+              </div>
+            </article>
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
-export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeView }) {
+export function KnowledgeBrowser({
+  knowledge,
+}: {
+  readonly knowledge: KnowledgeView;
+}) {
   const [stageId, setStageId] = useState("all");
   const [trackId, setTrackId] = useState("all");
   const [statusFilter, setStatusFilter] = useState<ProgressStatusFilter>("all");
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
   const hydrated = useLearningStore(({ hydrated }) => hydrated);
   const progress = useLearningStore(
     ({ learningState }) => learningState.conceptProgress,
@@ -181,15 +219,20 @@ export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeV
     ({ concept, stage, tracks }) =>
       (stageId === "all" || stage.id === stageId) &&
       (trackId === "all" || tracks.some(({ id }) => id === trackId)) &&
-      statusConceptIds.has(concept.id),
+      statusConceptIds.has(concept.id) &&
+      (!favoriteOnly || progress[concept.id]?.favorite === true),
   );
   const isAll =
-    stageId === "all" && trackId === "all" && statusFilter === "all";
+    stageId === "all" &&
+    trackId === "all" &&
+    statusFilter === "all" &&
+    !favoriteOnly;
 
   function resetFilters() {
     setStageId("all");
     setTrackId("all");
     setStatusFilter("all");
+    setFavoriteOnly(false);
   }
 
   return (
@@ -288,6 +331,23 @@ export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeV
             </p>
           ) : null}
         </fieldset>
+        <fieldset className="mt-5">
+          <legend className="text-sm font-semibold">个人标记</legend>
+          <button
+            aria-pressed={favoriteOnly}
+            className={`mt-2 min-h-10 rounded-md border px-4 text-sm font-semibold ${
+              favoriteOnly
+                ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
+                : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:border-[var(--color-accent)]"
+            }`}
+            data-knowledge-favorite-filter
+            disabled={!hydrated}
+            onClick={() => setFavoriteOnly((value) => !value)}
+            type="button"
+          >
+            仅看收藏
+          </button>
+        </fieldset>
       </nav>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -305,7 +365,11 @@ export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeV
       </div>
 
       {visibleConcepts.length > 0 ? (
-        <KnowledgeConceptList concepts={visibleConcepts} />
+        <KnowledgeConceptList
+          concepts={visibleConcepts}
+          hydrated={hydrated}
+          progress={progress}
+        />
       ) : (
         <div
           className="mt-6 border-y border-[var(--color-border)] py-10"
@@ -313,7 +377,9 @@ export function KnowledgeBrowser({ knowledge }: { readonly knowledge: KnowledgeV
         >
           <h3 className="text-lg font-semibold">当前范围没有正式 Concept</h3>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-muted)]">
-            {selectedStage?.contentStatus === "planned"
+            {favoriteOnly
+              ? "当前筛选范围没有已收藏的正式 Concept。"
+              : selectedStage?.contentStatus === "planned"
               ? `「${selectedStage.title}」路线已规划，但正式学习内容尚未展开。`
               : selectedTrack?.publishedConceptCount === 0
                 ? `「${selectedTrack.title}」路线已规划，但目前没有已发布 Concept。`

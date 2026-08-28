@@ -29,6 +29,7 @@ export type {
   ProjectProgress,
   StageCheckpoint,
   StudyLog,
+  UserDifficulty,
   UserPreferences,
 } from "@/lib/validation/progress-schemas";
 export type {

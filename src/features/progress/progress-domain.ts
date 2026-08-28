@@ -3,6 +3,7 @@ import {
   type ConceptProgress,
   type LearningStateV1,
   type MasteryEvidence,
+  type UserDifficulty,
 } from "@/lib/validation/progress-schemas";
 import type {
   DependencyKind,
@@ -190,6 +191,57 @@ export function startConcept(
       startedAt: base.startedAt ?? timestamp,
       updatedAt: timestamp,
     },
+  };
+}
+
+export function updateConceptNote(
+  existing: ConceptProgress | undefined,
+  note: string,
+  timestamp: string,
+): ProgressMutationResult {
+  const base = existing ?? createProgressRecord(timestamp);
+  if (base.note === note) {
+    return { ok: true, progress: base, changed: false };
+  }
+
+  return {
+    ok: true,
+    changed: true,
+    progress: { ...base, note, updatedAt: timestamp },
+  };
+}
+
+export function setConceptFavorite(
+  existing: ConceptProgress | undefined,
+  favorite: boolean,
+  timestamp: string,
+): ProgressMutationResult {
+  const base = existing ?? createProgressRecord(timestamp);
+  if (base.favorite === favorite) {
+    return { ok: true, progress: base, changed: false };
+  }
+
+  return {
+    ok: true,
+    changed: true,
+    progress: { ...base, favorite, updatedAt: timestamp },
+  };
+}
+
+export function setConceptUserDifficulty(
+  existing: ConceptProgress | undefined,
+  userDifficulty: UserDifficulty | undefined,
+  timestamp: string,
+): ProgressMutationResult {
+  const base = existing ?? createProgressRecord(timestamp);
+  if (base.userDifficulty === userDifficulty) {
+    return { ok: true, progress: base, changed: false };
+  }
+
+  return {
+    ok: true,
+    changed: true,
+    progress: { ...base, userDifficulty, updatedAt: timestamp },
   };
 }
 

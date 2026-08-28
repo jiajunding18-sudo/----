@@ -6,6 +6,7 @@ import { ResourceLinks } from "@/components/content/resource-links";
 import { ConceptNavigation } from "@/features/knowledge/concept-navigation";
 import { ConceptTableOfContents } from "@/features/knowledge/concept-table-of-contents";
 import { ConceptProgressPanel } from "@/features/progress/concept-progress-panel";
+import { ConceptPersonalPanel } from "@/features/progress/concept-personal-panel";
 import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content";
 import {
   getPublishedConceptBySlug,
@@ -84,6 +85,7 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
               }),
             )}
           />
+          <ConceptPersonalPanel conceptId={concept.id} />
           <ConceptTableOfContents headings={concept.headings} variant="mobile" />
           <div className="learning-document">
             <ConceptContent />

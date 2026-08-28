@@ -447,6 +447,47 @@ describe("MasteryEvidence 与 ConceptProgress schema", () => {
       false,
     );
   });
+
+  it("个人难度只接受正式的 1 至 5 整数枚举", () => {
+    const personalProgress = {
+      status: "not_started",
+      note: "个人笔记",
+      favorite: true,
+      updatedAt: "2026-08-28T03:00:00.000Z",
+      evidence: [],
+    };
+
+    expect(
+      conceptProgressSchema.safeParse({
+        ...personalProgress,
+        userDifficulty: 1,
+      }).success,
+    ).toBe(true);
+    expect(
+      conceptProgressSchema.safeParse({
+        ...personalProgress,
+        userDifficulty: 5,
+      }).success,
+    ).toBe(true);
+    expect(
+      conceptProgressSchema.safeParse({
+        ...personalProgress,
+        userDifficulty: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      conceptProgressSchema.safeParse({
+        ...personalProgress,
+        userDifficulty: 3.5,
+      }).success,
+    ).toBe(false);
+    expect(
+      conceptProgressSchema.safeParse({
+        ...personalProgress,
+        userDifficulty: 6,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("构建期错误接口", () => {

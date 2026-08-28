@@ -6,7 +6,10 @@ import {
   downgradeConcept,
   inspectLearningStateAgainstCatalog,
   markConceptUnderstood,
+  setConceptFavorite,
+  setConceptUserDifficulty,
   startConcept,
+  updateConceptNote,
   type ProgressCatalog,
   type ProgressMutationResult,
 } from "./progress-domain";
@@ -24,7 +27,11 @@ import {
   type PrepareImportResult,
 } from "@/lib/storage";
 import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
-import type { LearningStateV1, MasteryEvidence } from "@/types";
+import type {
+  LearningStateV1,
+  MasteryEvidence,
+  UserDifficulty,
+} from "@/types";
 
 export type PersistenceStatus =
   | "pending"
@@ -37,7 +44,7 @@ export type LearningStoreActionResult =
   | ProgressMutationResult
   | {
       readonly ok: false;
-      readonly code: "persistence-blocked";
+      readonly code: "persistence-blocked" | "persistence-error";
       readonly message: string;
     };
 
@@ -92,6 +99,18 @@ export interface LearningStoreState {
     conceptId: string,
     targetStatus: "not_started" | "learning" | "understood",
   ) => Promise<LearningStoreActionResult>;
+  updateConceptNote: (
+    conceptId: string,
+    note: string,
+  ) => Promise<LearningStoreActionResult>;
+  setConceptFavorite: (
+    conceptId: string,
+    favorite: boolean,
+  ) => Promise<LearningStoreActionResult>;
+  setConceptUserDifficulty: (
+    conceptId: string,
+    userDifficulty: UserDifficulty | undefined,
+  ) => Promise<LearningStoreActionResult>;
   createBackup: (localDate: string) => BackupCreationResult;
   recordBackupCreated: (timestamp: string) => Promise<DataManagementActionResult>;
   prepareImport: (raw: string, mode: ImportMode) => PrepareImportResult;
@@ -131,11 +150,12 @@ export function createLearningStore({
   const initialState = () => createInitialLearningState(catalog.tracks, now());
 
   return createStore<LearningStoreState>()((set, get) => {
-    async function persist(nextState: LearningStateV1) {
+    async function persist(
+      nextState: LearningStateV1,
+    ): Promise<string | undefined> {
       const current = get();
       const nextRevision = current.revision + 1;
       const timestamp = now();
-      set({ learningState: nextState });
 
       try {
         await adapter.save(
@@ -147,17 +167,20 @@ export function createLearningStore({
           ),
         );
         set({
+          learningState: nextState,
           revision: nextRevision,
           savedAt: timestamp,
           persistenceStatus: "ready",
           persistenceMessage: undefined,
         });
+        return undefined;
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         set({
           persistenceStatus: "error",
-          persistenceMessage:
-            error instanceof Error ? error.message : String(error),
+          persistenceMessage: message,
         });
+        return message;
       }
     }
 
@@ -253,7 +276,14 @@ export function createLearningStore({
           [conceptId]: mutation.progress,
         },
       });
-      await persist(nextState);
+      const persistenceError = await persist(nextState);
+      if (persistenceError) {
+        return {
+          ok: false,
+          code: "persistence-error",
+          message: `未能保存到浏览器，当前学习数据没有改变：${persistenceError}`,
+        };
+      }
       return mutation;
     }
 
@@ -391,6 +421,42 @@ export function createLearningStore({
           downgradeConcept(
             get().learningState.conceptProgress[conceptId],
             targetStatus,
+            now(),
+          ),
+        );
+      },
+
+      updateConceptNote: async (conceptId, note) => {
+        if (!conceptsById.has(conceptId)) return missingConceptResult(conceptId);
+        return commitConceptMutation(
+          conceptId,
+          updateConceptNote(
+            get().learningState.conceptProgress[conceptId],
+            note,
+            now(),
+          ),
+        );
+      },
+
+      setConceptFavorite: async (conceptId, favorite) => {
+        if (!conceptsById.has(conceptId)) return missingConceptResult(conceptId);
+        return commitConceptMutation(
+          conceptId,
+          setConceptFavorite(
+            get().learningState.conceptProgress[conceptId],
+            favorite,
+            now(),
+          ),
+        );
+      },
+
+      setConceptUserDifficulty: async (conceptId, userDifficulty) => {
+        if (!conceptsById.has(conceptId)) return missingConceptResult(conceptId);
+        return commitConceptMutation(
+          conceptId,
+          setConceptUserDifficulty(
+            get().learningState.conceptProgress[conceptId],
+            userDifficulty,
             now(),
           ),
         );

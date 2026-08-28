@@ -6,6 +6,8 @@ import {
   downgradeConcept,
   getConceptReadiness,
   getConceptStatus,
+  getRouteRequiredStatus,
+  hasReachedRequiredStatus,
   markConceptUnderstood,
   selectConceptIdsByStatus,
   startConcept,
@@ -258,6 +260,39 @@ describe("Concept progress 状态规则", () => {
 });
 
 describe("Stage 三类派生进度", () => {
+  it("路线目标状态复用统一状态顺序，并允许高级副修 M 节点降为 understood", () => {
+    expect(hasReachedRequiredStatus("understood", "understood")).toBe(true);
+    expect(hasReachedRequiredStatus("understood", "mastered")).toBe(false);
+    expect(hasReachedRequiredStatus("mastered", "understood")).toBe(true);
+
+    expect(
+      getRouteRequiredStatus(
+        { targetDepth: "master", trackIds: ["track.advanced"] },
+        [
+          {
+            id: "track.advanced",
+            kind: "advanced-branch",
+            defaultGoal: "master",
+          },
+        ],
+        { trackGoals: { "track.advanced": "understand" } },
+      ),
+    ).toBe("understood");
+    expect(
+      getRouteRequiredStatus(
+        { targetDepth: "master", trackIds: ["track.common"] },
+        [
+          {
+            id: "track.common",
+            kind: "common",
+            defaultGoal: "master",
+          },
+        ],
+        { trackGoals: { "track.common": "master" } },
+      ),
+    ).toBe("mastered");
+  });
+
   it("分别计算接触、understood 与 mastered，并排除 orphan", () => {
     const concepts = [
       foundation,

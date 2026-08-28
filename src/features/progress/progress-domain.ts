@@ -8,19 +8,23 @@ import type {
   DependencyKind,
   LearningStatus,
   TrackDefinition,
+  TrackGoal,
 } from "@/types";
 
-export interface ProgressConceptDefinition {
+export interface DependencyConceptDefinition {
+  readonly dependencies: readonly {
+    readonly conceptId: string;
+    readonly kind: DependencyKind;
+  }[];
+}
+
+export interface ProgressConceptDefinition extends DependencyConceptDefinition {
   readonly id: string;
   readonly stageId: string;
   readonly stageCategoryOrder: number;
   readonly trackIds: readonly string[];
   readonly requiredness: "required" | "optional";
   readonly publicationStatus: "draft" | "published" | "hidden" | "retired";
-  readonly dependencies: readonly {
-    readonly conceptId: string;
-    readonly kind: DependencyKind;
-  }[];
   readonly masteryCriteria: readonly {
     readonly id: string;
     readonly description: string;
@@ -44,6 +48,21 @@ export interface DependencyReadiness {
   readonly missingHard: string[];
   readonly missingRecommended: string[];
 }
+
+export type RequiredConceptStatus = "understood" | "mastered";
+
+export interface RouteRequiredStatusConcept {
+  readonly targetDepth: "master" | "understand" | "advanced";
+  readonly trackIds: readonly string[];
+}
+
+export interface RouteRequiredStatusPreferences {
+  readonly trackGoals: Readonly<Record<string, TrackGoal>>;
+}
+
+export type RouteRequiredStatusTrack = Readonly<
+  Pick<TrackDefinition, "id" | "kind" | "defaultGoal">
+>;
 
 export interface MasteryEligibility {
   readonly eligible: boolean;
@@ -101,8 +120,37 @@ export function satisfiesHardPrerequisite(status: LearningStatus): boolean {
   return status === "understood" || status === "mastered";
 }
 
+export function hasReachedRequiredStatus(
+  status: LearningStatus,
+  requiredStatus: RequiredConceptStatus,
+): boolean {
+  return statusOrder[status] >= statusOrder[requiredStatus];
+}
+
+export function getRouteRequiredStatus(
+  concept: RouteRequiredStatusConcept,
+  tracks: readonly RouteRequiredStatusTrack[],
+  preferences: RouteRequiredStatusPreferences,
+): RequiredConceptStatus {
+  if (concept.targetDepth !== "master") return "understood";
+
+  const tracksById = new Map(tracks.map((track) => [track.id, track]));
+  for (const trackId of concept.trackIds) {
+    const track = tracksById.get(trackId);
+    if (!track) return "mastered";
+    if (track.kind === "common") return "mastered";
+    if (
+      (preferences.trackGoals[track.id] ?? track.defaultGoal) === "master"
+    ) {
+      return "mastered";
+    }
+  }
+
+  return "understood";
+}
+
 export function getConceptReadiness(
-  concept: ProgressConceptDefinition,
+  concept: DependencyConceptDefinition,
   progress: Readonly<Record<string, ConceptProgress>>,
 ): DependencyReadiness {
   const missingHard: string[] = [];

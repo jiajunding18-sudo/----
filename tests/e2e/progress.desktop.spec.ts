@@ -189,7 +189,7 @@ test("完整 mastered 状态与 Evidence 可经 Export → Reset → Import 恢�
   expect(browserErrors).toEqual([]);
 });
 
-test("新用户看到正式总览、planned Stage 和非推荐式空状态", async ({ page }) => {
+test("新用户看到正式 NextStep、Progress 总览与 planned Stage", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/");
   const overview = page.locator("[data-progress-overview]");
@@ -199,7 +199,7 @@ test("新用户看到正式总览、planned Stage 和非推荐式空状态", asy
   await expect(overview.locator('[data-overview-status-count="understood"]')).toHaveText("0");
   await expect(overview.locator('[data-overview-status-count="mastered"]')).toHaveText("0");
   await expect(overview.locator("[data-no-continuing-concepts]")).toContainText(
-    "当前没有正在学习的知识点",
+    "以上方正式 NextStep 结果为准",
   );
   await expect(overview.getByRole("link", { name: "浏览 Roadmap" })).toBeVisible();
   await expect(overview.getByRole("link", { name: "浏览 Knowledge" })).toBeVisible();
@@ -221,6 +221,9 @@ test("新用户看到正式总览、planned Stage 和非推荐式空状态", asy
   await expect(overview.locator("[data-progress-filter-empty]")).toContainText(
     "当前没有处于“学习中”状态",
   );
+  await expect(
+    page.locator('[data-dashboard-next-step="recommendation"]'),
+  ).toHaveAttribute("data-next-step-target-id", "tooling.computer-files");
   await expect(page.getByText(/今日任务|建议你接下来学习/)).toHaveCount(0);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

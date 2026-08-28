@@ -133,7 +133,7 @@ export function ProgressOverview({
         ) : (
           <div data-no-continuing-concepts>
             <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
-              当前没有正在学习的知识点。这里不会自动指定下一项。
+              当前没有正在学习的知识点。是否有可执行入口，以上方正式 NextStep 结果为准。
             </p>
             <nav aria-label="浏览正式学习内容" className="mt-4 flex flex-wrap gap-3">
               <Link className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm font-semibold" href="/roadmap/">

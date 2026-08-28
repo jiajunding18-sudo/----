@@ -13,6 +13,7 @@ import type {
 import { getConceptById, getConceptBySlug, getProjectBySlug } from "./manifest-reader";
 import type { Resource, StageDefinition, TrackDefinition } from "@/types";
 import type { ProgressCatalog } from "@/features/progress/progress-domain";
+import type { NextStepCatalog } from "@/features/recommendations";
 
 export const stageZeroId = "stage.tooling-foundations";
 export const pixelLabProjectId = "project.pixel-lab";
@@ -191,6 +192,15 @@ export function getProgressCatalog(): ProgressCatalog {
           ? track.exclusiveMasteryGroup
           : undefined,
     })),
+  };
+}
+
+export function getNextStepCatalog(): NextStepCatalog {
+  return {
+    concepts: contentManifest.concepts,
+    projects: contentManifest.projects,
+    stages: contentManifest.stages,
+    tracks: contentManifest.tracks,
   };
 }
 

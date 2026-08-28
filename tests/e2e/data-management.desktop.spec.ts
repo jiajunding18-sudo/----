@@ -20,6 +20,10 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
     .getByRole("button", { name: "开始学习" })
     .click();
 
+  await page.goto("/");
+  await expect(
+    page.locator('[data-dashboard-next-step="recommendation"]'),
+  ).toHaveAttribute("data-next-step-target-id", "tooling.python-core");
   await page.goto("/settings/data/");
   await expect(page.getByText("1 条").first()).toBeVisible();
 
@@ -58,6 +62,12 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
   );
   await expect(page.getByText("0 条").first()).toBeVisible();
 
+  await page.goto("/");
+  await expect(
+    page.locator('[data-dashboard-next-step="recommendation"]'),
+  ).toHaveAttribute("data-next-step-target-id", "tooling.computer-files");
+  await page.goto("/settings/data/");
+
   const fileInput = page.getByLabel("选择 Learning OS JSON 备份");
   await page.getByRole("radio", { name: /替换恢复/ }).check();
   await fileInput.setInputFiles({
@@ -93,6 +103,14 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
 
   await page.reload();
   await expect(page.getByText("1 条").first()).toBeVisible();
+  await page.goto("/");
+  await expect(
+    page.locator('[data-dashboard-next-step="recommendation"]'),
+  ).toHaveAttribute("data-next-step-target-id", "tooling.python-core");
+  await page.reload();
+  await expect(
+    page.locator('[data-dashboard-next-step="recommendation"]'),
+  ).toHaveAttribute("data-next-step-target-id", "tooling.python-core");
   await page.goto("/knowledge/python-core/");
   await expect(page.locator("[data-concept-progress]")).toContainText(
     "当前：学习中",

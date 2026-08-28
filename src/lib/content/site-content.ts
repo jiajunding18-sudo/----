@@ -12,6 +12,7 @@ import type {
 } from "./manifest-types";
 import { getConceptById, getConceptBySlug, getProjectBySlug } from "./manifest-reader";
 import type { Resource, StageDefinition, TrackDefinition } from "@/types";
+import type { ProgressCatalog } from "@/features/progress/progress-domain";
 
 export const stageZeroId = "stage.tooling-foundations";
 export const pixelLabProjectId = "project.pixel-lab";
@@ -148,4 +149,42 @@ export function getPublishedConceptSlugs() {
 
 export function getPublishedProjectSlugs() {
   return getPublishedProjects().map(({ slug }) => ({ slug }));
+}
+
+export function getProgressCatalog(): ProgressCatalog {
+  return {
+    concepts: contentManifest.concepts.map((concept) => ({
+      id: concept.id,
+      stageId: concept.stageId,
+      trackIds: concept.trackIds,
+      requiredness: concept.requiredness,
+      publicationStatus: concept.publicationStatus,
+      dependencies: concept.dependencies.map(({ conceptId, kind }) => ({
+        conceptId,
+        kind,
+      })),
+      masteryCriteria: concept.masteryCriteria.map(({ id, required }) => ({
+        id,
+        required,
+      })),
+    })),
+    tracks: contentManifest.tracks.map((track) => ({
+      id: track.id,
+      kind: track.kind,
+      defaultGoal: track.defaultGoal,
+      exclusiveMasteryGroup:
+        "exclusiveMasteryGroup" in track
+          ? track.exclusiveMasteryGroup
+          : undefined,
+    })),
+  };
+}
+
+export function getCurrentContentVersion() {
+  const versions = [
+    ...contentManifest.concepts.map(({ contentVersion }) => contentVersion),
+    ...contentManifest.projects.map(({ contentVersion }) => contentVersion),
+  ].toSorted((left, right) => left.localeCompare(right, "en"));
+
+  return versions.at(-1) ?? "content-schema-1";
 }

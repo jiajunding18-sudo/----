@@ -5,6 +5,7 @@ import { DocumentContext } from "@/components/content/document-context";
 import { ResourceLinks } from "@/components/content/resource-links";
 import { ConceptNavigation } from "@/features/knowledge/concept-navigation";
 import { ConceptTableOfContents } from "@/features/knowledge/concept-table-of-contents";
+import { ConceptProgressPanel } from "@/features/progress/concept-progress-panel";
 import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content";
 import {
   getPublishedConceptBySlug,
@@ -67,6 +68,15 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
             eyebrow="Concept · available（正式内容）"
           />
           <ConceptNavigation concept={knowledgeConcept} />
+          <ConceptProgressPanel
+            conceptId={concept.id}
+            hardPrerequisites={knowledgeConcept.prerequisites
+              .filter(({ kind }) => kind === "hard")
+              .map(({ concept: prerequisite }) => ({
+                id: prerequisite.id,
+                title: prerequisite.title,
+              }))}
+          />
           <ConceptTableOfContents headings={concept.headings} variant="mobile" />
           <div className="learning-document">
             <ConceptContent />

@@ -3,7 +3,11 @@ import Link from "next/link";
 
 import { ContentState } from "@/components/content/content-state";
 import { PageHeader } from "@/components/shell/page-header";
-import { readStageZeroSlice } from "@/lib/content/site-content";
+import { StageProgressSummary } from "@/features/progress/stage-progress-summary";
+import {
+  getProgressCatalog,
+  readStageZeroSlice,
+} from "@/lib/content/site-content";
 
 export const metadata: Metadata = {
   title: "Dashboard · 机器视觉 Learning OS",
@@ -25,17 +29,18 @@ export default function DashboardPage() {
   }
 
   const { concepts, project, stage } = content.value;
+  const progressCatalog = getProgressCatalog();
 
   return (
     <div className="max-w-5xl">
         <PageHeader
-          description="从当前已发布的路线和内容开始学习；本阶段只呈现真实静态结构，不推测你的学习进度。"
-          status={{
-            label: "尚未记录个人学习状态",
-            description:
-              "当前没有完成率、今日推荐或解锁判断。你可以先浏览 Stage 0 内容与 Pixel Lab，进度交互将在后续阶段实现。",
-          }}
+          description="从当前已发布的路线和内容开始学习；本地状态分别记录接触、理解与掌握，不合并成模糊完成率。"
           title="Dashboard"
+        />
+
+        <StageProgressSummary
+          concepts={progressCatalog.concepts}
+          stageId={stage.id}
         />
 
         <section aria-labelledby="current-route-title" className="mt-10">

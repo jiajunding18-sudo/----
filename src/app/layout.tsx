@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
+import { LearningStoreProvider } from "@/features/progress/learning-store-provider";
+import {
+  getCurrentContentVersion,
+  getProgressCatalog,
+} from "@/lib/content/site-content";
 
 import "katex/dist/katex.min.css";
 import "./globals.css";
@@ -16,10 +21,17 @@ type RootLayoutProps = Readonly<{
 }>;
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const progressCatalog = getProgressCatalog();
+
   return (
     <html lang="zh-CN">
       <body>
-        <AppShell>{children}</AppShell>
+        <LearningStoreProvider
+          catalog={progressCatalog}
+          contentVersion={getCurrentContentVersion()}
+        >
+          <AppShell>{children}</AppShell>
+        </LearningStoreProvider>
       </body>
     </html>
   );

@@ -4,7 +4,13 @@ import {
   conceptIdSchema,
   evidenceIdSchema,
   learningStatusSchema,
+  localDateSchema,
   masteryCriterionIdSchema,
+  projectIdSchema,
+  semanticIdSchema,
+  stageIdSchema,
+  trackGoalSchema,
+  trackIdSchema,
   trimmedTextSchema,
   uniqueSemanticIdArraySchema,
   utcTimestampSchema,
@@ -212,7 +218,144 @@ export const conceptProgressSchema = z
     });
   });
 
+export const projectProgressSchema = z
+  .strictObject({
+    status: z.enum(["not_started", "in_progress", "paused", "completed"]),
+    note: z.string(),
+    nextAction: z.string().optional(),
+    selectedExecutionPathId: semanticIdSchema.optional(),
+    environmentChecks: z.record(semanticIdSchema, z.boolean()),
+    prerequisiteOverride: z
+      .strictObject({
+        confirmedAt: utcTimestampSchema,
+        missingRequirementConceptIds: z.array(conceptIdSchema),
+      })
+      .optional(),
+    acceptance: z.record(semanticIdSchema, z.boolean()),
+    deliverables: z.array(
+      z
+        .strictObject({
+          id: semanticIdSchema,
+          title: trimmedTextSchema,
+          reference: trimmedTextSchema.optional(),
+          note: z.string().optional(),
+          createdAt: utcTimestampSchema,
+          updatedAt: utcTimestampSchema,
+        })
+        .refine(({ createdAt, updatedAt }) => updatedAt >= createdAt, {
+          message: "updatedAt 不得早于 createdAt",
+          path: ["updatedAt"],
+        }),
+    ),
+    unverifiedAssumptions: z.array(trimmedTextSchema),
+    completionConfirmation: z
+      .strictObject({
+        confirmedAt: utcTimestampSchema,
+        acceptanceCriterionIds: z.array(semanticIdSchema),
+        deliverableIds: z.array(semanticIdSchema),
+      })
+      .optional(),
+    startedAt: utcTimestampSchema.optional(),
+    completedAt: utcTimestampSchema.optional(),
+    updatedAt: utcTimestampSchema,
+  })
+  .superRefine((progress, context) => {
+    if (progress.status === "in_progress") {
+      if (!progress.nextAction?.trim()) {
+        context.addIssue({
+          code: "custom",
+          message: "进行中的项目必须有非空下一动作",
+          path: ["nextAction"],
+        });
+      }
+      if (progress.selectedExecutionPathId === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "进行中的项目必须选择执行路径",
+          path: ["selectedExecutionPathId"],
+        });
+      }
+    }
+
+    if (progress.status !== "not_started" && progress.startedAt === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "已开始的项目必须记录 startedAt",
+        path: ["startedAt"],
+      });
+    }
+
+    if (progress.status === "completed") {
+      if (progress.completedAt === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "已完成项目必须记录 completedAt",
+          path: ["completedAt"],
+        });
+      }
+      if (progress.completionConfirmation === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "已完成项目必须包含用户确认快照",
+          path: ["completionConfirmation"],
+        });
+      }
+    }
+  });
+
+export const studyLogSchema = z
+  .strictObject({
+    id: semanticIdSchema,
+    localDate: localDateSchema,
+    minutes: z.number().int().positive(),
+    conceptIds: z.array(conceptIdSchema),
+    projectIds: z.array(projectIdSchema),
+    learned: z.string(),
+    blockers: z.string(),
+    completed: z.string(),
+    tomorrowPlan: z.string(),
+    createdAt: utcTimestampSchema,
+    updatedAt: utcTimestampSchema,
+  })
+  .refine(({ createdAt, updatedAt }) => updatedAt >= createdAt, {
+    message: "updatedAt 不得早于 createdAt",
+    path: ["updatedAt"],
+  });
+
+export const userPreferencesSchema = z.strictObject({
+  focusedTrackIds: z.array(trackIdSchema),
+  trackGoals: z.record(trackIdSchema, trackGoalSchema),
+  activeStageId: stageIdSchema.optional(),
+  weeklyTargetMinutes: z.number().int().nonnegative(),
+  todayAvailableMinutes: z.number().int().nonnegative().optional(),
+  primaryProjectId: projectIdSchema.optional(),
+  currentConceptId: conceptIdSchema.optional(),
+  lastBackupAt: utcTimestampSchema.optional(),
+  updatedAt: utcTimestampSchema,
+});
+
+export const stageCheckpointSchema = z.strictObject({
+  criterionEvidence: z.record(semanticIdSchema, z.array(semanticIdSchema)),
+  initiallyEligibleAt: utcTimestampSchema.optional(),
+  retestedAt: utcTimestampSchema.optional(),
+  updatedAt: utcTimestampSchema,
+});
+
+export const learningStateV1Schema = z.strictObject({
+  schemaVersion: z.literal(1),
+  preferences: userPreferencesSchema,
+  conceptProgress: z.record(conceptIdSchema, conceptProgressSchema),
+  projectProgress: z.record(projectIdSchema, projectProgressSchema),
+  stageCheckpoints: z.record(stageIdSchema, stageCheckpointSchema),
+  studyLogs: z.array(studyLogSchema),
+});
+
 export type EvidenceKind = z.infer<typeof evidenceKindSchema>;
 export type MasteryEvidence = z.infer<typeof masteryEvidenceSchema>;
 export type MasteryConfirmation = z.infer<typeof masteryConfirmationSchema>;
 export type ConceptProgress = z.infer<typeof conceptProgressSchema>;
+export type ProjectProgress = z.infer<typeof projectProgressSchema>;
+export type StudyLog = z.infer<typeof studyLogSchema>;
+export type UserPreferences = z.infer<typeof userPreferencesSchema>;
+export type StageCheckpoint = z.infer<typeof stageCheckpointSchema>;
+export type LearningStateV1 = z.infer<typeof learningStateV1Schema>;

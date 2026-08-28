@@ -23,8 +23,13 @@ export type {
 export type {
   ConceptProgress,
   EvidenceKind,
+  LearningStateV1,
   MasteryConfirmation,
   MasteryEvidence,
+  ProjectProgress,
+  StageCheckpoint,
+  StudyLog,
+  UserPreferences,
 } from "@/lib/validation/progress-schemas";
 export type {
   ConceptId,

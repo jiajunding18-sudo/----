@@ -63,8 +63,10 @@ test("真实 Stage 0 内容可从 Knowledge、Roadmap 与 Projects 浏览", asyn
 
   await page.goto("/projects/");
   await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
-  await expect(page.getByText(/7 项可检查的验收标准/)).toBeVisible();
-  await page.getByRole("link", { name: /Pixel Lab/ }).click();
+  const pixelLabProject = page.locator('[data-project-id="project.pixel-lab"]');
+  await expect(pixelLabProject).toContainText("8 项正式 requirement");
+  await expect(pixelLabProject).toContainText("仍缺 7 项 hard 要求");
+  await pixelLabProject.getByRole("link", { name: /Pixel Lab/ }).click();
   await expect(page).toHaveURL(/\/projects\/pixel-lab\/$/);
   await expect(page.getByRole("heading", { level: 1, name: /Pixel Lab/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Stage 0 出口演练" })).toBeVisible();

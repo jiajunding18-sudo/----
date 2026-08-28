@@ -98,6 +98,9 @@ const validProject = {
   title: "像素实验室",
   level: "beginner",
   trackIds: ["track.common"],
+  problemStatement: "验证图像输入失败能否被明确诊断。",
+  capabilitySummary: ["建立可复现的图像输入检查。"],
+  realWorldApplications: ["视觉实验输入边界验证。"],
   conceptRequirements: [
     {
       conceptId: "testing.image-arrays",
@@ -409,6 +412,21 @@ describe("ProjectMeta schema", () => {
       executionPaths: [validProject.executionPaths[0]],
     };
     expect(projectMetaSchema.safeParse(noAlternative).success).toBe(false);
+  });
+
+  it("要求最小能力映射包含现实问题、能力与应用场景", () => {
+    expect(
+      projectMetaSchema.safeParse({
+        ...validProject,
+        capabilitySummary: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      projectMetaSchema.safeParse({
+        ...validProject,
+        realWorldApplications: [],
+      }).success,
+    ).toBe(false);
   });
 });
 

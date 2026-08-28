@@ -155,7 +155,11 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await stageOneB.locator("summary").click();
   await expect(stageOneB.locator("[data-project-gate-id]")).toHaveCount(1);
   await expect(stageOneB).toContainText("项目已规划 · 正文未发布");
-  await expect(stageOneB.getByRole("link", { name: /视觉数学实验册/ })).toHaveCount(0);
+  const plannedProjectLink = stageOneB.getByRole("link", { name: /视觉数学实验册/ });
+  await expect(plannedProjectLink).toHaveAttribute(
+    "href",
+    "/projects/#project-math-vision-lab",
+  );
 
   const stageTwo = focusedStageList.locator(
     '[data-overview-stage-id="stage.image-computing"]',

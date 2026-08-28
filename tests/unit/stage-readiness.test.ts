@@ -128,6 +128,9 @@ function project(conceptId: string): ProjectMeta {
     title: "Checkpoint 项目",
     level: "beginner",
     trackIds: ["track.common"],
+    problemStatement: "验证 Stage 项目门槛。",
+    capabilitySummary: ["识别项目知识与完成门槛。"],
+    realWorldApplications: ["Stage readiness 测试。"],
     conceptRequirements: [
       {
         conceptId,

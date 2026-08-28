@@ -492,6 +492,9 @@ interface ProjectMeta {
   title: string;
   level: "beginner" | "intermediate" | "advanced";
   trackIds: TrackId[];
+  problemStatement: string;
+  capabilitySummary: string[];
+  realWorldApplications: string[];
   conceptRequirements: ProjectConceptRequirement[];
   estimatedHours: { min: number; max: number };
   techStack: string[];
@@ -509,6 +512,8 @@ interface ProjectMeta {
 ```
 
 概念之间的 `hard` 前置统一由 `understood` 或 `mastered` 满足；项目可以通过 `minimumStatus` 对个别知识要求 `mastered`。项目完成不能自动把关联概念设为 `mastered`，只能成为用户可选择引用的证据候选。
+
+`capabilitySummary` 是 Project 级最小能力表达，不建立独立 Capability catalog、图或用户状态。`Concept → Project` 只从 `ProjectMeta.conceptRequirements` 建立反向索引；Project 所属 Stage 只从 `StageDefinition.projectGates` 与 requirement Concept 的 `stageId` 派生，不在 `ProjectMeta` 重复维护 `stageIds`。
 
 Stage→Track 关系只维护在 `StageDefinition.trackIds`；`TrackDefinition` 的阶段列表按 `stage.order` 派生，不双向保存。`categoryExitForTrackIds` 必须是 `trackIds` 的子集。资源关联也只从 `ConceptMeta.resourceIds` 与 `ProjectMeta.resources` 单向维护，`Resource` 不保存反向实体数组；Resources 页面和搜索索引使用构建期反向索引。
 

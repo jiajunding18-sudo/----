@@ -195,16 +195,16 @@ function StageProjectGates({
           {stage.projectGates.map(({ conditionSummary, project }) => (
             <li className="py-4" data-project-gate-id={project.id} key={project.id}>
               <div className="flex flex-wrap items-center gap-2">
-                {project.publicationStatus === "published" ? (
-                  <Link
-                    className="font-semibold text-[var(--color-accent)] underline decoration-[var(--color-border)] underline-offset-4"
-                    href={`/projects/${project.slug}/`}
-                  >
-                    {project.title}
-                  </Link>
-                ) : (
-                  <span className="font-semibold">{project.title}</span>
-                )}
+                <Link
+                  className="font-semibold text-[var(--color-accent)] underline decoration-[var(--color-border)] underline-offset-4"
+                  href={
+                    project.publicationStatus === "published"
+                      ? `/projects/${project.slug}/`
+                      : `/projects/#project-${project.slug}`
+                  }
+                >
+                  {project.title}
+                </Link>
                 <span className="rounded-full border border-[var(--color-border)] px-2.5 py-1 text-xs font-semibold text-[var(--color-muted)]">
                   {project.publicationStatus === "published"
                     ? "项目内容已发布"

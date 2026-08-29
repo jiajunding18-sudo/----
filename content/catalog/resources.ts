@@ -21,7 +21,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://docs.python.org/3/tutorial/",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.python-pathlib",
@@ -42,7 +42,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://docs.python.org/3/library/pathlib.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.python-venv",
@@ -63,7 +63,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://docs.python.org/3/library/venv.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.opencv-python-tutorials",
@@ -83,7 +83,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://docs.opencv.org/4.x/d6/d00/tutorial_py_root.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.pro-git",
@@ -104,7 +104,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://git-scm.com/book/en/v2",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.ubuntu-command-line",
@@ -125,7 +125,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://ubuntu.com/desktop/docs/en/latest/tutorial/the-linux-command-line-for-beginners/",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.npm-package-lock",
@@ -146,7 +146,7 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json/",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
   {
     id: "resource.github-readme",
@@ -166,6 +166,6 @@ export const resources: readonly Resource[] = [
     verification: "verified",
     url: "https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-27",
+    lastCheckedAt: "2026-08-29",
   },
 ];

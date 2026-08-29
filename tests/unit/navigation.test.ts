@@ -18,6 +18,7 @@ describe("navigation contract", () => {
     ]);
     expect(auxiliaryNavigation.map((item) => item.label)).toEqual([
       "Search",
+      "Resources",
       "Settings / Data",
     ]);
   });

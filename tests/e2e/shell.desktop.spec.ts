@@ -8,6 +8,7 @@ const destinations = [
   { href: "/projects/", label: "Projects", navigation: "主导航" },
   { href: "/study-log/", label: "Study Log", navigation: "主导航" },
   { href: "/search/", label: "Search", navigation: "top" },
+  { href: "/resources/", label: "Resources", navigation: "辅助导航" },
   { href: "/settings/data/", label: "Settings / Data", navigation: "辅助导航" },
 ] as const;
 

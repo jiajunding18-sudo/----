@@ -4,7 +4,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 import { NavigationList } from "./navigation-list";
-import { primaryNavigation, settingsNavigationItem } from "./navigation";
+import {
+  primaryNavigation,
+  resourcesNavigationItem,
+  settingsNavigationItem,
+} from "./navigation";
 
 export function MobileNavigation() {
   const pathname = usePathname();
@@ -114,7 +118,7 @@ export function MobileNavigation() {
           <div className="mt-auto border-t border-[var(--color-border)] pt-4">
             <NavigationList
               ariaLabel="移动端辅助导航"
-              items={[settingsNavigationItem]}
+              items={[resourcesNavigationItem, settingsNavigationItem]}
               onNavigate={closeNavigation}
               tone="light"
             />

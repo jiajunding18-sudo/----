@@ -122,6 +122,7 @@ export default nextConfig;
 │  │  ├─ knowledge/[slug]/page.tsx
 │  │  ├─ projects/page.tsx
 │  │  ├─ projects/[slug]/page.tsx
+│  │  ├─ resources/page.tsx
 │  │  ├─ study-log/page.tsx
 │  │  ├─ search/page.tsx
 │  │  └─ settings/data/page.tsx
@@ -133,6 +134,7 @@ export default nextConfig;
 │  │  ├─ progress/
 │  │  ├─ recommendations/
 │  │  ├─ projects/
+│  │  ├─ resources/
 │  │  ├─ search/
 │  │  ├─ graph/
 │  │  └─ study-log/

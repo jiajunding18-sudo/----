@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  getConceptResourceGuidance,
+  getProjectResourceGuidance,
+  getResourceCatalogView,
+} from "@/lib/content/site-content";
+
+describe("正式 Resource 派生模型", () => {
+  it("完整保留 8 个 catalog Resource 及学习指导字段", () => {
+    const view = getResourceCatalogView();
+
+    expect(view.resources).toHaveLength(8);
+    expect(
+      view.resources.every(
+        ({ concepts, projects, resource }) =>
+          resource.authorOrOrganization !== undefined &&
+          resource.reason.length > 0 &&
+          (resource.recommendedParts?.length ?? 0) > 0 &&
+          concepts.length + projects.length > 0,
+      ),
+    ).toBe(true);
+    expect(view.resources.map(({ resource }) => resource.id)).toEqual(
+      expect.arrayContaining([
+        "resource.python-tutorial",
+        "resource.python-pathlib",
+        "resource.python-venv",
+        "resource.opencv-python-tutorials",
+        "resource.pro-git",
+        "resource.ubuntu-command-line",
+        "resource.npm-package-lock",
+        "resource.github-readme",
+      ]),
+    );
+  });
+
+  it("从 Concept / Project 单向关系反推 Stage、Track 与关联实体", () => {
+    const view = getResourceCatalogView();
+    const pythonTutorial = view.resources.find(
+      ({ resource }) => resource.id === "resource.python-tutorial",
+    );
+    const pythonVenv = view.resources.find(
+      ({ resource }) => resource.id === "resource.python-venv",
+    );
+
+    expect(view.stages.map(({ id }) => id)).toEqual([
+      "stage.tooling-foundations",
+    ]);
+    expect(view.tracks.map(({ id }) => id)).toEqual(["track.common"]);
+    expect(pythonTutorial?.concepts.map(({ concept }) => concept.id)).toEqual(
+      expect.arrayContaining([
+        "tooling.dev-environment",
+        "tooling.python-core",
+        "tooling.python-modules",
+        "tooling.debugging",
+      ]),
+    );
+    expect(pythonVenv?.projects.map(({ project }) => project.id)).toEqual([
+      "project.pixel-lab",
+    ]);
+  });
+
+  it("Concept 推荐顺序和 Project 角色保持各自正式作者输入", () => {
+    const debugging = getConceptResourceGuidance("tooling.debugging");
+    const pixelLab = getProjectResourceGuidance("project.pixel-lab");
+
+    expect(
+      debugging.map(({ item, relation }) => ({
+        id: item.resource.id,
+        order:
+          relation.kind === "concept"
+            ? relation.recommendationOrder
+            : undefined,
+      })),
+    ).toEqual([
+      { id: "resource.python-tutorial", order: 1 },
+      { id: "resource.opencv-python-tutorials", order: 2 },
+    ]);
+    expect(pixelLab).toHaveLength(4);
+    expect(
+      pixelLab.every(
+        ({ relation }) =>
+          relation.kind === "project" && relation.reference.required,
+      ),
+    ).toBe(true);
+    expect(
+      pixelLab
+        .filter(({ relation }) => relation.kind === "project")
+        .map(({ relation }) =>
+          relation.kind === "project" ? relation.reference.role : undefined,
+        ),
+    ).toEqual(["documentation", "documentation", "reference", "documentation"]);
+  });
+});

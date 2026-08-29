@@ -1,7 +1,11 @@
 import Link from "next/link";
 
 import { NavigationList } from "./navigation-list";
-import { primaryNavigation, settingsNavigationItem } from "./navigation";
+import {
+  primaryNavigation,
+  resourcesNavigationItem,
+  settingsNavigationItem,
+} from "./navigation";
 
 export function DesktopSidebar() {
   return (
@@ -31,7 +35,7 @@ export function DesktopSidebar() {
       <div className="mt-auto border-t border-white/10 pt-4">
         <NavigationList
           ariaLabel="辅助导航"
-          items={[settingsNavigationItem]}
+          items={[resourcesNavigationItem, settingsNavigationItem]}
         />
       </div>
     </aside>

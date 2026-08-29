@@ -11,9 +11,14 @@ import type {
   ProjectManifestEntry,
 } from "./manifest-types";
 import { getConceptById, getConceptBySlug, getProjectBySlug } from "./manifest-reader";
-import type { Resource, StageDefinition, TrackDefinition } from "@/types";
+import type { StageDefinition, TrackDefinition } from "@/types";
 import type { ProgressCatalog } from "@/features/progress/progress-domain";
 import type { NextStepCatalog } from "@/features/recommendations";
+import {
+  buildResourceCatalogView,
+  getConceptResourceGuidance as buildConceptResourceGuidance,
+  getProjectResourceGuidance as buildProjectResourceGuidance,
+} from "@/features/resources/resource-model";
 
 export const stageZeroId = "stage.tooling-foundations";
 export const pixelLabProjectId = "project.pixel-lab";
@@ -130,11 +135,16 @@ export function getTracks(trackIds: readonly string[]): readonly DeepReadonly<Tr
   });
 }
 
-export function getResources(resourceIds: readonly string[]): readonly DeepReadonly<Resource>[] {
-  return resourceIds.flatMap((resourceId) => {
-    const resource = contentManifest.resources.find(({ id }) => id === resourceId);
-    return resource ? [resource] : [];
-  });
+export function getResourceCatalogView() {
+  return buildResourceCatalogView(contentManifest);
+}
+
+export function getConceptResourceGuidance(conceptId: string) {
+  return buildConceptResourceGuidance(contentManifest, conceptId);
+}
+
+export function getProjectResourceGuidance(projectId: string) {
+  return buildProjectResourceGuidance(contentManifest, projectId);
 }
 
 export async function loadConceptContent(slug: string) {

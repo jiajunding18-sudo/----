@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DocumentContext } from "@/components/content/document-context";
-import { ResourceLinks } from "@/components/content/resource-links";
+import { ResourceGuidanceList } from "@/features/resources";
 import {
   getProjectCatalogItem,
   getProjectNextProjects,
@@ -17,7 +17,7 @@ import {
   getConcepts,
   getPublishedProjectBySlug,
   getPublishedProjectSlugs,
-  getResources,
+  getProjectResourceGuidance,
   getTracks,
   loadProjectContent,
 } from "@/lib/content/site-content";
@@ -61,7 +61,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const tracks = getTracks(project.trackIds);
   const concepts = getConceptsForProject(project);
   const evidenceConcepts = getConcepts(project.evidenceConceptIds);
-  const resources = getResources(project.resources.map(({ resourceId }) => resourceId));
+  const resources = getProjectResourceGuidance(project.id);
   const nextProjects = getProjectNextProjects(project.id);
 
   return (
@@ -90,7 +90,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         evidenceConcepts={evidenceConcepts}
         project={project}
       />
-      <ResourceLinks resources={resources} />
+      <ResourceGuidanceList
+        description="这里只显示 ProjectMeta.resources 中真实声明的关系，并保留 documentation、dataset、course、repository 或 reference 角色。"
+        items={resources}
+        title="项目资源"
+      />
       {nextProjects.length > 0 ? (
         <section
           aria-labelledby="next-projects-title"

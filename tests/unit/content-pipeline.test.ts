@@ -194,7 +194,7 @@ function createCatalogInput({
   projects = [],
   tracks = [createTrack()],
   stages,
-  resources = [createResource()],
+  resources,
 }: {
   readonly concepts: readonly LoadedConcept[];
   readonly projects?: readonly LoadedProject[];
@@ -215,7 +215,21 @@ function createCatalogInput({
           : "planned",
       }),
     ];
-  return { concepts, projects, tracks, stages: resolvedStages, resources };
+  const resolvedResources =
+    resources ??
+    (concepts.some(({ meta }) => meta.resourceIds.includes("resource.fixture")) ||
+    projects.some(({ meta }) =>
+      meta.resources.some(({ resourceId }) => resourceId === "resource.fixture"),
+    )
+      ? [createResource()]
+      : []);
+  return {
+    concepts,
+    projects,
+    tracks,
+    stages: resolvedStages,
+    resources: resolvedResources,
+  };
 }
 
 function toMdx(frontmatter: object, body = "# Fixture body") {
@@ -623,6 +637,17 @@ describe("manifest 与跨实体校验", () => {
         createCatalogInput({ concepts: [loadedConcept(concept)] }),
       ),
     ).toThrow(/stageId .* Stage 引用不存在的 ID "stage\.missing"/);
+  });
+
+  it("拒绝没有 Concept 或 Project 正式关系的孤立 Resource", () => {
+    expect(() =>
+      buildContentManifest(
+        createCatalogInput({
+          concepts: [],
+          resources: [createResource()],
+        }),
+      ),
+    ).toThrow(/Resource 必须由至少一个 Concept\.resourceIds 或 Project\.resources 正式关联/);
   });
 
   it("Stage 引用不存在的 Track 会失败", () => {

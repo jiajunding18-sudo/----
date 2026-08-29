@@ -39,6 +39,11 @@ export const auxiliaryNavigation = [
     description: "全局搜索",
   },
   {
+    href: "/resources/",
+    label: "Resources",
+    description: "精选学习资源",
+  },
+  {
     href: "/settings/data/",
     label: "Settings / Data",
     description: "设置与本地数据",
@@ -46,7 +51,8 @@ export const auxiliaryNavigation = [
 ] as const satisfies readonly NavigationItem[];
 
 export const searchNavigationItem = auxiliaryNavigation[0];
-export const settingsNavigationItem = auxiliaryNavigation[1];
+export const resourcesNavigationItem = auxiliaryNavigation[1];
+export const settingsNavigationItem = auxiliaryNavigation[2];
 
 function normalizePathname(pathname: string): string {
   if (pathname === "/") {

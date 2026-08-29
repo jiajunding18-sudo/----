@@ -530,9 +530,28 @@ function validateStageReferences({
 function validateResourceReferences(
   resources: readonly Resource[],
   resourceIds: ReadonlySet<string>,
+  concepts: readonly LoadedConcept[],
+  projects: readonly LoadedProject[],
   issues: ContentValidationIssue[],
 ) {
+  const referencedResourceIds = new Set([
+    ...concepts.flatMap(({ meta }) => meta.resourceIds),
+    ...projects.flatMap(({ meta }) =>
+      meta.resources.map(({ resourceId }) => resourceId),
+    ),
+  ]);
+
   resources.forEach((resource, index) => {
+    if (!referencedResourceIds.has(resource.id)) {
+      issues.push({
+        sourcePath: "content/catalog/resources.ts",
+        fieldPath: `${index}.id`,
+        entityId: resource.id,
+        message:
+          "Resource 必须由至少一个 Concept.resourceIds 或 Project.resources 正式关联",
+      });
+    }
+
     if (
       resource.verification === "broken" &&
       resource.replacementResourceId &&
@@ -893,7 +912,13 @@ export function validateContentCatalog(
     projectIds,
     issues,
   });
-  validateResourceReferences(input.resources, resourceIds, issues);
+  validateResourceReferences(
+    input.resources,
+    resourceIds,
+    input.concepts,
+    input.projects,
+    issues,
+  );
   validateTrackGroups(input.tracks, issues);
   validateCatalogOrders({
     stages: input.stages,

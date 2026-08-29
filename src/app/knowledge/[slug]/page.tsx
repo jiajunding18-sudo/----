@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { DocumentContext } from "@/components/content/document-context";
-import { ResourceLinks } from "@/components/content/resource-links";
 import { ConceptNavigation } from "@/features/knowledge/concept-navigation";
 import { ConceptTableOfContents } from "@/features/knowledge/concept-table-of-contents";
 import { ConceptProgressPanel } from "@/features/progress/concept-progress-panel";
 import { ConceptPersonalPanel } from "@/features/progress/concept-personal-panel";
+import { ResourceGuidanceList } from "@/features/resources";
 import {
   ConceptProjectUsage,
   getConceptProjectUsage,
@@ -15,8 +15,8 @@ import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content"
 import {
   getPublishedConceptBySlug,
   getPublishedConceptSlugs,
+  getConceptResourceGuidance,
   getProgressConceptDefinition,
-  getResources,
   loadConceptContent,
 } from "@/lib/content/site-content";
 
@@ -55,7 +55,7 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
   if (!knowledgeConcept) {
     notFound();
   }
-  const resources = getResources(concept.resourceIds);
+  const resources = getConceptResourceGuidance(concept.id);
   const progressConcept = getProgressConceptDefinition(concept.id);
   if (!progressConcept) {
     notFound();
@@ -96,7 +96,10 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
           <div className="learning-document">
             <ConceptContent />
           </div>
-          <ResourceLinks resources={resources} />
+          <ResourceGuidanceList
+            description="顺序直接来自本 Concept 的正式 resourceIds；先看推荐理由和指定章节，再决定是否打开外部材料。"
+            items={resources}
+          />
         </article>
         <ConceptTableOfContents headings={concept.headings} variant="desktop" />
       </div>

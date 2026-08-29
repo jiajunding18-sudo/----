@@ -22,6 +22,7 @@
     "pretest:unit": "npm run content:build",
     "test:unit": "vitest run",
     "test:e2e": "npm run build && playwright test",
+    "links:check": "tsx scripts/check-links.ts",
     "serve:static": "node scripts/serve-static.mjs",
     "check": "npm run content:check && npm run typecheck && npm run lint && npm run test:unit && npm run build",
     "check:full": "npm run check && playwright test"

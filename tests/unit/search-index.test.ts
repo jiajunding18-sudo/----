@@ -80,9 +80,16 @@ describe("构建期 SearchDocument", () => {
     );
     expect(pythonTutorial).toMatchObject({
       aliases: ["Python 官方教程"],
+      authorOrOrganization: "Python Software Foundation",
       external: true,
+      resourceType: "official-doc",
       status: "verified",
     });
+    expect(pythonTutorial?.summary).toContain("权威说明");
+    expect(pythonTutorial?.body).toContain("More Control Flow Tools");
+    expect(pythonTutorial?.keywords).toEqual(
+      expect.arrayContaining(["official-doc", "beginner", "essential"]),
+    );
     expect(pythonTutorial?.relatedTitles.length).toBeGreaterThan(0);
   });
 

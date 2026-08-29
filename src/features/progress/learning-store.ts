@@ -1,6 +1,13 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import {
+  setProjectEnvironmentCheck as setProjectEnvironmentCheckMutation,
+  startProjectProgress,
+  type ProjectProgressMutationResult,
+  type StartProjectInput,
+} from "@/features/projects/project-progress";
+
+import {
   addMasteryEvidence,
   confirmConceptMastery,
   downgradeConcept,
@@ -45,6 +52,17 @@ export type LearningStoreActionResult =
   | {
       readonly ok: false;
       readonly code: "persistence-blocked" | "persistence-error";
+      readonly message: string;
+    };
+
+export type ProjectLearningStoreActionResult =
+  | ProjectProgressMutationResult
+  | {
+      readonly ok: false;
+      readonly code:
+        | "missing-project"
+        | "persistence-blocked"
+        | "persistence-error";
       readonly message: string;
     };
 
@@ -111,6 +129,15 @@ export interface LearningStoreState {
     conceptId: string,
     userDifficulty: UserDifficulty | undefined,
   ) => Promise<LearningStoreActionResult>;
+  startProject: (
+    projectId: string,
+    input: StartProjectInput,
+  ) => Promise<ProjectLearningStoreActionResult>;
+  setProjectEnvironmentCheck: (
+    projectId: string,
+    requirementId: string,
+    checked: boolean,
+  ) => Promise<ProjectLearningStoreActionResult>;
   createBackup: (localDate: string) => BackupCreationResult;
   recordBackupCreated: (timestamp: string) => Promise<DataManagementActionResult>;
   prepareImport: (raw: string, mode: ImportMode) => PrepareImportResult;
@@ -147,6 +174,7 @@ export function createLearningStore({
   now = () => new Date().toISOString(),
 }: CreateLearningStoreOptions): LearningStoreApi {
   const conceptsById = new Map(catalog.concepts.map((concept) => [concept.id, concept]));
+  const projectsById = new Map(catalog.projects.map((project) => [project.id, project]));
   const initialState = () => createInitialLearningState(catalog.tracks, now());
 
   return createStore<LearningStoreState>()((set, get) => {
@@ -282,6 +310,38 @@ export function createLearningStore({
           ok: false,
           code: "persistence-error",
           message: `未能保存到浏览器，当前学习数据没有改变：${persistenceError}`,
+        };
+      }
+      return mutation;
+    }
+
+    async function commitProjectMutation(
+      projectId: string,
+      mutation: ProjectProgressMutationResult,
+    ): Promise<ProjectLearningStoreActionResult> {
+      if (!mutation.ok || !mutation.changed) return mutation;
+      if (get().persistenceStatus === "blocked") {
+        return {
+          ok: false,
+          code: "persistence-blocked",
+          message: "原始本地数据需要恢复处理；为避免覆盖，当前已禁用持久化写入。",
+        };
+      }
+
+      const current = get().learningState;
+      const nextState = learningStateV1Schema.parse({
+        ...current,
+        projectProgress: {
+          ...current.projectProgress,
+          [projectId]: mutation.progress,
+        },
+      });
+      const persistenceError = await persist(nextState);
+      if (persistenceError) {
+        return {
+          ok: false,
+          code: "persistence-error",
+          message: `未能保存到浏览器，当前项目数据没有改变：${persistenceError}`,
         };
       }
       return mutation;
@@ -457,6 +517,47 @@ export function createLearningStore({
           setConceptUserDifficulty(
             get().learningState.conceptProgress[conceptId],
             userDifficulty,
+            now(),
+          ),
+        );
+      },
+
+      startProject: async (projectId, input) => {
+        const project = projectsById.get(projectId);
+        if (!project) {
+          return {
+            ok: false,
+            code: "missing-project",
+            message: `当前内容 catalog 不存在 Project ${projectId}。`,
+          };
+        }
+        const current = get().learningState;
+        return commitProjectMutation(
+          projectId,
+          startProjectProgress(project, current, input, now()),
+        );
+      },
+
+      setProjectEnvironmentCheck: async (
+        projectId,
+        requirementId,
+        checked,
+      ) => {
+        const project = projectsById.get(projectId);
+        if (!project) {
+          return {
+            ok: false,
+            code: "missing-project",
+            message: `当前内容 catalog 不存在 Project ${projectId}。`,
+          };
+        }
+        return commitProjectMutation(
+          projectId,
+          setProjectEnvironmentCheckMutation(
+            project,
+            get().learningState.projectProgress[projectId],
+            requirementId,
+            checked,
             now(),
           ),
         );

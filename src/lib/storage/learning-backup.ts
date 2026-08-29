@@ -36,6 +36,7 @@ export interface ImportPreview {
   readonly savedAt: string;
   readonly exportedAt: string;
   readonly conceptRecordCount: number;
+  readonly projectRecordCount: number;
   readonly understoodCount: number;
   readonly masteredCount: number;
   readonly orphanConceptIds: readonly string[];
@@ -271,6 +272,9 @@ export function prepareLearningStateImport(options: {
         savedAt: migrated.value.savedAt,
         exportedAt: migrated.value.exportedAt,
         conceptRecordCount: records.length,
+        projectRecordCount: Object.keys(
+          migrated.value.payload.projectProgress,
+        ).length,
         understoodCount: records.filter(
           ({ status }) => status === "understood" || status === "mastered",
         ).length,

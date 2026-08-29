@@ -37,7 +37,23 @@ const catalog: ProgressCatalog = {
       ],
     },
   ],
-  projectIds: ["project.fixture"],
+  projects: [
+    {
+      id: "project.fixture",
+      publicationStatus: "published",
+      conceptRequirements: [
+        {
+          conceptId: "concept.foundation",
+          kind: "hard",
+          minimumStatus: "understood",
+        },
+      ],
+      environmentRequirements: [{ id: "environment.fixture", required: true }],
+      executionPaths: [
+        { id: "execution.fixture", requirementIds: ["environment.fixture"] },
+      ],
+    },
+  ],
   stageIds: ["stage.test"],
   tracks: [
     { id: "track.common", kind: "common", defaultGoal: "master" },
@@ -191,6 +207,116 @@ describe("LocalStorage adapter 与 hydration", () => {
     expect(storage.getItem(LEARNING_STATE_STORAGE_KEY)).toBeNull();
   });
 
+  it("Project 只能主动开始，并在刷新后恢复执行路径、下一动作与环境检查", async () => {
+    const storage = new MemoryStorage();
+    const firstStore = makeStore(storage);
+    await firstStore.getState().hydrate();
+    expect(firstStore.getState().learningState.projectProgress).toEqual({});
+
+    expect(
+      await firstStore.getState().startProject("project.fixture", {
+        selectedExecutionPathId: "execution.fixture",
+        nextAction: "  创建隔离环境  ",
+        environmentChecks: {},
+        confirmPrerequisiteOverride: false,
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: "confirmation-required",
+      relatedIds: ["concept.foundation"],
+    });
+    expect(firstStore.getState().learningState.projectProgress).toEqual({});
+
+    expect(
+      await firstStore.getState().startProject("project.fixture", {
+        selectedExecutionPathId: "execution.fixture",
+        nextAction: "  创建隔离环境  ",
+        environmentChecks: {},
+        confirmPrerequisiteOverride: true,
+      }),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(firstStore.getState().learningState).toMatchObject({
+      conceptProgress: {},
+      projectProgress: {
+        "project.fixture": {
+          status: "in_progress",
+          nextAction: "创建隔离环境",
+          selectedExecutionPathId: "execution.fixture",
+          startedAt: timestamp,
+          prerequisiteOverride: {
+            missingRequirementConceptIds: ["concept.foundation"],
+          },
+        },
+      },
+    });
+
+    expect(
+      await firstStore
+        .getState()
+        .setProjectEnvironmentCheck(
+          "project.fixture",
+          "environment.fixture",
+          true,
+        ),
+    ).toMatchObject({ ok: true, changed: true });
+
+    const refreshedStore = makeStore(storage);
+    await refreshedStore.getState().hydrate();
+    expect(
+      refreshedStore.getState().learningState.projectProgress[
+        "project.fixture"
+      ],
+    ).toMatchObject({
+      status: "in_progress",
+      environmentChecks: { "environment.fixture": true },
+      nextAction: "创建隔离环境",
+    });
+    expect(refreshedStore.getState().learningState.conceptProgress).toEqual({});
+  });
+
+  it("未知、非法路径与未发布 Project 都不能建立 ProjectProgress", async () => {
+    const storage = new MemoryStorage();
+    const store = createLearningStore({
+      adapter: new LocalStorageLearningStateAdapter(() => storage),
+      catalog: {
+        ...catalog,
+        projects: [
+          ...catalog.projects,
+          {
+            ...catalog.projects[0],
+            id: "project.draft",
+            publicationStatus: "draft",
+          },
+        ],
+      },
+      contentVersion: "2026.08.28",
+      now: () => timestamp,
+    });
+    await store.getState().hydrate();
+    const input = {
+      selectedExecutionPathId: "execution.missing",
+      nextAction: "开始",
+      environmentChecks: {},
+      confirmPrerequisiteOverride: true,
+    } as const;
+
+    expect(await store.getState().startProject("project.missing", input)).toMatchObject({
+      ok: false,
+      code: "missing-project",
+    });
+    expect(await store.getState().startProject("project.fixture", input)).toMatchObject({
+      ok: false,
+      code: "invalid-execution-path",
+    });
+    expect(
+      await store.getState().startProject("project.draft", {
+        ...input,
+        selectedExecutionPathId: "execution.fixture",
+      }),
+    ).toMatchObject({ ok: false, code: "project-not-published" });
+    expect(store.getState().learningState.projectProgress).toEqual({});
+  });
+
   it("坏 JSON 不抛出，并保留 raw 诊断信息", async () => {
     const storage = new MemoryStorage();
     storage.setItem(LEARNING_STATE_STORAGE_KEY, "{broken");
@@ -291,6 +417,83 @@ describe("LocalStorage adapter 与 hydration", () => {
     expect(
       store.getState().learningState.conceptProgress["concept.foundation"],
     ).toBeUndefined();
+  });
+
+  it("orphan ProjectProgress 被保留并报告，已知 Project 的非法路径进入写保护", async () => {
+    const storage = new MemoryStorage();
+    const state = createInitialLearningState(catalog.tracks, timestamp);
+    const orphanProgress = {
+      status: "not_started" as const,
+      note: "历史 Project",
+      environmentChecks: {},
+      acceptance: {},
+      deliverables: [],
+      unverifiedAssumptions: [],
+      updatedAt: timestamp,
+    };
+    const orphanEnvelope = createPersistedEnvelope(
+      {
+        ...state,
+        projectProgress: { "project.retired": orphanProgress },
+      },
+      "2026.08.28",
+      2,
+      timestamp,
+    );
+    storage.setItem(
+      LEARNING_STATE_STORAGE_KEY,
+      JSON.stringify(orphanEnvelope),
+    );
+
+    const orphanStore = makeStore(storage);
+    await orphanStore.getState().hydrate();
+    expect(orphanStore.getState().orphanProjectIds).toEqual([
+      "project.retired",
+    ]);
+    expect(
+      orphanStore.getState().learningState.projectProgress["project.retired"],
+    ).toEqual(orphanProgress);
+
+    const invalidEnvelope = createPersistedEnvelope(
+      {
+        ...state,
+        projectProgress: {
+          "project.fixture": {
+            status: "in_progress",
+            note: "",
+            nextAction: "继续",
+            selectedExecutionPathId: "execution.retired",
+            environmentChecks: {},
+            acceptance: {},
+            deliverables: [],
+            unverifiedAssumptions: [],
+            startedAt: timestamp,
+            updatedAt: timestamp,
+          },
+        },
+      },
+      "2026.08.28",
+      3,
+      timestamp,
+    );
+    const invalidRaw = JSON.stringify(invalidEnvelope);
+    storage.setItem(LEARNING_STATE_STORAGE_KEY, invalidRaw);
+
+    const invalidStore = makeStore(storage);
+    await invalidStore.getState().hydrate();
+    expect(invalidStore.getState()).toMatchObject({
+      persistenceStatus: "blocked",
+      rawRecoveryData: invalidRaw,
+    });
+    expect(
+      await invalidStore.getState().startProject("project.fixture", {
+        selectedExecutionPathId: "execution.fixture",
+        nextAction: "不能覆盖",
+        environmentChecks: {},
+        confirmPrerequisiteOverride: true,
+      }),
+    ).toMatchObject({ ok: false, code: "persistence-blocked" });
+    expect(storage.getItem(LEARNING_STATE_STORAGE_KEY)).toBe(invalidRaw);
   });
 
   it("clear 精确删除固定 storage key", async () => {

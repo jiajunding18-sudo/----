@@ -8,6 +8,7 @@ import {
   getProjectCatalogItem,
   getProjectNextProjects,
   ProjectCapabilityOverview,
+  ProjectExecutionPanel,
   ProjectKnowledgePanel,
 } from "@/features/projects";
 import {
@@ -74,6 +75,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         eyebrow="Project · published（正式内容）"
       />
       <ProjectCapabilityOverview item={projectItem} />
+      <ProjectExecutionPanel
+        concepts={concepts.map(({ concept }) => concept)}
+        project={project}
+      />
       <ProjectKnowledgePanel project={project} requirements={concepts} />
       <div className="learning-document">
         <ProjectContent />

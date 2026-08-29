@@ -41,7 +41,23 @@ const catalog: ProgressCatalog = {
       ],
     },
   ],
-  projectIds: ["project.fixture"],
+  projects: [
+    {
+      id: "project.fixture",
+      publicationStatus: "published",
+      conceptRequirements: [
+        {
+          conceptId: "concept.foundation",
+          kind: "hard",
+          minimumStatus: "understood",
+        },
+      ],
+      environmentRequirements: [{ id: "environment.fixture", required: true }],
+      executionPaths: [
+        { id: "execution.fixture", requirementIds: ["environment.fixture"] },
+      ],
+    },
+  ],
   stageIds: ["stage.test"],
   tracks: [
     { id: "track.common", kind: "common", defaultGoal: "master" },
@@ -256,6 +272,58 @@ describe("Learning OS JSON 备份", () => {
       favorite: true,
       userDifficulty: 5,
     });
+  });
+
+  it("导出 → reset → 导入后恢复 ProjectProgress，且不改写 ConceptProgress", async () => {
+    const storage = new MemoryStorage();
+    const source = makeStore(storage);
+    await source.getState().hydrate();
+
+    expect(
+      await source.getState().startProject("project.fixture", {
+        selectedExecutionPathId: "execution.fixture",
+        nextAction: "创建项目目录",
+        environmentChecks: { "environment.fixture": true },
+        confirmPrerequisiteOverride: true,
+      }),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(source.getState().learningState.conceptProgress).toEqual({});
+
+    const backup = source.getState().createBackup("2026-08-28");
+    expect(backup.ok).toBe(true);
+    if (!backup.ok) return;
+    expect(
+      backup.envelope.payload.projectProgress["project.fixture"],
+    ).toMatchObject({
+      status: "in_progress",
+      selectedExecutionPathId: "execution.fixture",
+      nextAction: "创建项目目录",
+      environmentChecks: { "environment.fixture": true },
+      prerequisiteOverride: {
+        missingRequirementConceptIds: ["concept.foundation"],
+      },
+    });
+
+    expect((await source.getState().resetLearningData(true)).ok).toBe(true);
+    expect(source.getState().learningState.projectProgress).toEqual({});
+
+    const prepared = source.getState().prepareImport(backup.json, "replace");
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect((await source.getState().applyImport(prepared.value, true)).ok).toBe(
+      true,
+    );
+
+    const refreshed = makeStore(storage);
+    await refreshed.getState().hydrate();
+    expect(
+      refreshed.getState().learningState.projectProgress["project.fixture"],
+    ).toMatchObject({
+      status: "in_progress",
+      selectedExecutionPathId: "execution.fixture",
+      nextAction: "创建项目目录",
+    });
+    expect(refreshed.getState().learningState.conceptProgress).toEqual({});
   });
 
   it("缺少可选 userDifficulty 的旧正式 v1 备份仍可安全恢复", () => {

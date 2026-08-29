@@ -4,4 +4,6 @@ export * from "./project-catalog-explorer";
 export * from "./project-knowledge-panel";
 export * from "./project-model";
 export * from "./project-readiness";
+export * from "./project-progress";
+export * from "./project-execution-panel";
 export * from "./concept-project-usage";

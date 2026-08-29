@@ -6,8 +6,13 @@ import {
   getNextProjects,
   getProjectsForConcept,
   getProjectKnowledgeReadiness,
+  getProjectReadiness,
 } from "@/features/projects";
-import type { ConceptProgress } from "@/types";
+import {
+  createInitialLearningState,
+} from "@/lib/storage";
+import { getProgressCatalog } from "@/lib/content/site-content";
+import type { ConceptProgress, ProjectProgress } from "@/types";
 
 function understoodProgress(conceptIds: readonly string[]) {
   return Object.fromEntries(
@@ -107,6 +112,73 @@ describe("Phase 5A Project 能力目录", () => {
     expect(ready.ready).toBe(true);
     expect(ready.missingHard).toEqual([]);
     expect(ready.missingRecommended).toHaveLength(1);
+  });
+
+  it("Knowledge 与 Environment readiness 分离，并按执行路径隔离必需环境", () => {
+    const project = contentManifest.projects.find(
+      ({ id }) => id === "project.pixel-lab",
+    );
+    if (!project) throw new Error("测试需要 Pixel Lab");
+    const state = createInitialLearningState(
+      getProgressCatalog().tracks,
+      "2026-08-29T00:00:00.000Z",
+    );
+
+    expect(getProjectReadiness(project, state)).toMatchObject({
+      knowledgeReady: false,
+      environmentReady: null,
+      missingHardConceptIds: expect.arrayContaining([
+        "tooling.computer-files",
+        "tooling.reproducibility",
+      ]),
+      missingRecommendedConceptIds: ["tooling.linux-basics"],
+      pathReadiness: [
+        {
+          pathId: "execution.pixel-lab.phone-photo",
+          ready: false,
+          missingEnvironmentRequirementIds: [
+            "environment.pixel-lab.python",
+            "environment.pixel-lab.opencv",
+          ],
+        },
+        {
+          pathId: "execution.pixel-lab.generated-image",
+          ready: false,
+          missingEnvironmentRequirementIds: [
+            "environment.pixel-lab.python",
+            "environment.pixel-lab.opencv",
+          ],
+        },
+      ],
+    });
+
+    const inProgress: ProjectProgress = {
+      status: "in_progress",
+      note: "",
+      nextAction: "安装 OpenCV",
+      selectedExecutionPathId: "execution.pixel-lab.phone-photo",
+      environmentChecks: {
+        "environment.pixel-lab.python": true,
+        "environment.pixel-lab.phone-camera": false,
+      },
+      acceptance: {},
+      deliverables: [],
+      unverifiedAssumptions: [],
+      startedAt: "2026-08-29T00:00:00.000Z",
+      updatedAt: "2026-08-29T00:00:00.000Z",
+    };
+    const selected = getProjectReadiness(project, {
+      ...state,
+      projectProgress: { [project.id]: inProgress },
+    });
+    expect(selected).toMatchObject({
+      environmentReady: false,
+      selectedExecutionPathId: "execution.pixel-lab.phone-photo",
+      missingEnvironmentRequirementIds: ["environment.pixel-lab.opencv"],
+    });
+    expect(selected.missingEnvironmentRequirementIds).not.toContain(
+      "environment.pixel-lab.phone-camera",
+    );
   });
 
   it("Next Projects 只沿后续 Stage projectGates 派生", () => {

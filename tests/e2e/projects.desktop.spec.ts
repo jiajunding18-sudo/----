@@ -24,6 +24,31 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(true);
 }
 
+async function startPixelLabWithGaps(page: Page) {
+  await page.goto("/projects/pixel-lab/");
+  await page
+    .getByRole("radio", { name: /程序生成的 PGM 测试图/ })
+    .check();
+  await page.getByRole("checkbox", { name: /Python 与项目内 venv/ }).check();
+  await page.getByRole("checkbox", { name: /opencv-python/ }).check();
+  await page
+    .getByLabel("第一项下一动作")
+    .fill("创建项目目录并记录 Python 解释器路径");
+  const override = page.getByRole("checkbox", {
+    name: /我理解仍缺少上述 hard 前置能力/,
+  });
+  await override.focus();
+  await page.keyboard.press("Space");
+  const start = page.getByRole("button", {
+    name: "确认带缺口开始 Project",
+  });
+  await start.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-project-action-message]")).toContainText(
+    "Project 已开始",
+  );
+}
+
 test("Projects 从 manifest 浏览 13 项能力路线并按正式维度筛选", async ({
   page,
 }) => {
@@ -46,6 +71,8 @@ test("Projects 从 manifest 浏览 13 项能力路线并按正式维度筛选", 
   await status.selectOption("draft");
   await expect(page.locator("[data-project-id]")).toHaveCount(12);
   await expect(page.locator('[data-project-status="published"]')).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "查看正式项目内容" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /开始 Project/ })).toHaveCount(0);
 
   await status.selectOption("all");
   await page.getByLabel("Stage").selectOption("stage.planar-vision");
@@ -101,6 +128,142 @@ test("Pixel Lab 显示能力、应用、Required Knowledge 与实时 readiness",
   await expect(page.getByText("已具备开始条件", { exact: true })).toBeVisible();
   await expect(page.locator('[data-requirement-satisfied="true"]')).toHaveCount(8);
   await expectNoHorizontalOverflow(page);
+});
+
+test("Pixel Lab 必须主动确认带缺口开始，并在刷新后保持正式执行状态", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/projects/pixel-lab/");
+  await expect(page.locator("[data-project-execution]")).toHaveAttribute(
+    "data-project-progress-status",
+    "not_started",
+  );
+  await expect(page.locator("[data-environment-readiness]")).toHaveCount(0);
+
+  await page
+    .getByRole("radio", { name: /程序生成的 PGM 测试图/ })
+    .check();
+  await expect(page.locator('[data-environment-readiness="not-ready"]')).toBeVisible();
+  await page.getByRole("checkbox", { name: /Python 与项目内 venv/ }).check();
+  await page.getByRole("checkbox", { name: /opencv-python/ }).check();
+  await expect(page.locator('[data-environment-readiness="ready"]')).toBeVisible();
+  await page
+    .getByLabel("第一项下一动作")
+    .fill("创建项目目录并记录 Python 解释器路径");
+  await expect(
+    page.getByRole("button", { name: "确认带缺口开始 Project" }),
+  ).toBeDisabled();
+
+  const override = page.getByRole("checkbox", {
+    name: /我理解仍缺少上述 hard 前置能力/,
+  });
+  await override.focus();
+  await page.keyboard.press("Space");
+  const start = page.getByRole("button", {
+    name: "确认带缺口开始 Project",
+  });
+  await start.focus();
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("[data-project-execution]")).toHaveAttribute(
+    "data-project-progress-status",
+    "in_progress",
+  );
+  await expect(page.getByRole("heading", { name: "当前正在执行" })).toBeVisible();
+  await expect(page.locator("[data-project-started-at]")).toBeVisible();
+  await expect(page.locator("[data-project-next-action]")).toHaveText(
+    "创建项目目录并记录 Python 解释器路径",
+  );
+  await expect(page.locator("[data-project-hard-gaps] li")).toHaveCount(7);
+  await expect(page.locator('[data-environment-readiness="ready"]')).toBeVisible();
+  const stored = await page.evaluate(() =>
+    JSON.parse(
+      window.localStorage.getItem("mv-learning-os:learning-state") ?? "null",
+    ),
+  );
+  expect(stored.payload).toMatchObject({
+    conceptProgress: {},
+    projectProgress: {
+      "project.pixel-lab": {
+        status: "in_progress",
+        selectedExecutionPathId: "execution.pixel-lab.generated-image",
+        prerequisiteOverride: {
+          missingRequirementConceptIds: expect.arrayContaining([
+            "tooling.computer-files",
+            "tooling.reproducibility",
+          ]),
+        },
+      },
+    },
+  });
+
+  await page.reload();
+  await expect(page.locator("[data-project-execution]")).toHaveAttribute(
+    "data-project-progress-status",
+    "in_progress",
+  );
+  await expect(page.locator("[data-project-next-action]")).toHaveText(
+    "创建项目目录并记录 Python 解释器路径",
+  );
+  await page.goto("/");
+  await expect(
+    page.locator('[data-dashboard-next-step="recommendation"]'),
+  ).toHaveAttribute("data-next-step-target-id", "tooling.computer-files");
+  expect(browserErrors).toEqual([]);
+});
+
+test("ProjectProgress 经 Export → Reset → Import 后恢复", async ({ page }) => {
+  await startPixelLabWithGaps(page);
+  await page.goto("/settings/data/");
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出 JSON 备份" }).click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const backupBuffer = Buffer.concat(chunks);
+  const exported = JSON.parse(backupBuffer.toString("utf8"));
+  expect(exported.payload.projectProgress["project.pixel-lab"]).toMatchObject({
+    status: "in_progress",
+    selectedExecutionPathId: "execution.pixel-lab.generated-image",
+  });
+
+  await page.getByRole("button", { name: "准备清空学习记录" }).click();
+  await page
+    .getByRole("checkbox", { name: /明确确认清空学习记录/ })
+    .check();
+  await page.getByRole("button", { name: "确认清空学习记录" }).click();
+  await page.goto("/projects/pixel-lab/");
+  await expect(page.locator("[data-project-execution]")).toHaveAttribute(
+    "data-project-progress-status",
+    "not_started",
+  );
+
+  await page.goto("/settings/data/");
+  await page.getByRole("radio", { name: /替换恢复/ }).check();
+  await page.getByLabel("选择 Learning OS JSON 备份").setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: backupBuffer,
+  });
+  await expect(page.locator("[data-import-preview]")).toContainText(
+    "1 个 Project 的执行记录",
+  );
+  await page
+    .getByRole("checkbox", { name: /明确确认替换当前学习状态/ })
+    .check();
+  await page.getByRole("button", { name: "确认替换并恢复" }).click();
+
+  await page.goto("/projects/pixel-lab/");
+  await expect(page.locator("[data-project-execution]")).toHaveAttribute(
+    "data-project-progress-status",
+    "in_progress",
+  );
+  await expect(page.locator("[data-project-next-action]")).toHaveText(
+    "创建项目目录并记录 Python 解释器路径",
+  );
 });
 
 test("Concept 与 Roadmap 都通过正式派生关系返回 Project", async ({ page }) => {

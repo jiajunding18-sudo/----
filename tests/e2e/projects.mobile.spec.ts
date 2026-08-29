@@ -24,6 +24,22 @@ test("360px 下可筛选 Project 并浏览未 ready 的 Pixel Lab", async ({ pag
   await expect(page.getByRole("heading", { level: 1, name: /Pixel Lab/ })).toBeVisible();
   await expect(page.getByText(/仍缺 7 项 hard requirement/)).toBeVisible();
   await expect(page.locator("[data-project-requirement]")).toHaveCount(8);
+
+  await page
+    .getByRole("radio", { name: /程序生成的 PGM 测试图/ })
+    .check();
+  await page.getByRole("checkbox", { name: /Python 与项目内 venv/ }).check();
+  await page.getByRole("checkbox", { name: /opencv-python/ }).check();
+  await page
+    .getByLabel("第一项下一动作")
+    .fill("创建项目目录并记录解释器路径");
+  await page
+    .getByRole("checkbox", { name: /我理解仍缺少上述 hard 前置能力/ })
+    .check();
+  await page
+    .getByRole("button", { name: "确认带缺口开始 Project" })
+    .click();
+  await expect(page.getByRole("heading", { name: "当前正在执行" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

@@ -181,7 +181,24 @@ export function getProgressCatalog(): ProgressCatalog {
         })),
       };
     }),
-    projectIds: contentManifest.projects.map(({ id }) => id),
+    projects: contentManifest.projects.map((project) => ({
+      id: project.id,
+      publicationStatus: project.publicationStatus,
+      conceptRequirements: project.conceptRequirements.map(
+        ({ conceptId, kind, minimumStatus }) => ({
+          conceptId,
+          kind,
+          minimumStatus,
+        }),
+      ),
+      environmentRequirements: project.environmentRequirements.map(
+        ({ id, required }) => ({ id, required }),
+      ),
+      executionPaths: project.executionPaths.map(({ id, requirementIds }) => ({
+        id,
+        requirementIds,
+      })),
+    })),
     stageIds: contentManifest.stages.map(({ id }) => id),
     tracks: contentManifest.tracks.map((track) => ({
       id: track.id,

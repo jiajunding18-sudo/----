@@ -36,12 +36,30 @@ export interface ProgressConceptDefinition extends DependencyConceptDefinition {
 
 export interface ProgressCatalog {
   readonly concepts: readonly ProgressConceptDefinition[];
-  readonly projectIds: readonly string[];
+  readonly projects: readonly ProgressProjectDefinition[];
   readonly stageIds: readonly string[];
   readonly tracks: readonly Pick<
     TrackDefinition,
     "id" | "kind" | "defaultGoal" | "exclusiveMasteryGroup"
   >[];
+}
+
+export interface ProgressProjectDefinition {
+  readonly id: string;
+  readonly publicationStatus: "draft" | "published" | "hidden" | "retired";
+  readonly conceptRequirements: readonly {
+    readonly conceptId: string;
+    readonly kind: "hard" | "recommended";
+    readonly minimumStatus: "understood" | "mastered";
+  }[];
+  readonly environmentRequirements: readonly {
+    readonly id: string;
+    readonly required: boolean;
+  }[];
+  readonly executionPaths: readonly {
+    readonly id: string;
+    readonly requirementIds: readonly string[];
+  }[];
 }
 
 export interface DependencyReadiness {
@@ -542,7 +560,8 @@ export function inspectLearningStateAgainstCatalog(
 ): LearningStateCatalogInspection {
   const conceptsById = new Map(catalog.concepts.map((concept) => [concept.id, concept]));
   const tracksById = new Map(catalog.tracks.map((track) => [track.id, track]));
-  const projectIds = new Set(catalog.projectIds);
+  const projectsById = new Map(catalog.projects.map((project) => [project.id, project]));
+  const projectIds = new Set(catalog.projects.map(({ id }) => id));
   const stageIds = new Set(catalog.stageIds);
   const errors: string[] = [];
   const orphanConceptIds = Object.keys(state.conceptProgress).filter(
@@ -578,6 +597,31 @@ export function inspectLearningStateAgainstCatalog(
       const eligibility = getMasteryEligibility(concept, progress);
       if (!eligibility.eligible) {
         errors.push(`${conceptId} 的 mastered 状态缺少完整通过证据`);
+      }
+    }
+  }
+
+  for (const [projectId, progress] of Object.entries(state.projectProgress)) {
+    const project = projectsById.get(projectId);
+    if (!project) continue;
+    const executionPathIds = new Set(
+      project.executionPaths.map(({ id }) => id),
+    );
+    const environmentRequirementIds = new Set(
+      project.environmentRequirements.map(({ id }) => id),
+    );
+
+    if (
+      progress.selectedExecutionPathId !== undefined &&
+      !executionPathIds.has(progress.selectedExecutionPathId)
+    ) {
+      errors.push(
+        `${projectId} 引用了不存在的执行路径 ${progress.selectedExecutionPathId}`,
+      );
+    }
+    for (const requirementId of Object.keys(progress.environmentChecks)) {
+      if (!environmentRequirementIds.has(requirementId)) {
+        errors.push(`${projectId} 引用了不存在的环境要求 ${requirementId}`);
       }
     }
   }

@@ -75,6 +75,7 @@ export function DataManagementPanel() {
   const [resetConfirmed, setResetConfirmed] = useState(false);
 
   const conceptRecordCount = Object.keys(learningState.conceptProgress).length;
+  const projectRecordCount = Object.keys(learningState.projectProgress).length;
   const orphanCount =
     orphanConceptIds.length +
     orphanProjectIds.length +
@@ -221,6 +222,10 @@ export function DataManagementPanel() {
             <dd className="mt-1 font-semibold">{conceptRecordCount} 条</dd>
           </div>
           <div>
+            <dt className="text-[var(--color-muted)]">Project 执行记录</dt>
+            <dd className="mt-1 font-semibold">{projectRecordCount} 条</dd>
+          </div>
+          <div>
             <dt className="text-[var(--color-muted)]">历史 orphan</dt>
             <dd className="mt-1 font-semibold">{orphanCount} 条</dd>
           </div>
@@ -332,6 +337,7 @@ export function DataManagementPanel() {
             </p>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6">
               <li>{preparedImport.preview.conceptRecordCount} 个 Concept 的学习记录</li>
+              <li>{preparedImport.preview.projectRecordCount} 个 Project 的执行记录</li>
               <li>{preparedImport.preview.understoodCount} 个已理解（含已掌握）</li>
               <li>{preparedImport.preview.masteredCount} 个已掌握</li>
               <li>

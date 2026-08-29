@@ -1,6 +1,9 @@
 import { contentManifest } from "../../../.generated/content-manifest";
 
-import { buildKnowledgeNeighborhood } from "./knowledge-graph-model";
+import {
+  buildGlobalKnowledgeGraphCatalog,
+  buildKnowledgeNeighborhood,
+} from "./knowledge-graph-model";
 import { buildKnowledgeView } from "./knowledge-model";
 
 export function getKnowledgeView() {
@@ -23,4 +26,8 @@ export function getKnowledgeConceptView(conceptId: string) {
 
 export function getKnowledgeNeighborhood(conceptId: string) {
   return buildKnowledgeNeighborhood(contentManifest, conceptId);
+}
+
+export function getGlobalKnowledgeGraphCatalog() {
+  return buildGlobalKnowledgeGraphCatalog(contentManifest);
 }

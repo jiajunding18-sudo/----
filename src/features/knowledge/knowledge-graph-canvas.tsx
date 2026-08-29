@@ -2,7 +2,7 @@
 
 import dagre from "@dagrejs/dagre";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -11,6 +11,7 @@ import {
   MarkerType,
   Position,
   ReactFlow,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeProps,
@@ -23,8 +24,8 @@ import { useLearningStore } from "@/features/progress/learning-store-provider";
 import { getConceptStatus } from "@/features/progress/progress-domain";
 
 import type {
+  KnowledgeGraphData,
   KnowledgeGraphNode,
-  KnowledgeNeighborhood,
 } from "./knowledge-graph-model";
 
 const nodeWidth = 244;
@@ -32,6 +33,9 @@ const nodeHeight = 166;
 
 type ConceptNodeData = {
   readonly concept: KnowledgeGraphNode;
+  readonly graphMode: "global" | "neighborhood";
+  readonly isLearningFocus: boolean;
+  readonly outgoingCount: number;
 };
 
 type ConceptFlowNode = Node<ConceptNodeData, "concept">;
@@ -46,7 +50,7 @@ const publicationLabels: Readonly<
 };
 
 function ConceptGraphNode({ data }: NodeProps<ConceptFlowNode>) {
-  const { concept } = data;
+  const { concept, graphMode, isLearningFocus, outgoingCount } = data;
   const hydrated = useLearningStore(({ hydrated }) => hydrated);
   const progress = useLearningStore(
     ({ learningState }) => learningState.conceptProgress,
@@ -59,7 +63,7 @@ function ConceptGraphNode({ data }: NodeProps<ConceptFlowNode>) {
   return (
     <div
       className={`h-[166px] w-[244px] rounded-lg border bg-[var(--color-surface)] p-4 shadow-sm ${
-        concept.isCurrent
+        concept.isCurrent || isLearningFocus
           ? "border-2 border-[var(--color-accent)] ring-4 ring-[var(--color-accent-soft)]"
           : concept.publicationStatus === "published"
             ? "border-[var(--color-border)]"
@@ -67,6 +71,7 @@ function ConceptGraphNode({ data }: NodeProps<ConceptFlowNode>) {
       }`}
       data-graph-concept-id={concept.id}
       data-graph-current={concept.isCurrent ? "true" : "false"}
+      data-graph-learning-focus={isLearningFocus ? "true" : "false"}
       data-graph-progress-status={status ?? "not-applicable"}
       data-graph-publication-status={concept.publicationStatus}
     >
@@ -78,7 +83,15 @@ function ConceptGraphNode({ data }: NodeProps<ConceptFlowNode>) {
       />
       <div className="flex min-w-0 items-start justify-between gap-2">
         <p className="text-[0.66rem] font-bold tracking-[0.1em] text-[var(--color-accent)] uppercase">
-          {concept.isCurrent ? "当前 Concept" : "1 跳关系"}
+          {concept.isCurrent
+            ? "当前 Concept"
+            : isLearningFocus
+              ? "当前学习位置"
+              : outgoingCount > 1
+                ? `分支点 · ${outgoingCount} 条后续`
+                : graphMode === "global"
+                  ? "路线节点"
+                  : "1 跳关系"}
         </p>
         <span className="shrink-0 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[0.62rem] font-semibold text-[var(--color-muted)]">
           {concept.publicationStatus}
@@ -121,7 +134,11 @@ function ConceptGraphNode({ data }: NodeProps<ConceptFlowNode>) {
 
 const nodeTypes = { concept: ConceptGraphNode } as const;
 
-function layoutNeighborhood(neighborhood: KnowledgeNeighborhood) {
+function layoutKnowledgeGraph(
+  graph: KnowledgeGraphData,
+  graphMode: "global" | "neighborhood",
+  highlightConceptId?: string,
+) {
   const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   layout.setGraph({
     rankdir: "LR",
@@ -132,20 +149,29 @@ function layoutNeighborhood(neighborhood: KnowledgeNeighborhood) {
     marginy: 28,
   });
 
-  for (const node of neighborhood.nodes) {
+  for (const node of graph.nodes) {
     layout.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   }
-  for (const edge of neighborhood.edges) {
+  for (const edge of graph.edges) {
     layout.setEdge(edge.source, edge.target);
   }
   dagre.layout(layout);
 
-  const nodes: ConceptFlowNode[] = neighborhood.nodes.map((concept) => {
+  const outgoingCounts = new Map<string, number>();
+  for (const edge of graph.edges) {
+    outgoingCounts.set(edge.source, (outgoingCounts.get(edge.source) ?? 0) + 1);
+  }
+  const nodes: ConceptFlowNode[] = graph.nodes.map((concept) => {
     const position = layout.node(concept.id) as { x: number; y: number };
     return {
       id: concept.id,
       type: "concept",
-      data: { concept },
+      data: {
+        concept,
+        graphMode,
+        isLearningFocus: concept.id === highlightConceptId,
+        outgoingCount: outgoingCounts.get(concept.id) ?? 0,
+      },
       position: {
         x: position.x - nodeWidth / 2,
         y: position.y - nodeHeight / 2,
@@ -160,9 +186,9 @@ function layoutNeighborhood(neighborhood: KnowledgeNeighborhood) {
     };
   });
   const titlesById = new Map(
-    neighborhood.nodes.map(({ id, title }) => [id, title]),
+    graph.nodes.map(({ id, title }) => [id, title]),
   );
-  const edges: Edge[] = neighborhood.edges.map((edge) => ({
+  const edges: Edge[] = graph.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -190,25 +216,62 @@ function layoutNeighborhood(neighborhood: KnowledgeNeighborhood) {
   return { nodes, edges };
 }
 
-export default function KnowledgeGraphCanvas({
-  neighborhood,
+function GraphViewportFocus({
+  conceptId,
+  requestKey,
 }: {
-  readonly neighborhood: KnowledgeNeighborhood;
+  readonly conceptId?: string;
+  readonly requestKey: number;
 }) {
-  const graph = useMemo(() => layoutNeighborhood(neighborhood), [neighborhood]);
+  const { fitView } = useReactFlow<ConceptFlowNode>();
+
+  useEffect(() => {
+    if (!conceptId || requestKey === 0) return;
+    void fitView({
+      nodes: [{ id: conceptId }],
+      padding: 1.2,
+      minZoom: 0.7,
+      maxZoom: 1.05,
+      duration: 0,
+    });
+  }, [conceptId, fitView, requestKey]);
+
+  return null;
+}
+
+export default function KnowledgeGraphCanvas({
+  ariaLabel,
+  focusConceptId,
+  focusRequestKey = 0,
+  graph,
+  graphMode = "neighborhood",
+  highlightConceptId,
+}: {
+  readonly ariaLabel: string;
+  readonly focusConceptId?: string;
+  readonly focusRequestKey?: number;
+  readonly graph: KnowledgeGraphData;
+  readonly graphMode?: "global" | "neighborhood";
+  readonly highlightConceptId?: string;
+}) {
+  const layoutedGraph = useMemo(
+    () => layoutKnowledgeGraph(graph, graphMode, highlightConceptId),
+    [graph, graphMode, highlightConceptId],
+  );
 
   return (
     <div
-      aria-label={`${neighborhood.current.title} 的一跳知识关系图`}
+      aria-label={ariaLabel}
       className="h-[31rem] min-w-0 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] sm:h-[34rem]"
-      data-graph-edge-ids={neighborhood.edges.map(({ id }) => id).join("|")}
-      data-graph-node-ids={neighborhood.nodes.map(({ id }) => id).join("|")}
+      data-graph-edge-ids={graph.edges.map(({ id }) => id).join("|")}
+      data-graph-node-ids={graph.nodes.map(({ id }) => id).join("|")}
       data-knowledge-graph-canvas
+      data-knowledge-graph-mode={graphMode}
       role="region"
     >
       <ReactFlow
-        aria-label={`${neighborhood.current.title} 的一跳知识关系图；完整关系可使用页面中的等价文本列表`}
-        edges={graph.edges}
+        aria-label={`${ariaLabel}；完整关系可使用页面中的等价文本列表`}
+        edges={layoutedGraph.edges}
         edgesFocusable={false}
         elementsSelectable
         fitView
@@ -216,7 +279,7 @@ export default function KnowledgeGraphCanvas({
         maxZoom={1.5}
         minZoom={0.25}
         nodeTypes={nodeTypes}
-        nodes={graph.nodes}
+        nodes={layoutedGraph.nodes}
         nodesConnectable={false}
         nodesDraggable={false}
         nodesFocusable={false}
@@ -224,6 +287,10 @@ export default function KnowledgeGraphCanvas({
         zoomOnDoubleClick={false}
         zoomOnScroll={false}
       >
+        <GraphViewportFocus
+          conceptId={focusConceptId}
+          requestKey={focusRequestKey}
+        />
         <Background color="#c7d2ca" gap={24} size={1} variant={BackgroundVariant.Dots} />
         <Controls
           aria-label="知识关系图缩放控制"

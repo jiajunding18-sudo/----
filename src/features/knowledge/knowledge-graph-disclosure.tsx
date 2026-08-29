@@ -41,7 +41,10 @@ export function KnowledgeGraphDisclosure({
       </button>
       {expanded ? (
         <div className="mt-4 min-w-0" id={graphId}>
-          <KnowledgeGraphCanvas neighborhood={neighborhood} />
+          <KnowledgeGraphCanvas
+            ariaLabel={`${neighborhood.current.title} 的一跳知识关系图`}
+            graph={neighborhood}
+          />
         </div>
       ) : (
         <p className="mt-3 text-xs leading-5 text-[var(--color-muted)]">

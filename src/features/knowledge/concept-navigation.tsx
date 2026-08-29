@@ -101,12 +101,21 @@ export function ConceptNavigation({
             {concept.stage.title} · {concept.tracks.map(({ title }) => title).join(" / ")} · 推荐序位 {String(concept.recommendedSequence).padStart(2, "0")}
           </p>
         </div>
-        <Link
-          className="inline-flex min-h-10 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-accent)] underline decoration-[var(--color-border)] underline-offset-4 hover:border-[var(--color-accent)]"
-          href={`/roadmap/#roadmap-stage-${concept.stage.id}`}
-        >
-          在 Roadmap 查看对应 Stage
-        </Link>
+        <div className="flex flex-wrap gap-2 sm:max-w-72 sm:justify-end">
+          <Link
+            className="inline-flex min-h-10 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-accent)] underline decoration-[var(--color-border)] underline-offset-4 hover:border-[var(--color-accent)]"
+            href={`/roadmap/#roadmap-stage-${concept.stage.id}`}
+          >
+            在 Roadmap 查看对应 Stage
+          </Link>
+          <Link
+            className="inline-flex min-h-10 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-accent)] underline decoration-[var(--color-border)] underline-offset-4 hover:border-[var(--color-accent)]"
+            data-concept-graph-link
+            href="#concept-knowledge-graph-title"
+          >
+            查看当前知识关系
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-2">

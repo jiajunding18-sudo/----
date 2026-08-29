@@ -52,6 +52,9 @@ const catalog: ProgressCatalog = {
       executionPaths: [
         { id: "execution.fixture", requirementIds: ["environment.fixture"] },
       ],
+      acceptanceCriteria: [
+        { id: "acceptance.fixture", required: true },
+      ],
     },
   ],
   stageIds: ["stage.test"],
@@ -274,6 +277,125 @@ describe("LocalStorage adapter 与 hydration", () => {
     expect(refreshedStore.getState().learningState.conceptProgress).toEqual({});
   });
 
+  it("Project 必须满足验收和交付物并由用户主动确认，且不修改 ConceptProgress", async () => {
+    const storage = new MemoryStorage();
+    const store = makeStore(storage);
+    await store.getState().hydrate();
+
+    expect(
+      await store.getState().completeProject("project.fixture", true),
+    ).toMatchObject({ ok: false, code: "project-not-started" });
+    expect(
+      await store
+        .getState()
+        .setProjectAcceptanceCriterion(
+          "project.fixture",
+          "acceptance.fixture",
+          true,
+        ),
+    ).toMatchObject({ ok: false, code: "project-not-started" });
+
+    await store.getState().startProject("project.fixture", {
+      selectedExecutionPathId: "execution.fixture",
+      nextAction: "完成正式验收",
+      environmentChecks: {},
+      confirmPrerequisiteOverride: true,
+    });
+    const conceptProgressBefore = store.getState().learningState.conceptProgress;
+
+    expect(
+      await store.getState().completeProject("project.fixture", true),
+    ).toMatchObject({
+      ok: false,
+      code: "completion-requirements-missing",
+      relatedIds: ["acceptance.fixture"],
+    });
+    expect(
+      await store
+        .getState()
+        .setProjectAcceptanceCriterion(
+          "project.fixture",
+          "acceptance.unknown",
+          true,
+        ),
+    ).toMatchObject({ ok: false, code: "invalid-acceptance-criterion" });
+    expect(
+      await store
+        .getState()
+        .setProjectAcceptanceCriterion(
+          "project.fixture",
+          "acceptance.fixture",
+          true,
+        ),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(
+      store.getState().learningState.projectProgress["project.fixture"].status,
+    ).toBe("in_progress");
+
+    expect(
+      await store.getState().addProjectDeliverable("project.fixture", {
+        id: "deliverable.fixture.result",
+        title: "  可检查项目结果  ",
+        reference: " evidence/result.md ",
+      }),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(
+      await store.getState().completeProject("project.fixture", false),
+    ).toMatchObject({ ok: false, code: "confirmation-required" });
+    expect(
+      store.getState().learningState.projectProgress["project.fixture"].status,
+    ).toBe("in_progress");
+
+    expect(
+      await store.getState().completeProject("project.fixture", true),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(store.getState().learningState).toMatchObject({
+      conceptProgress: conceptProgressBefore,
+      projectProgress: {
+        "project.fixture": {
+          status: "completed",
+          nextAction: undefined,
+          completedAt: timestamp,
+          deliverables: [
+            {
+              id: "deliverable.fixture.result",
+              title: "可检查项目结果",
+              reference: "evidence/result.md",
+            },
+          ],
+          completionConfirmation: {
+            acceptanceCriterionIds: ["acceptance.fixture"],
+            deliverableIds: ["deliverable.fixture.result"],
+          },
+        },
+      },
+    });
+    expect(
+      await store
+        .getState()
+        .setProjectAcceptanceCriterion(
+          "project.fixture",
+          "acceptance.fixture",
+          false,
+        ),
+    ).toMatchObject({ ok: false, code: "project-already-completed" });
+
+    const refreshed = makeStore(storage);
+    await refreshed.getState().hydrate();
+    expect(
+      refreshed.getState().learningState.projectProgress["project.fixture"],
+    ).toMatchObject({
+      status: "completed",
+      completedAt: timestamp,
+      completionConfirmation: {
+        deliverableIds: ["deliverable.fixture.result"],
+      },
+    });
+    expect(refreshed.getState().learningState.conceptProgress).toEqual(
+      conceptProgressBefore,
+    );
+  });
+
   it("未知、非法路径与未发布 Project 都不能建立 ProjectProgress", async () => {
     const storage = new MemoryStorage();
     const store = createLearningStore({
@@ -312,6 +434,15 @@ describe("LocalStorage adapter 与 hydration", () => {
       await store.getState().startProject("project.draft", {
         ...input,
         selectedExecutionPathId: "execution.fixture",
+      }),
+    ).toMatchObject({ ok: false, code: "project-not-published" });
+    expect(
+      await store.getState().completeProject("project.draft", true),
+    ).toMatchObject({ ok: false, code: "project-not-published" });
+    expect(
+      await store.getState().addProjectDeliverable("project.draft", {
+        id: "deliverable.draft.result",
+        title: "不得写入",
       }),
     ).toMatchObject({ ok: false, code: "project-not-published" });
     expect(store.getState().learningState.projectProgress).toEqual({});
@@ -423,13 +554,20 @@ describe("LocalStorage adapter 与 hydration", () => {
     const storage = new MemoryStorage();
     const state = createInitialLearningState(catalog.tracks, timestamp);
     const orphanProgress = {
-      status: "not_started" as const,
+      status: "completed" as const,
       note: "历史 Project",
       environmentChecks: {},
       acceptance: {},
       deliverables: [],
       unverifiedAssumptions: [],
+      startedAt: timestamp,
+      completedAt: timestamp,
       updatedAt: timestamp,
+      completionConfirmation: {
+        confirmedAt: timestamp,
+        acceptanceCriterionIds: [],
+        deliverableIds: [],
+      },
     };
     const orphanEnvelope = createPersistedEnvelope(
       {
@@ -494,6 +632,48 @@ describe("LocalStorage adapter 与 hydration", () => {
       }),
     ).toMatchObject({ ok: false, code: "persistence-blocked" });
     expect(storage.getItem(LEARNING_STATE_STORAGE_KEY)).toBe(invalidRaw);
+  });
+
+  it("当前已知 Project 的非法完成快照进入写保护", async () => {
+    const storage = new MemoryStorage();
+    const state = createInitialLearningState(catalog.tracks, timestamp);
+    const invalidEnvelope = createPersistedEnvelope(
+      {
+        ...state,
+        projectProgress: {
+          "project.fixture": {
+            status: "completed",
+            note: "",
+            selectedExecutionPathId: "execution.fixture",
+            environmentChecks: {},
+            acceptance: {},
+            deliverables: [],
+            unverifiedAssumptions: [],
+            startedAt: timestamp,
+            completedAt: timestamp,
+            updatedAt: timestamp,
+            completionConfirmation: {
+              confirmedAt: timestamp,
+              acceptanceCriterionIds: [],
+              deliverableIds: [],
+            },
+          },
+        },
+      },
+      "2026.08.28",
+      4,
+      timestamp,
+    );
+    const raw = JSON.stringify(invalidEnvelope);
+    storage.setItem(LEARNING_STATE_STORAGE_KEY, raw);
+
+    const store = makeStore(storage);
+    await store.getState().hydrate();
+    expect(store.getState()).toMatchObject({
+      persistenceStatus: "blocked",
+      rawRecoveryData: raw,
+    });
+    expect(storage.getItem(LEARNING_STATE_STORAGE_KEY)).toBe(raw);
   });
 
   it("clear 精确删除固定 storage key", async () => {

@@ -6,6 +6,7 @@ import type {
   ConceptProgress,
   LearningStateV1,
   LearningStatus,
+  ProjectProgress,
 } from "@/types";
 
 interface ProjectRequirements {
@@ -50,6 +51,19 @@ export interface ProjectReadiness {
   readonly missingRecommendedConceptIds: readonly string[];
   readonly missingEnvironmentRequirementIds: readonly string[];
   readonly pathReadiness: readonly ProjectExecutionPathReadiness[];
+}
+
+interface ProjectCompletionDefinition {
+  readonly acceptanceCriteria: readonly {
+    readonly id: string;
+    readonly required: boolean;
+  }[];
+}
+
+export interface ProjectCompletionEligibility {
+  readonly eligible: boolean;
+  readonly missingAcceptanceCriterionIds: readonly string[];
+  readonly hasDeliverable: boolean;
 }
 
 export function getProjectKnowledgeReadiness(
@@ -147,5 +161,27 @@ export function getProjectReadiness(
     missingEnvironmentRequirementIds:
       selectedPathReadiness?.missingEnvironmentRequirementIds ?? [],
     pathReadiness,
+  };
+}
+
+export function getProjectCompletionEligibility(
+  project: ProjectCompletionDefinition,
+  progress: ProjectProgress | undefined,
+): ProjectCompletionEligibility {
+  const missingAcceptanceCriterionIds = project.acceptanceCriteria
+    .filter(({ required }) => required)
+    .map(({ id }) => id)
+    .filter((criterionId) => progress?.acceptance[criterionId] !== true);
+  const hasDeliverable = (progress?.deliverables.length ?? 0) > 0;
+  const startedAndOpen =
+    progress?.status === "in_progress" || progress?.status === "paused";
+
+  return {
+    eligible:
+      startedAndOpen &&
+      missingAcceptanceCriterionIds.length === 0 &&
+      hasDeliverable,
+    missingAcceptanceCriterionIds,
+    hasDeliverable,
   };
 }

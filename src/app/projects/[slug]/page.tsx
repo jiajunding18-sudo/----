@@ -8,11 +8,13 @@ import {
   getProjectCatalogItem,
   getProjectNextProjects,
   ProjectCapabilityOverview,
+  ProjectCompletionPanel,
   ProjectExecutionPanel,
   ProjectKnowledgePanel,
 } from "@/features/projects";
 import {
   getConceptsForProject,
+  getConcepts,
   getPublishedProjectBySlug,
   getPublishedProjectSlugs,
   getResources,
@@ -58,6 +60,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   }
   const tracks = getTracks(project.trackIds);
   const concepts = getConceptsForProject(project);
+  const evidenceConcepts = getConcepts(project.evidenceConceptIds);
   const resources = getResources(project.resources.map(({ resourceId }) => resourceId));
   const nextProjects = getProjectNextProjects(project.id);
 
@@ -83,6 +86,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       <div className="learning-document">
         <ProjectContent />
       </div>
+      <ProjectCompletionPanel
+        evidenceConcepts={evidenceConcepts}
+        project={project}
+      />
       <ResourceLinks resources={resources} />
       {nextProjects.length > 0 ? (
         <section

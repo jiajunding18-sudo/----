@@ -1,8 +1,13 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import {
+  addProjectDeliverable as addProjectDeliverableMutation,
+  completeProjectProgress,
+  removeProjectDeliverable as removeProjectDeliverableMutation,
+  setProjectAcceptanceCriterion as setProjectAcceptanceCriterionMutation,
   setProjectEnvironmentCheck as setProjectEnvironmentCheckMutation,
   startProjectProgress,
+  type ProjectDeliverableInput,
   type ProjectProgressMutationResult,
   type StartProjectInput,
 } from "@/features/projects/project-progress";
@@ -137,6 +142,23 @@ export interface LearningStoreState {
     projectId: string,
     requirementId: string,
     checked: boolean,
+  ) => Promise<ProjectLearningStoreActionResult>;
+  setProjectAcceptanceCriterion: (
+    projectId: string,
+    criterionId: string,
+    satisfied: boolean,
+  ) => Promise<ProjectLearningStoreActionResult>;
+  addProjectDeliverable: (
+    projectId: string,
+    input: ProjectDeliverableInput,
+  ) => Promise<ProjectLearningStoreActionResult>;
+  removeProjectDeliverable: (
+    projectId: string,
+    deliverableId: string,
+  ) => Promise<ProjectLearningStoreActionResult>;
+  completeProject: (
+    projectId: string,
+    userConfirmed: boolean,
   ) => Promise<ProjectLearningStoreActionResult>;
   createBackup: (localDate: string) => BackupCreationResult;
   recordBackupCreated: (timestamp: string) => Promise<DataManagementActionResult>;
@@ -558,6 +580,91 @@ export function createLearningStore({
             get().learningState.projectProgress[projectId],
             requirementId,
             checked,
+            now(),
+          ),
+        );
+      },
+
+      setProjectAcceptanceCriterion: async (
+        projectId,
+        criterionId,
+        satisfied,
+      ) => {
+        const project = projectsById.get(projectId);
+        if (!project) {
+          return {
+            ok: false,
+            code: "missing-project",
+            message: `当前内容 catalog 不存在 Project ${projectId}。`,
+          };
+        }
+        return commitProjectMutation(
+          projectId,
+          setProjectAcceptanceCriterionMutation(
+            project,
+            get().learningState.projectProgress[projectId],
+            criterionId,
+            satisfied,
+            now(),
+          ),
+        );
+      },
+
+      addProjectDeliverable: async (projectId, input) => {
+        const project = projectsById.get(projectId);
+        if (!project) {
+          return {
+            ok: false,
+            code: "missing-project",
+            message: `当前内容 catalog 不存在 Project ${projectId}。`,
+          };
+        }
+        return commitProjectMutation(
+          projectId,
+          addProjectDeliverableMutation(
+            project,
+            get().learningState.projectProgress[projectId],
+            input,
+            now(),
+          ),
+        );
+      },
+
+      removeProjectDeliverable: async (projectId, deliverableId) => {
+        const project = projectsById.get(projectId);
+        if (!project) {
+          return {
+            ok: false,
+            code: "missing-project",
+            message: `当前内容 catalog 不存在 Project ${projectId}。`,
+          };
+        }
+        return commitProjectMutation(
+          projectId,
+          removeProjectDeliverableMutation(
+            project,
+            get().learningState.projectProgress[projectId],
+            deliverableId,
+            now(),
+          ),
+        );
+      },
+
+      completeProject: async (projectId, userConfirmed) => {
+        const project = projectsById.get(projectId);
+        if (!project) {
+          return {
+            ok: false,
+            code: "missing-project",
+            message: `当前内容 catalog 不存在 Project ${projectId}。`,
+          };
+        }
+        return commitProjectMutation(
+          projectId,
+          completeProjectProgress(
+            project,
+            get().learningState.projectProgress[projectId],
+            userConfirmed,
             now(),
           ),
         );

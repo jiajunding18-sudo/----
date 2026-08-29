@@ -112,6 +112,13 @@ export function getConceptsForProject(project: ProjectManifestEntry) {
   });
 }
 
+export function getConcepts(conceptIds: readonly string[]) {
+  return conceptIds.flatMap((conceptId) => {
+    const concept = getConceptById(contentManifest, conceptId);
+    return concept ? [concept] : [];
+  });
+}
+
 export function getStage(stageId: string): DeepReadonly<StageDefinition> | undefined {
   return contentManifest.stages.find(({ id }) => id === stageId);
 }
@@ -197,6 +204,10 @@ export function getProgressCatalog(): ProgressCatalog {
       executionPaths: project.executionPaths.map(({ id, requirementIds }) => ({
         id,
         requirementIds,
+      })),
+      acceptanceCriteria: project.acceptanceCriteria.map(({ id, required }) => ({
+        id,
+        required,
       })),
     })),
     stageIds: contentManifest.stages.map(({ id }) => id),

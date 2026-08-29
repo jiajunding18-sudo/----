@@ -187,7 +187,14 @@ function completedProjectProgress(): ProjectProgress {
     note: "",
     environmentChecks: {},
     acceptance: { "acceptance.checkpoint.complete": true },
-    deliverables: [],
+    deliverables: [
+      {
+        id: "deliverable.checkpoint.result",
+        title: "Checkpoint 项目结果",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
     unverifiedAssumptions: [],
     startedAt: timestamp,
     completedAt: timestamp,
@@ -195,7 +202,7 @@ function completedProjectProgress(): ProjectProgress {
     completionConfirmation: {
       confirmedAt: timestamp,
       acceptanceCriterionIds: ["acceptance.checkpoint.complete"],
-      deliverableIds: [],
+      deliverableIds: ["deliverable.checkpoint.result"],
     },
   };
 }

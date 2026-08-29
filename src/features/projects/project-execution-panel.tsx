@@ -135,7 +135,11 @@ export function ProjectExecutionPanel({
     }) ?? [];
   const writesBlocked =
     persistenceStatus === "blocked" || persistenceStatus === "unavailable";
-  const started = projectProgress?.status === "in_progress";
+  const executing =
+    projectProgress?.status === "in_progress" ||
+    projectProgress?.status === "paused";
+  const completed = projectProgress?.status === "completed";
+  const hasStarted = executing || completed;
 
   async function handleStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,15 +204,17 @@ export function ProjectExecutionPanel({
       <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold" id="project-execution-title">
-            {started ? "当前正在执行" : "开始执行"}
+            {completed ? "项目已完成" : executing ? "当前正在执行" : "开始执行"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
-            {started
+            {completed
+              ? "完成快照已保存；当前 Knowledge Readiness 仍按最新 Concept 状态独立计算。"
+              : executing
               ? "ProjectProgress 已建立；Concept 学习状态与项目状态仍分别维护。"
               : "浏览本页不会改变状态。只有提交下方表单才会建立 ProjectProgress。"}
           </p>
         </div>
-        {started && projectProgress.startedAt ? (
+        {hasStarted && projectProgress.startedAt ? (
           <p className="text-sm font-semibold" data-project-started-at>
             开始于 {formatTimestamp(projectProgress.startedAt)}
           </p>
@@ -257,7 +263,7 @@ export function ProjectExecutionPanel({
         </section>
       </div>
 
-      {started ? (
+      {hasStarted ? (
         <div className="mt-7 border-t border-[var(--color-border)] pt-6">
           <div className="grid gap-5 lg:grid-cols-2">
             <section aria-labelledby="active-path-title">
@@ -276,7 +282,9 @@ export function ProjectExecutionPanel({
                 下一动作
               </h3>
               <p className="mt-2 text-sm leading-6" data-project-next-action>
-                {projectProgress.nextAction}
+                {completed
+                  ? "项目已完成；完成快照中不再保留待执行下一动作。"
+                  : projectProgress.nextAction}
               </p>
             </section>
           </div>
@@ -386,10 +394,10 @@ export function ProjectExecutionPanel({
         </form>
       )}
 
-      {activePath && started ? (
+      {activePath && hasStarted ? (
         <EnvironmentChecklist
           checks={activeChecks}
-          disabled={writesBlocked}
+          disabled={writesBlocked || !executing}
           onChange={(requirementId, checked) =>
             void handleStoredEnvironmentCheck(requirementId, checked)
           }

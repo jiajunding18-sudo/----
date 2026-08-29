@@ -3,14 +3,25 @@ import type {
   LearningStateV1,
   ProjectProgress,
 } from "@/types";
+import { projectProgressSchema } from "@/lib/validation/progress-schemas";
 
-import { getProjectReadiness } from "./project-readiness";
+import {
+  getProjectCompletionEligibility,
+  getProjectReadiness,
+} from "./project-readiness";
 
 export interface StartProjectInput {
   readonly selectedExecutionPathId: string;
   readonly nextAction: string;
   readonly environmentChecks: Readonly<Record<string, boolean>>;
   readonly confirmPrerequisiteOverride: boolean;
+}
+
+export interface ProjectDeliverableInput {
+  readonly id: string;
+  readonly title: string;
+  readonly reference?: string;
+  readonly note?: string;
 }
 
 export type ProjectProgressMutationErrorCode =
@@ -20,7 +31,11 @@ export type ProjectProgressMutationErrorCode =
   | "invalid-environment-requirement"
   | "missing-next-action"
   | "confirmation-required"
-  | "project-not-started";
+  | "project-not-started"
+  | "project-already-completed"
+  | "invalid-acceptance-criterion"
+  | "invalid-deliverable"
+  | "completion-requirements-missing";
 
 export type ProjectProgressMutationResult =
   | {
@@ -176,4 +191,188 @@ export function setProjectEnvironmentCheck(
       updatedAt: timestamp,
     },
   };
+}
+
+function getEditableProjectProgress(
+  project: ProgressProjectDefinition,
+  progress: ProjectProgress | undefined,
+): ProjectProgressMutationResult | ProjectProgress {
+  if (project.publicationStatus !== "published") {
+    return {
+      ok: false,
+      code: "project-not-published",
+      message: "该 Project 尚未发布，不能写入正式执行记录。",
+    };
+  }
+  if (!progress || progress.status === "not_started") {
+    return {
+      ok: false,
+      code: "project-not-started",
+      message: "Project 必须先由用户主动开始。",
+    };
+  }
+  if (progress.status === "completed") {
+    return {
+      ok: false,
+      code: "project-already-completed",
+      message: "已完成 Project 的完成快照不会被当前操作改写。",
+    };
+  }
+  return progress;
+}
+
+export function setProjectAcceptanceCriterion(
+  project: ProgressProjectDefinition,
+  progress: ProjectProgress | undefined,
+  criterionId: string,
+  satisfied: boolean,
+  timestamp: string,
+): ProjectProgressMutationResult {
+  const editable = getEditableProjectProgress(project, progress);
+  if ("ok" in editable) return editable;
+  if (!project.acceptanceCriteria.some(({ id }) => id === criterionId)) {
+    return {
+      ok: false,
+      code: "invalid-acceptance-criterion",
+      message: "只能更新当前 Project 正式定义的验收标准。",
+      relatedIds: [criterionId],
+    };
+  }
+  if (editable.acceptance[criterionId] === satisfied) {
+    return { ok: true, progress: editable, changed: false };
+  }
+
+  return {
+    ok: true,
+    changed: true,
+    progress: {
+      ...editable,
+      acceptance: { ...editable.acceptance, [criterionId]: satisfied },
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function addProjectDeliverable(
+  project: ProgressProjectDefinition,
+  progress: ProjectProgress | undefined,
+  input: ProjectDeliverableInput,
+  timestamp: string,
+): ProjectProgressMutationResult {
+  const editable = getEditableProjectProgress(project, progress);
+  if ("ok" in editable) return editable;
+  if (editable.deliverables.some(({ id }) => id === input.id)) {
+    return {
+      ok: false,
+      code: "invalid-deliverable",
+      message: `交付物 ID ${input.id} 已存在。`,
+    };
+  }
+
+  const candidate = projectProgressSchema.safeParse({
+    ...editable,
+    deliverables: [
+      ...editable.deliverables,
+      {
+        id: input.id,
+        title: input.title.trim(),
+        reference: input.reference?.trim() || undefined,
+        note: input.note?.trim() || undefined,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
+    updatedAt: timestamp,
+  });
+  if (!candidate.success) {
+    return {
+      ok: false,
+      code: "invalid-deliverable",
+      message: "交付物必须包含有效稳定 ID 和非空标题。",
+    };
+  }
+  return { ok: true, changed: true, progress: candidate.data };
+}
+
+export function removeProjectDeliverable(
+  project: ProgressProjectDefinition,
+  progress: ProjectProgress | undefined,
+  deliverableId: string,
+  timestamp: string,
+): ProjectProgressMutationResult {
+  const editable = getEditableProjectProgress(project, progress);
+  if ("ok" in editable) return editable;
+  if (!editable.deliverables.some(({ id }) => id === deliverableId)) {
+    return {
+      ok: false,
+      code: "invalid-deliverable",
+      message: "当前 ProjectProgress 中不存在该交付物。",
+      relatedIds: [deliverableId],
+    };
+  }
+  return {
+    ok: true,
+    changed: true,
+    progress: {
+      ...editable,
+      deliverables: editable.deliverables.filter(
+        ({ id }) => id !== deliverableId,
+      ),
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function completeProjectProgress(
+  project: ProgressProjectDefinition,
+  progress: ProjectProgress | undefined,
+  userConfirmed: boolean,
+  timestamp: string,
+): ProjectProgressMutationResult {
+  const editable = getEditableProjectProgress(project, progress);
+  if ("ok" in editable) return editable;
+  if (!userConfirmed) {
+    return {
+      ok: false,
+      code: "confirmation-required",
+      message: "完成 Project 必须由用户主动确认。",
+    };
+  }
+
+  const eligibility = getProjectCompletionEligibility(project, editable);
+  if (!eligibility.eligible) {
+    return {
+      ok: false,
+      code: "completion-requirements-missing",
+      message: eligibility.hasDeliverable
+        ? "仍有必需 Acceptance Criteria 未确认。"
+        : "完成前必须至少记录一个可检查交付物，并满足全部必需验收项。",
+      relatedIds: eligibility.missingAcceptanceCriterionIds,
+    };
+  }
+
+  const acceptanceCriterionIds = project.acceptanceCriteria
+    .filter(({ id }) => editable.acceptance[id] === true)
+    .map(({ id }) => id);
+  const deliverableIds = editable.deliverables.map(({ id }) => id);
+  const completed = projectProgressSchema.safeParse({
+    ...editable,
+    status: "completed",
+    nextAction: undefined,
+    completedAt: timestamp,
+    updatedAt: timestamp,
+    completionConfirmation: {
+      confirmedAt: timestamp,
+      acceptanceCriterionIds,
+      deliverableIds,
+    },
+  });
+  if (!completed.success) {
+    return {
+      ok: false,
+      code: "completion-requirements-missing",
+      message: "Project 完成快照未通过正式数据校验。",
+    };
+  }
+  return { ok: true, changed: true, progress: completed.data };
 }

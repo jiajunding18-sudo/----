@@ -7,6 +7,7 @@ import {
   deriveDependencies,
   parseDomainData,
   projectMetaSchema,
+  projectProgressSchema,
   resourceSchema,
   stageDefinitionSchema,
   trackDefinitionSchema,
@@ -505,6 +506,52 @@ describe("MasteryEvidence 与 ConceptProgress schema", () => {
         userDifficulty: 6,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("ProjectProgress 完成快照 schema", () => {
+  const completedProject = {
+    status: "completed",
+    note: "",
+    selectedExecutionPathId: "path.simulation",
+    environmentChecks: {},
+    acceptance: { "acceptance.bad-file": true },
+    deliverables: [
+      {
+        id: "deliverable.pixel-lab.result",
+        title: "可检查项目结果",
+        createdAt: "2026-08-27T01:00:00.000Z",
+        updatedAt: "2026-08-27T01:00:00.000Z",
+      },
+    ],
+    unverifiedAssumptions: [],
+    startedAt: "2026-08-26T01:00:00.000Z",
+    completedAt: "2026-08-27T01:00:00.000Z",
+    updatedAt: "2026-08-27T01:00:00.000Z",
+    completionConfirmation: {
+      confirmedAt: "2026-08-27T01:00:00.000Z",
+      acceptanceCriterionIds: ["acceptance.bad-file"],
+      deliverableIds: ["deliverable.pixel-lab.result"],
+    },
+  } as const;
+
+  it("接受引用已满足验收项和现有交付物的完成快照", () => {
+    expect(projectProgressSchema.parse(completedProject).status).toBe(
+      "completed",
+    );
+  });
+
+  it("保持 v1 结构兼容；当前 catalog 的完成语义由导入检查负责", () => {
+    expect(
+      projectProgressSchema.safeParse({
+        ...completedProject,
+        deliverables: [],
+        completionConfirmation: {
+          ...completedProject.completionConfirmation,
+          deliverableIds: [],
+        },
+      }).success,
+    ).toBe(true);
   });
 });
 

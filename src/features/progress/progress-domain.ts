@@ -60,6 +60,10 @@ export interface ProgressProjectDefinition {
     readonly id: string;
     readonly requirementIds: readonly string[];
   }[];
+  readonly acceptanceCriteria: readonly {
+    readonly id: string;
+    readonly required: boolean;
+  }[];
 }
 
 export interface DependencyReadiness {
@@ -610,6 +614,10 @@ export function inspectLearningStateAgainstCatalog(
     const environmentRequirementIds = new Set(
       project.environmentRequirements.map(({ id }) => id),
     );
+    const acceptanceCriterionIds = new Set(
+      project.acceptanceCriteria.map(({ id }) => id),
+    );
+    const deliverableIds = new Set<string>();
 
     if (
       progress.selectedExecutionPathId !== undefined &&
@@ -622,6 +630,69 @@ export function inspectLearningStateAgainstCatalog(
     for (const requirementId of Object.keys(progress.environmentChecks)) {
       if (!environmentRequirementIds.has(requirementId)) {
         errors.push(`${projectId} 引用了不存在的环境要求 ${requirementId}`);
+      }
+    }
+    for (const criterionId of Object.keys(progress.acceptance)) {
+      if (!acceptanceCriterionIds.has(criterionId)) {
+        errors.push(`${projectId} 引用了不存在的验收标准 ${criterionId}`);
+      }
+    }
+    for (const deliverable of progress.deliverables) {
+      if (deliverableIds.has(deliverable.id)) {
+        errors.push(`${projectId} 的交付物 ID ${deliverable.id} 重复`);
+      }
+      deliverableIds.add(deliverable.id);
+    }
+
+    if (progress.status === "completed") {
+      const missingRequiredAcceptanceIds = project.acceptanceCriteria
+        .filter(({ required }) => required)
+        .map(({ id }) => id)
+        .filter((criterionId) => progress.acceptance[criterionId] !== true);
+      if (missingRequiredAcceptanceIds.length > 0) {
+        errors.push(
+          `${projectId} 的 completed 状态缺少必需验收项 ${missingRequiredAcceptanceIds.join(", ")}`,
+        );
+      }
+      if (progress.deliverables.length === 0) {
+        errors.push(`${projectId} 的 completed 状态没有可检查交付物`);
+      }
+      const confirmation = progress.completionConfirmation;
+      if (confirmation) {
+        const confirmedAcceptanceIds = new Set<string>();
+        for (const criterionId of confirmation.acceptanceCriterionIds) {
+          if (confirmedAcceptanceIds.has(criterionId)) {
+            errors.push(`${projectId} 的完成确认重复引用验收标准 ${criterionId}`);
+          }
+          confirmedAcceptanceIds.add(criterionId);
+          if (
+            !acceptanceCriterionIds.has(criterionId) ||
+            progress.acceptance[criterionId] !== true
+          ) {
+            errors.push(`${projectId} 的完成确认引用了无效验收标准 ${criterionId}`);
+          }
+        }
+        for (const criterionId of project.acceptanceCriteria
+          .filter(({ required }) => required)
+          .map(({ id }) => id)) {
+          if (!confirmedAcceptanceIds.has(criterionId)) {
+            errors.push(`${projectId} 的完成确认未引用必需验收标准 ${criterionId}`);
+          }
+        }
+
+        const confirmedDeliverableIds = new Set<string>();
+        for (const deliverableId of confirmation.deliverableIds) {
+          if (confirmedDeliverableIds.has(deliverableId)) {
+            errors.push(`${projectId} 的完成确认重复引用交付物 ${deliverableId}`);
+          }
+          confirmedDeliverableIds.add(deliverableId);
+          if (!deliverableIds.has(deliverableId)) {
+            errors.push(`${projectId} 的完成确认引用了不存在的交付物 ${deliverableId}`);
+          }
+        }
+        if (confirmation.deliverableIds.length === 0) {
+          errors.push(`${projectId} 的完成确认没有引用交付物`);
+        }
       }
     }
   }

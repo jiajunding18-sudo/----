@@ -40,6 +40,23 @@ test("360px 下可筛选 Project 并浏览未 ready 的 Pixel Lab", async ({ pag
     .getByRole("button", { name: "确认带缺口开始 Project" })
     .click();
   await expect(page.getByRole("heading", { name: "当前正在执行" })).toBeVisible();
+  await expect(page.locator("[data-deliverable-requirements] li")).toHaveCount(4);
+  await page
+    .getByLabel("交付物标题")
+    .fill("Pixel Lab 移动端验收记录");
+  await page.getByRole("button", { name: "记录交付物" }).click();
+  const acceptanceCheckboxes = page.locator(
+    "[data-acceptance-criterion] input[type=checkbox]",
+  );
+  for (let index = 0; index < 7; index += 1) {
+    await acceptanceCheckboxes.nth(index).check();
+  }
+  await page
+    .getByRole("checkbox", { name: /我已逐项检查正式验收标准与交付物/ })
+    .check();
+  await page.getByRole("button", { name: "确认完成项目" }).click();
+  await expect(page.getByRole("heading", { name: "项目已完成" })).toBeVisible();
+  await expect(page.locator("[data-project-evidence-candidates] li")).toHaveCount(8);
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

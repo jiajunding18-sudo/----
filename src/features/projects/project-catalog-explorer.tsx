@@ -24,6 +24,9 @@ function ProjectReadinessSummary({
   const progress = useLearningStore(
     ({ learningState }) => learningState.conceptProgress,
   );
+  const projectProgress = useLearningStore(
+    ({ learningState }) => learningState.projectProgress[project.id],
+  );
   const readiness = getProjectKnowledgeReadiness(project, progress);
 
   if (project.conceptRequirements.length === 0) {
@@ -43,7 +46,20 @@ function ProjectReadinessSummary({
   }
 
   return (
-    <div data-project-readiness={readiness.ready ? "ready" : "not-ready"}>
+    <div
+      data-project-execution-status={projectProgress?.status ?? "not_started"}
+      data-project-readiness={readiness.ready ? "ready" : "not-ready"}
+    >
+      <p className="text-sm font-semibold">
+        执行状态：
+        {projectProgress?.status === "completed"
+          ? "已完成"
+          : projectProgress?.status === "in_progress"
+            ? "正在执行"
+            : projectProgress?.status === "paused"
+              ? "已暂停"
+              : "尚未开始"}
+      </p>
       <p className="text-sm font-semibold">
         {readiness.ready ? "已具备开始条件" : "尚缺 hard 前置能力"}
       </p>

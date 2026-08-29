@@ -5,6 +5,7 @@ import {
   buildProjectCatalogView,
   getNextProjects,
   getProjectsForConcept,
+  getProjectCompletionEligibility,
   getProjectKnowledgeReadiness,
   getProjectReadiness,
 } from "@/features/projects";
@@ -179,6 +180,55 @@ describe("Phase 5A Project 能力目录", () => {
     expect(selected.missingEnvironmentRequirementIds).not.toContain(
       "environment.pixel-lab.phone-camera",
     );
+  });
+
+  it("完成资格只由 required acceptance、交付物和已开始状态决定", () => {
+    const project = contentManifest.projects.find(
+      ({ id }) => id === "project.pixel-lab",
+    );
+    if (!project) throw new Error("测试需要 Pixel Lab");
+    const base: ProjectProgress = {
+      status: "in_progress",
+      note: "",
+      nextAction: "完成验收",
+      selectedExecutionPathId: "execution.pixel-lab.generated-image",
+      environmentChecks: {},
+      acceptance: {},
+      deliverables: [],
+      unverifiedAssumptions: [],
+      startedAt: "2026-08-29T00:00:00.000Z",
+      updatedAt: "2026-08-29T00:00:00.000Z",
+    };
+
+    expect(getProjectCompletionEligibility(project, undefined)).toMatchObject({
+      eligible: false,
+      hasDeliverable: false,
+      missingAcceptanceCriterionIds: expect.arrayContaining([
+        "acceptance.pixel-lab.environment-rebuild",
+        "acceptance.pixel-lab.reproducible-readme",
+      ]),
+    });
+    const acceptance = Object.fromEntries(
+      project.acceptanceCriteria.map(({ id }) => [id, true]),
+    );
+    expect(
+      getProjectCompletionEligibility(project, {
+        ...base,
+        acceptance,
+        deliverables: [
+          {
+            id: "deliverable.pixel-lab.result",
+            title: "Pixel Lab 项目结果",
+            createdAt: "2026-08-29T00:00:00.000Z",
+            updatedAt: "2026-08-29T00:00:00.000Z",
+          },
+        ],
+      }),
+    ).toEqual({
+      eligible: true,
+      hasDeliverable: true,
+      missingAcceptanceCriterionIds: [],
+    });
   });
 
   it("Next Projects 只沿后续 Stage projectGates 派生", () => {

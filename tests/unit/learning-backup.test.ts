@@ -56,6 +56,9 @@ const catalog: ProgressCatalog = {
       executionPaths: [
         { id: "execution.fixture", requirementIds: ["environment.fixture"] },
       ],
+      acceptanceCriteria: [
+        { id: "acceptance.fixture", required: true },
+      ],
     },
   ],
   stageIds: ["stage.test"],
@@ -274,7 +277,7 @@ describe("Learning OS JSON 备份", () => {
     });
   });
 
-  it("导出 → reset → 导入后恢复 ProjectProgress，且不改写 ConceptProgress", async () => {
+  it("导出 → reset → 导入后恢复完整 Project 完成快照，且不改写 ConceptProgress", async () => {
     const storage = new MemoryStorage();
     const source = makeStore(storage);
     await source.getState().hydrate();
@@ -287,6 +290,25 @@ describe("Learning OS JSON 备份", () => {
         confirmPrerequisiteOverride: true,
       }),
     ).toMatchObject({ ok: true, changed: true });
+    expect(
+      await source
+        .getState()
+        .setProjectAcceptanceCriterion(
+          "project.fixture",
+          "acceptance.fixture",
+          true,
+        ),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(
+      await source.getState().addProjectDeliverable("project.fixture", {
+        id: "deliverable.fixture.backup",
+        title: "备份中的项目交付物",
+        reference: "evidence/backup.md",
+      }),
+    ).toMatchObject({ ok: true, changed: true });
+    expect(
+      await source.getState().completeProject("project.fixture", true),
+    ).toMatchObject({ ok: true, changed: true });
     expect(source.getState().learningState.conceptProgress).toEqual({});
 
     const backup = source.getState().createBackup("2026-08-28");
@@ -295,10 +317,20 @@ describe("Learning OS JSON 备份", () => {
     expect(
       backup.envelope.payload.projectProgress["project.fixture"],
     ).toMatchObject({
-      status: "in_progress",
+      status: "completed",
       selectedExecutionPathId: "execution.fixture",
-      nextAction: "创建项目目录",
       environmentChecks: { "environment.fixture": true },
+      acceptance: { "acceptance.fixture": true },
+      deliverables: [
+        {
+          id: "deliverable.fixture.backup",
+          title: "备份中的项目交付物",
+        },
+      ],
+      completionConfirmation: {
+        acceptanceCriterionIds: ["acceptance.fixture"],
+        deliverableIds: ["deliverable.fixture.backup"],
+      },
       prerequisiteOverride: {
         missingRequirementConceptIds: ["concept.foundation"],
       },
@@ -319,9 +351,12 @@ describe("Learning OS JSON 备份", () => {
     expect(
       refreshed.getState().learningState.projectProgress["project.fixture"],
     ).toMatchObject({
-      status: "in_progress",
+      status: "completed",
       selectedExecutionPathId: "execution.fixture",
-      nextAction: "创建项目目录",
+      deliverables: [{ id: "deliverable.fixture.backup" }],
+      completionConfirmation: {
+        deliverableIds: ["deliverable.fixture.backup"],
+      },
     });
     expect(refreshed.getState().learningState.conceptProgress).toEqual({});
   });

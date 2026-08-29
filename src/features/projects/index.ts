@@ -6,4 +6,5 @@ export * from "./project-model";
 export * from "./project-readiness";
 export * from "./project-progress";
 export * from "./project-execution-panel";
+export * from "./project-completion-panel";
 export * from "./concept-project-usage";

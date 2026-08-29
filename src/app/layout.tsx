@@ -9,6 +9,7 @@ import {
 } from "@/lib/content/site-content";
 
 import "katex/dist/katex.min.css";
+import "@xyflow/react/dist/style.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

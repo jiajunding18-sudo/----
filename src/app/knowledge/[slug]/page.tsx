@@ -11,7 +11,10 @@ import {
   ConceptProjectUsage,
   getConceptProjectUsage,
 } from "@/features/projects";
-import { getKnowledgeConceptView } from "@/features/knowledge/knowledge-content";
+import {
+  getKnowledgeConceptView,
+  getKnowledgeNeighborhood,
+} from "@/features/knowledge/knowledge-content";
 import {
   getPublishedConceptBySlug,
   getPublishedConceptSlugs,
@@ -55,6 +58,7 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
   if (!knowledgeConcept) {
     notFound();
   }
+  const knowledgeNeighborhood = getKnowledgeNeighborhood(concept.id);
   const resources = getConceptResourceGuidance(concept.id);
   const progressConcept = getProgressConceptDefinition(concept.id);
   if (!progressConcept) {
@@ -78,7 +82,10 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
             ]}
             eyebrow="Concept · available（正式内容）"
           />
-          <ConceptNavigation concept={knowledgeConcept} />
+          <ConceptNavigation
+            concept={knowledgeConcept}
+            neighborhood={knowledgeNeighborhood}
+          />
           <ConceptProjectUsage projects={projects} />
           <ConceptProgressPanel
             concept={progressConcept}

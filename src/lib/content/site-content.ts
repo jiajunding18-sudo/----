@@ -18,6 +18,8 @@ import {
   buildResourceCatalogView,
   getConceptResourceGuidance as buildConceptResourceGuidance,
   getProjectResourceGuidance as buildProjectResourceGuidance,
+  getResourceCatalogItemBySlug as findResourceCatalogItemBySlug,
+  getResourceSlugs as buildResourceSlugs,
 } from "@/features/resources/resource-model";
 
 export const stageZeroId = "stage.tooling-foundations";
@@ -137,6 +139,14 @@ export function getTracks(trackIds: readonly string[]): readonly DeepReadonly<Tr
 
 export function getResourceCatalogView() {
   return buildResourceCatalogView(contentManifest);
+}
+
+export function getResourceCatalogItemBySlug(slug: string) {
+  return findResourceCatalogItemBySlug(contentManifest, slug);
+}
+
+export function getResourceSlugs() {
+  return buildResourceSlugs(contentManifest);
 }
 
 export function getConceptResourceGuidance(conceptId: string) {

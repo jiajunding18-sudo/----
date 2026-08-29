@@ -91,7 +91,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         project={project}
       />
       <ResourceGuidanceList
-        description="这里只显示 ProjectMeta.resources 中真实声明的关系，并保留 documentation、dataset、course、repository 或 reference 角色。"
+        description="这里只显示 ProjectMeta.resources 中真实声明的关系，并保留正式角色；资源名称统一先进入站内详情。"
         items={resources}
         title="项目资源"
       />

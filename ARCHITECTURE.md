@@ -123,6 +123,7 @@ export default nextConfig;
 │  │  ├─ projects/page.tsx
 │  │  ├─ projects/[slug]/page.tsx
 │  │  ├─ resources/page.tsx
+│  │  ├─ resources/[slug]/page.tsx
 │  │  ├─ study-log/page.tsx
 │  │  ├─ search/page.tsx
 │  │  └─ settings/data/page.tsx
@@ -221,10 +222,12 @@ MDX 由 Next.js 的本地 MDX 支持编译，frontmatter 通过 remark frontmatt
 
 - `/knowledge/[slug]` 的 `generateStaticParams()` 从 concept manifest 返回全部 canonical slug 与保留的 legacy slug。
 - `/projects/[slug]` 使用同一模式。
+- `/resources/[slug]` 从正式 Resource 的稳定 ID 派生：`resource.<kebab-case>` 去掉 `resource.` 前缀后作为公开路由段。Resource schema 不重复保存等价 slug；所有正式 Resource 都由 `generateStaticParams()` 生成，未知值返回静态 404。
 - 页面首先按 slug 定位 manifest，再用稳定 ID 获取实体和关联数据。
 - canonical slug 输出正常页面；legacy slug 输出静态迁移页，声明 canonical URL，并引导到新地址。静态模式不依赖服务器 redirect。
 - 找不到的 slug 在构建数据中不存在，返回静态 404；不得回退到运行时文件读取。
 - Dashboard、Roadmap、Projects 和 Graph 读取同一个规范化 catalog，不各自维护副本。
+- Resources 页的 `type`、`stage`、`track`、`difficulty` 与 `relatedConcept` 由 Client Component 读取 URL query；仅接受当前正式 catalog 派生的值，非法值按“全部”处理。筛选状态不进入个人持久化数据。
 
 ### 5.3 必需内容质量检查
 
@@ -243,6 +246,7 @@ MDX 由 Next.js 的本地 MDX 支持编译，frontmatter 通过 remark frontmatt
 - ID 一经发布永久不变、不得复用，即使标题、Stage、文件路径或 slug 改变。
 - 所有依赖、资源、项目、进度和证据引用都使用 ID，不使用标题或 slug。
 - Stage 使用语义 ID，如 `multiview-geometry`，不得把 `stage-6` 当永久身份；展示顺序由 `order` 决定。
+- Resource ID 必须使用 `resource.<kebab-case>`；详情路由段从不可变 ID 确定性派生，因此不另设需要人工同步的 Resource slug 字段。
 
 ### 6.2 slug
 
@@ -952,6 +956,7 @@ interface SearchDocument {
 ```
 
 - 概念、项目和资源各生成一个主文档。
+- 所有 SearchDocument 都指向站内页面或站内正文锚点；Resource 文档指向 `/resources/[slug]`，不得把正式外部 URL 直接作为搜索落点。
 - `ConceptMeta.searchEntries` 为重要公式和工具生成带锚点的子文档，使“公式/工具搜索”可直接定位，而不是引入独立页面体系。
 - MDX 标题、正文、LaTeX 文本和代码标识符被抽取为低权重 `body`；不执行 MDX 中的代码来生成索引。
 - 索引按稳定 ID 排序后输出，确保相同内容生成一致结果。

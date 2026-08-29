@@ -23,6 +23,8 @@ export interface ResourceProjectRelation {
 
 export interface ResourceCatalogItem {
   readonly resource: DeepReadonly<Resource>;
+  readonly slug: string;
+  readonly href: string;
   readonly concepts: readonly ResourceConceptRelation[];
   readonly projects: readonly ResourceProjectRelation[];
   readonly stages: readonly DeepReadonly<StageDefinition>[];
@@ -69,6 +71,25 @@ const resourceTypeOrder = {
   dataset: 7,
 } as const;
 
+const resourceIdPrefix = "resource.";
+const resourceSlugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+export function getResourceSlug(resourceId: string) {
+  const slug = resourceId.startsWith(resourceIdPrefix)
+    ? resourceId.slice(resourceIdPrefix.length)
+    : "";
+  if (!resourceSlugPattern.test(slug)) {
+    throw new Error(
+      `Resource ${resourceId} 必须使用 resource.<kebab-case> 稳定 ID 才能生成详情路由`,
+    );
+  }
+  return slug;
+}
+
+export function getResourceHref(resourceId: string) {
+  return `/resources/${getResourceSlug(resourceId)}/`;
+}
+
 function uniqueById<Item extends { readonly id: string }>(
   items: readonly Item[],
 ) {
@@ -86,6 +107,7 @@ function buildResourceCatalogItem(
   manifest: ContentManifest,
   resource: DeepReadonly<Resource>,
 ): ResourceCatalogItem {
+  const slug = getResourceSlug(resource.id);
   const concepts = manifest.concepts
     .filter(
       (concept) =>
@@ -140,7 +162,15 @@ function buildResourceCatalogItem(
     }),
   ).sort((left, right) => left.order - right.order);
 
-  return { resource, concepts, projects, stages, tracks };
+  return {
+    resource,
+    slug,
+    href: getResourceHref(resource.id),
+    concepts,
+    projects,
+    stages,
+    tracks,
+  };
 }
 
 export function buildResourceCatalogView(
@@ -174,6 +204,21 @@ export function buildResourceCatalogView(
       (left, right) => left.order - right.order,
     ),
   };
+}
+
+export function getResourceCatalogItemBySlug(
+  manifest: ContentManifest,
+  slug: string,
+) {
+  return buildResourceCatalogView(manifest).resources.find(
+    (item) => item.slug === slug,
+  );
+}
+
+export function getResourceSlugs(manifest: ContentManifest) {
+  return buildResourceCatalogView(manifest).resources.map(({ slug }) => ({
+    slug,
+  }));
 }
 
 export function getConceptResourceGuidance(

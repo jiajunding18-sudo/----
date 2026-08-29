@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { ResourceBrowser } from "@/features/resources";
@@ -17,7 +18,15 @@ export default function ResourcesPage() {
         description="按学习目标浏览正式精选资源，并在打开外链前查看来源、难度、推荐理由、建议范围与验证状态。"
         title="Resources"
       />
-      <ResourceBrowser view={view} />
+      <Suspense
+        fallback={
+          <p className="mt-10 text-sm text-[var(--color-muted)]">
+            正在准备资源筛选…
+          </p>
+        }
+      >
+        <ResourceBrowser view={view} />
+      </Suspense>
     </div>
   );
 }

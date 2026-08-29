@@ -90,7 +90,10 @@ test("Concept 技术正文提供高亮代码、复制反馈与学习环节层级
   ).toContainText("Mastery Evidence");
 
   const resourceLink = page.getByRole("link", { name: /The Python Tutorial/ });
-  await expect(resourceLink).toHaveAttribute("target", "_blank");
+  await expect(resourceLink).toHaveAttribute(
+    "href",
+    "/resources/python-tutorial/",
+  );
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

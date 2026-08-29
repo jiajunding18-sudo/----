@@ -103,7 +103,7 @@ test("英文、alias、缩写与 URL 刷新保持正确，draft 项目不进入�
   await expectNoHorizontalOverflow(page);
 });
 
-test("多类型结果、Project 导航与 Resource 外链语义正确", async ({ page }) => {
+test("多类型结果、Project 导航与 Resource 站内落点正确", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/search/?q=Python");
 
@@ -127,12 +127,13 @@ test("多类型结果、Project 导航与 Resource 外链语义正确", async ({
   await expect(resource).toContainText("命中别名");
   await expect(resource.getByRole("link", { name: /The Python Tutorial/ })).toHaveAttribute(
     "href",
-    "https://docs.python.org/3/tutorial/",
+    "/resources/python-tutorial/",
   );
-  await expect(resource.getByRole("link", { name: /The Python Tutorial/ })).toHaveAttribute(
-    "target",
-    "_blank",
-  );
+  await resource.getByRole("link", { name: /The Python Tutorial/ }).click();
+  await expect(page).toHaveURL(/\/resources\/python-tutorial\/$/u);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "The Python Tutorial" }),
+  ).toBeVisible();
 
   await expectNoHorizontalOverflow(page);
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

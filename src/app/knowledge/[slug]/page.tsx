@@ -97,7 +97,7 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
             <ConceptContent />
           </div>
           <ResourceGuidanceList
-            description="顺序直接来自本 Concept 的正式 resourceIds；先看推荐理由和指定章节，再决定是否打开外部材料。"
+            description="顺序直接来自本 Concept 的正式 resourceIds；资源名称先进入站内详情，再由你决定是否打开外部材料。"
             items={resources}
           />
         </article>

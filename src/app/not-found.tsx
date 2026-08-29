@@ -10,7 +10,7 @@ export default function NotFoundPage() {
         内容不存在
       </h1>
       <p className="mt-5 leading-7 text-[var(--color-muted)]">
-        这个 Concept 或 Project 尚未发布、已更换地址，或者输入的链接不正确。
+        这个 Concept、Project 或 Resource 尚未发布、已更换地址，或者输入的链接不正确。
       </p>
       <nav aria-label="返回内容入口" className="mt-7 flex flex-wrap gap-4">
         <Link
@@ -24,6 +24,12 @@ export default function NotFoundPage() {
           href="/projects/"
         >
           返回 Projects
+        </Link>
+        <Link
+          className="font-semibold text-[var(--color-accent)] underline underline-offset-4"
+          href="/resources/"
+        >
+          返回 Resources
         </Link>
       </nav>
     </div>

@@ -56,16 +56,10 @@ export const searchIndexSchema = z
       }
       ids.add(document.id);
 
-      if (
-        (document.kind === "concept" ||
-          document.kind === "project" ||
-          document.kind === "formula" ||
-          document.kind === "tool") &&
-        (!document.href || document.external)
-      ) {
+      if (!document.href || document.external) {
         context.addIssue({
           code: "custom",
-          message: "站内搜索文档必须提供内部 href",
+          message: "SearchDocument 必须提供站内 href",
           path: ["documents", index, "href"],
         });
       }

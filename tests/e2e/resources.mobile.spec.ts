@@ -28,11 +28,24 @@ test("Resources 在 360px 可筛选、可键盘操作且通过基础 axe", async
   await conceptFilter.selectOption("tooling.reproducibility");
   await expect(page.locator("[data-resource-id]")).toHaveCount(3);
   await expect(page.locator('[data-resource-id="resource.github-readme"]')).toBeVisible();
+  await expect(page).toHaveURL(/relatedConcept=tooling\.reproducibility/u);
+  await page.reload();
+  await expect(conceptFilter).toHaveValue("tooling.reproducibility");
 
   const reset = page.getByRole("button", { name: "全部资源" });
   await reset.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-resource-id]")).toHaveCount(8);
+  await page
+    .locator('[data-resource-id="resource.github-readme"]')
+    .getByRole("link", { name: "About the repository README file" })
+    .click();
+  await expect(page).toHaveURL(/\/resources\/github-readme\/$/u);
+  const externalLink = page.getByRole("link", {
+    name: /打开官方资源.*外部网站/u,
+  });
+  await externalLink.focus();
+  await expect(externalLink).toBeFocused();
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

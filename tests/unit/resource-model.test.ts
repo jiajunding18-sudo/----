@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getResourceHref,
+  getResourceSlug,
+} from "@/features/resources";
+import {
   getConceptResourceGuidance,
   getProjectResourceGuidance,
   getResourceCatalogView,
+  getResourceCatalogItemBySlug,
+  getResourceSlugs,
 } from "@/lib/content/site-content";
 
 describe("正式 Resource 派生模型", () => {
@@ -58,6 +64,28 @@ describe("正式 Resource 派生模型", () => {
     expect(pythonVenv?.projects.map(({ project }) => project.id)).toEqual([
       "project.pixel-lab",
     ]);
+  });
+
+  it("从不可变 Resource ID 唯一派生 8 个站内详情路由", () => {
+    const view = getResourceCatalogView();
+    const slugs = getResourceSlugs();
+
+    expect(slugs).toHaveLength(8);
+    expect(new Set(slugs.map(({ slug }) => slug)).size).toBe(8);
+    expect(view.resources.every(({ href }) => href.startsWith("/resources/"))).toBe(
+      true,
+    );
+    expect(getResourceSlug("resource.python-tutorial")).toBe("python-tutorial");
+    expect(getResourceHref("resource.python-tutorial")).toBe(
+      "/resources/python-tutorial/",
+    );
+    expect(
+      getResourceCatalogItemBySlug("python-tutorial")?.resource.id,
+    ).toBe("resource.python-tutorial");
+    expect(getResourceCatalogItemBySlug("not-a-resource")).toBeUndefined();
+    expect(() => getResourceSlug("resource.Invalid Slug")).toThrow(
+      /resource\.<kebab-case>/u,
+    );
   });
 
   it("Concept 推荐顺序和 Project 角色保持各自正式作者输入", () => {

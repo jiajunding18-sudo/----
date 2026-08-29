@@ -5,6 +5,7 @@ import type {
   LoadedProject,
 } from "@/lib/content/manifest-types";
 import { extractMdxHeadings } from "@/lib/content/mdx-headings.mjs";
+import { getResourceHref } from "@/features/resources/resource-model";
 
 import { searchIndexSchema, type SearchDocument } from "./search-schema";
 import { buildSearchTokens } from "./search-text";
@@ -270,8 +271,8 @@ function buildResourceDocuments(manifest: ContentManifest) {
       summary: resource.reason,
       body: (resource.recommendedParts ?? []).join(" "),
       tags: [],
-      href: resource.url,
-      external: true,
+      href: getResourceHref(resource.id),
+      external: false,
       status: resource.verification,
       resourceType: resource.type,
       stageIds: stageContext.stageIds,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { ResourceSummary } from "./resource-summary";
@@ -22,14 +23,71 @@ const levelLabels = {
   advanced: "高级",
 } as const;
 
-export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }) {
-  const [type, setType] = useState("all");
-  const [stageId, setStageId] = useState("all");
-  const [trackId, setTrackId] = useState("all");
-  const [level, setLevel] = useState("all");
-  const [conceptId, setConceptId] = useState("all");
+type ResourceFilterParam =
+  | "type"
+  | "stage"
+  | "track"
+  | "difficulty"
+  | "relatedConcept";
+
+type ResourceFilters = Record<ResourceFilterParam, string>;
+
+function readFilterValue(
+  value: string | null,
+  allowedValues: ReadonlySet<string>,
+) {
+  return value && allowedValues.has(value) ? value : "all";
+}
+
+function readResourceFilters(
+  view: ResourceCatalogView,
+  searchParams: Pick<URLSearchParams, "get">,
+): ResourceFilters {
   const resourceTypes = [...new Set(view.resources.map(({ resource }) => resource.type))];
   const levels = [...new Set(view.resources.map(({ resource }) => resource.level))];
+  return {
+    type: readFilterValue(
+      searchParams.get("type"),
+      new Set<string>(resourceTypes),
+    ),
+    stage: readFilterValue(
+      searchParams.get("stage"),
+      new Set(view.stages.map(({ id }) => id)),
+    ),
+    track: readFilterValue(
+      searchParams.get("track"),
+      new Set(view.tracks.map(({ id }) => id)),
+    ),
+    difficulty: readFilterValue(
+      searchParams.get("difficulty"),
+      new Set<string>(levels),
+    ),
+    relatedConcept: readFilterValue(
+      searchParams.get("relatedConcept"),
+      new Set(view.concepts.map(({ id }) => id)),
+    ),
+  };
+}
+
+function ResourceBrowserState({
+  initialFilters,
+  view,
+}: {
+  readonly initialFilters: ResourceFilters;
+  readonly view: ResourceCatalogView;
+}) {
+  const router = useRouter();
+  const [filters, setFilters] = useState<ResourceFilters>(initialFilters);
+  const resourceTypes = [...new Set(view.resources.map(({ resource }) => resource.type))];
+  const levels = [...new Set(view.resources.map(({ resource }) => resource.level))];
+
+  const {
+    type,
+    stage: stageId,
+    track: trackId,
+    difficulty: level,
+    relatedConcept: conceptId,
+  } = filters;
   const visibleResources = view.resources.filter(
     (item) =>
       (type === "all" || item.resource.type === type) &&
@@ -46,12 +104,37 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
     level === "all" &&
     conceptId === "all";
 
+  function updateFilters(
+    parameter: ResourceFilterParam,
+    value: string,
+  ) {
+    const nextValues: ResourceFilters = {
+      ...filters,
+      [parameter]: value,
+    };
+    setFilters(nextValues);
+    const nextParams = new URLSearchParams();
+    (Object.keys(nextValues) as ResourceFilterParam[]).forEach((key) => {
+      const nextValue = nextValues[key];
+      if (nextValue !== "all") {
+        nextParams.set(key, nextValue);
+      }
+    });
+    const query = nextParams.toString();
+    router.replace(query ? `/resources/?${query}` : "/resources/", {
+      scroll: false,
+    });
+  }
+
   function resetFilters() {
-    setType("all");
-    setStageId("all");
-    setTrackId("all");
-    setLevel("all");
-    setConceptId("all");
+    setFilters({
+      type: "all",
+      stage: "all",
+      track: "all",
+      difficulty: "all",
+      relatedConcept: "all",
+    });
+    router.replace("/resources/", { scroll: false });
   }
 
   return (
@@ -89,7 +172,7 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
             <select
               className="mt-2 block min-h-11 w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-normal focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
               id="resource-type-filter"
-              onChange={(event) => setType(event.target.value)}
+              onChange={(event) => updateFilters("type", event.target.value)}
               value={type}
             >
               <option value="all">全部 Type（{view.resources.length}）</option>
@@ -106,7 +189,7 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
             <select
               className="mt-2 block min-h-11 w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-normal focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
               id="resource-stage-filter"
-              onChange={(event) => setStageId(event.target.value)}
+              onChange={(event) => updateFilters("stage", event.target.value)}
               value={stageId}
             >
               <option value="all">全部相关 Stage</option>
@@ -121,7 +204,7 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
             <select
               className="mt-2 block min-h-11 w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-normal focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
               id="resource-track-filter"
-              onChange={(event) => setTrackId(event.target.value)}
+              onChange={(event) => updateFilters("track", event.target.value)}
               value={trackId}
             >
               <option value="all">全部相关 Track</option>
@@ -136,7 +219,7 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
             <select
               className="mt-2 block min-h-11 w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-normal focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
               id="resource-level-filter"
-              onChange={(event) => setLevel(event.target.value)}
+              onChange={(event) => updateFilters("difficulty", event.target.value)}
               value={level}
             >
               <option value="all">全部难度</option>
@@ -153,7 +236,9 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
             <select
               className="mt-2 block min-h-11 w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-normal focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
               id="resource-concept-filter"
-              onChange={(event) => setConceptId(event.target.value)}
+              onChange={(event) =>
+                updateFilters("relatedConcept", event.target.value)
+              }
               value={conceptId}
             >
               <option value="all">全部相关 Concept</option>
@@ -200,5 +285,17 @@ export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }
         </div>
       )}
     </section>
+  );
+}
+
+export function ResourceBrowser({ view }: { readonly view: ResourceCatalogView }) {
+  const searchParams = useSearchParams();
+
+  return (
+    <ResourceBrowserState
+      initialFilters={readResourceFilters(view, searchParams)}
+      key={searchParams.toString()}
+      view={view}
+    />
   );
 }

@@ -81,7 +81,8 @@ describe("构建期 SearchDocument", () => {
     expect(pythonTutorial).toMatchObject({
       aliases: ["Python 官方教程"],
       authorOrOrganization: "Python Software Foundation",
-      external: true,
+      external: false,
+      href: "/resources/python-tutorial/",
       resourceType: "official-doc",
       status: "verified",
     });
@@ -191,7 +192,7 @@ describe("基础搜索匹配与排序", () => {
     );
     expect(
       searchDocuments(searchIndex.documents, "Python 官方教程")[0]?.href,
-    ).toMatch(/^https:\/\//u);
+    ).toBe("/resources/python-tutorial/");
   });
 
   it("不返回 draft Project，也能安全处理空白和特殊字符", () => {

@@ -82,6 +82,8 @@ function RelationContext({ guidance }: { readonly guidance?: ResourceGuidanceIte
 function ResourceAccess({ item }: { readonly item: ResourceCatalogItem }) {
   const { resource } = item;
   if (resource.verification === "verified") {
+    const label =
+      resource.type === "official-doc" ? "打开官方资源" : "打开外部资源";
     return (
       <a
         className="inline-flex min-h-10 items-center rounded-md border border-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent)] underline-offset-4 hover:bg-[var(--color-accent-soft)]"
@@ -89,8 +91,8 @@ function ResourceAccess({ item }: { readonly item: ResourceCatalogItem }) {
         rel="noreferrer"
         target="_blank"
       >
-        打开外部资源
-        <span className="sr-only">（在新窗口打开）</span>
+        {label}（外部网站）
+        <span className="sr-only">，在新窗口打开</span>
       </a>
     );
   }
@@ -102,8 +104,8 @@ function ResourceAccess({ item }: { readonly item: ResourceCatalogItem }) {
         rel="noreferrer"
         target="_blank"
       >
-        查看待核验链接
-        <span className="sr-only">（在新窗口打开）</span>
+        查看待核验链接（外部网站）
+        <span className="sr-only">，在新窗口打开</span>
       </a>
     );
   }
@@ -111,40 +113,49 @@ function ResourceAccess({ item }: { readonly item: ResourceCatalogItem }) {
 }
 
 export function ResourceSummary({
+  displayMode = "summary",
   guidance,
   item,
 }: {
+  readonly displayMode?: "summary" | "detail";
   readonly guidance?: ResourceGuidanceItem;
   readonly item: ResourceCatalogItem;
 }) {
   const { resource } = item;
+  const isDetail = displayMode === "detail";
+  const ResourceHeading = isDetail ? "h1" : "h3";
+  const SectionHeading = isDetail ? "h2" : "h4";
   const verificationNote =
     resource.verification === "verified" ? undefined : resource.verificationNote;
 
   return (
     <article
       className="min-w-0 py-7"
+      data-resource-detail={isDetail ? "true" : undefined}
       data-resource-id={resource.id}
       id={`resource-${resource.id}`}
     >
       <RelationContext guidance={guidance} />
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-xl font-semibold tracking-[-0.02em]">
-            {resource.verification === "verified" ? (
-              <a
+          <ResourceHeading
+            className={
+              isDetail
+                ? "text-4xl font-semibold tracking-[-0.035em] sm:text-5xl"
+                : "text-xl font-semibold tracking-[-0.02em]"
+            }
+          >
+            {isDetail ? (
+              resource.title
+            ) : (
+              <Link
                 className="text-[var(--color-accent)] underline decoration-[var(--color-border)] underline-offset-4 hover:decoration-[var(--color-accent)]"
-                href={resource.url}
-                rel="noreferrer"
-                target="_blank"
+                href={item.href}
               >
                 {resource.title}
-                <span className="sr-only">（在新窗口打开）</span>
-              </a>
-            ) : (
-              resource.title
+              </Link>
             )}
-          </h3>
+          </ResourceHeading>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
             {resource.authorOrOrganization ?? "来源尚未记录"}
           </p>
@@ -169,17 +180,39 @@ export function ResourceSummary({
           <dt className="font-semibold text-[var(--color-ink)]">语言</dt>
           <dd>{languageLabels[resource.language]}</dd>
         </div>
+        {isDetail ? (
+          <>
+            <div>
+              <dt className="font-semibold text-[var(--color-ink)]">验证状态</dt>
+              <dd>
+                {resource.verification === "verified"
+                  ? "已核验"
+                  : resource.verification === "pending"
+                    ? "待核验"
+                    : "已失效"}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-[var(--color-ink)]">最近验证</dt>
+              <dd>{resource.lastCheckedAt ?? "尚未记录"}</dd>
+            </div>
+          </>
+        ) : null}
       </dl>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <div>
-          <h4 className="text-sm font-semibold">为什么推荐</h4>
+          <SectionHeading className="text-sm font-semibold">
+            为什么推荐
+          </SectionHeading>
           <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
             {resource.reason}
           </p>
         </div>
         <div>
-          <h4 className="text-sm font-semibold">建议学习范围</h4>
+          <SectionHeading className="text-sm font-semibold">
+            建议学习范围
+          </SectionHeading>
           {resource.recommendedParts && resource.recommendedParts.length > 0 ? (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[var(--color-muted)]">
               {resource.recommendedParts.map((part) => (
@@ -196,7 +229,7 @@ export function ResourceSummary({
 
       <div className="mt-5 grid gap-4 border-t border-[var(--color-border)] pt-4 text-sm sm:grid-cols-2">
         <div>
-          <h4 className="font-semibold">对应知识</h4>
+          <SectionHeading className="font-semibold">对应知识</SectionHeading>
           {item.concepts.length > 0 ? (
             <ul className="mt-2 space-y-1 text-[var(--color-muted)]">
               {item.concepts.map(({ concept, recommendationOrder }) => (
@@ -216,7 +249,7 @@ export function ResourceSummary({
           )}
         </div>
         <div>
-          <h4 className="font-semibold">对应项目</h4>
+          <SectionHeading className="font-semibold">对应项目</SectionHeading>
           {item.projects.length > 0 ? (
             <ul className="mt-2 space-y-1 text-[var(--color-muted)]">
               {item.projects.map(({ project, reference }) => (
@@ -242,9 +275,11 @@ export function ResourceSummary({
           链接状态说明：{verificationNote}
         </p>
       ) : null}
-      <div className="mt-5">
-        <ResourceAccess item={item} />
-      </div>
+      {isDetail ? (
+        <div className="mt-5">
+          <ResourceAccess item={item} />
+        </div>
+      ) : null}
     </article>
   );
 }

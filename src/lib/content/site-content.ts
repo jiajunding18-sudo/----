@@ -252,6 +252,27 @@ export function getNextStepCatalog(): NextStepCatalog {
   };
 }
 
+export function getStudyLogCatalog() {
+  return {
+    concepts: contentManifest.concepts.map(
+      ({ id, publicationStatus, slug, title }) => ({
+        id,
+        publicationStatus,
+        slug,
+        title,
+      }),
+    ),
+    projects: contentManifest.projects.map(
+      ({ id, publicationStatus, slug, title }) => ({
+        id,
+        publicationStatus,
+        slug,
+        title,
+      }),
+    ),
+  } as const;
+}
+
 export function getProgressConceptDefinition(conceptId: string) {
   return getProgressCatalog().concepts.find(({ id }) => id === conceptId);
 }

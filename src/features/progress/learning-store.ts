@@ -11,6 +11,12 @@ import {
   type ProjectProgressMutationResult,
   type StartProjectInput,
 } from "@/features/projects/project-progress";
+import {
+  createStudyLog as createStudyLogMutation,
+  updateStudyLog as updateStudyLogMutation,
+  type StudyLogInput,
+  type StudyLogMutationResult,
+} from "@/features/study-log";
 
 import {
   addMasteryEvidence,
@@ -42,6 +48,7 @@ import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
 import type {
   LearningStateV1,
   MasteryEvidence,
+  StudyLog,
   UserDifficulty,
 } from "@/types";
 
@@ -66,6 +73,21 @@ export type ProjectLearningStoreActionResult =
       readonly ok: false;
       readonly code:
         | "missing-project"
+        | "persistence-blocked"
+        | "persistence-error";
+      readonly message: string;
+    };
+
+export type StudyLogLearningStoreActionResult =
+  | StudyLogMutationResult
+  | { readonly ok: true; readonly changed: true; readonly deletedId: string }
+  | {
+      readonly ok: false;
+      readonly code:
+        | "missing-study-log"
+        | "duplicate-study-log"
+        | "invalid-study-log-association"
+        | "confirmation-required"
         | "persistence-blocked"
         | "persistence-error";
       readonly message: string;
@@ -160,6 +182,17 @@ export interface LearningStoreState {
     projectId: string,
     userConfirmed: boolean,
   ) => Promise<ProjectLearningStoreActionResult>;
+  createStudyLog: (
+    input: StudyLogInput,
+  ) => Promise<StudyLogLearningStoreActionResult>;
+  updateStudyLog: (
+    logId: string,
+    input: StudyLogInput,
+  ) => Promise<StudyLogLearningStoreActionResult>;
+  deleteStudyLog: (
+    logId: string,
+    userConfirmed: boolean,
+  ) => Promise<StudyLogLearningStoreActionResult>;
   createBackup: (localDate: string) => BackupCreationResult;
   recordBackupCreated: (timestamp: string) => Promise<DataManagementActionResult>;
   prepareImport: (raw: string, mode: ImportMode) => PrepareImportResult;
@@ -179,6 +212,7 @@ export interface CreateLearningStoreOptions {
   readonly contentVersion: string;
   readonly adapter?: LearningStateStorageAdapter;
   readonly now?: () => string;
+  readonly createStudyLogId?: () => string;
 }
 
 function missingConceptResult(conceptId: string): ProgressMutationResult {
@@ -193,10 +227,21 @@ export function createLearningStore({
   adapter = new LocalStorageLearningStateAdapter(),
   catalog,
   contentVersion,
+  createStudyLogId = () => `study-log.${globalThis.crypto.randomUUID()}`,
   now = () => new Date().toISOString(),
 }: CreateLearningStoreOptions): LearningStoreApi {
   const conceptsById = new Map(catalog.concepts.map((concept) => [concept.id, concept]));
   const projectsById = new Map(catalog.projects.map((project) => [project.id, project]));
+  const publishedConceptIds = new Set(
+    catalog.concepts
+      .filter(({ publicationStatus }) => publicationStatus === "published")
+      .map(({ id }) => id),
+  );
+  const publishedProjectIds = new Set(
+    catalog.projects
+      .filter(({ publicationStatus }) => publicationStatus === "published")
+      .map(({ id }) => id),
+  );
   const initialState = () => createInitialLearningState(catalog.tracks, now());
 
   return createStore<LearningStoreState>()((set, get) => {
@@ -216,12 +261,17 @@ export function createLearningStore({
             timestamp,
           ),
         );
+        const inspection = inspectLearningStateAgainstCatalog(nextState, catalog);
         set({
           learningState: nextState,
           revision: nextRevision,
           savedAt: timestamp,
           persistenceStatus: "ready",
           persistenceMessage: undefined,
+          orphanConceptIds: inspection.orphanConceptIds,
+          orphanProjectIds: inspection.orphanProjectIds,
+          orphanStageIds: inspection.orphanStageIds,
+          orphanTrackIds: inspection.orphanTrackIds,
         });
         return undefined;
       } catch (error) {
@@ -367,6 +417,42 @@ export function createLearningStore({
         };
       }
       return mutation;
+    }
+
+    function invalidStudyLogAssociation(
+      input: StudyLogInput,
+      existing?: StudyLog,
+    ): string | undefined {
+      const retainedConceptIds = new Set(existing?.conceptIds ?? []);
+      const retainedProjectIds = new Set(existing?.projectIds ?? []);
+      const invalidConceptId = input.conceptIds.find(
+        (conceptId) =>
+          !publishedConceptIds.has(conceptId) && !retainedConceptIds.has(conceptId),
+      );
+      if (invalidConceptId) {
+        return `不能新增当前未发布或不存在的 Concept 关联 ${invalidConceptId}。`;
+      }
+      const invalidProjectId = input.projectIds.find(
+        (projectId) =>
+          !publishedProjectIds.has(projectId) && !retainedProjectIds.has(projectId),
+      );
+      return invalidProjectId
+        ? `不能新增当前未发布或不存在的 Project 关联 ${invalidProjectId}。`
+        : undefined;
+    }
+
+    async function commitStudyLogs(
+      nextLogs: readonly StudyLog[],
+    ): Promise<string | undefined> {
+      if (get().persistenceStatus === "blocked") {
+        return "原始本地数据需要恢复处理；为避免覆盖，当前已禁用持久化写入。";
+      }
+      const current = get().learningState;
+      const nextState = learningStateV1Schema.parse({
+        ...current,
+        studyLogs: nextLogs,
+      });
+      return persist(nextState);
     }
 
     return {
@@ -668,6 +754,110 @@ export function createLearningStore({
             now(),
           ),
         );
+      },
+
+      createStudyLog: async (input) => {
+        const associationError = invalidStudyLogAssociation(input);
+        if (associationError) {
+          return {
+            ok: false,
+            code: "invalid-study-log-association",
+            message: associationError,
+          };
+        }
+        const id = createStudyLogId();
+        if (get().learningState.studyLogs.some((log) => log.id === id)) {
+          return {
+            ok: false,
+            code: "duplicate-study-log",
+            message: `Study Log ID ${id} 已存在。`,
+          };
+        }
+        const mutation = createStudyLogMutation(input, id, now());
+        if (!mutation.ok) return mutation;
+        const error = await commitStudyLogs([
+          ...get().learningState.studyLogs,
+          mutation.log,
+        ]);
+        return error
+          ? {
+              ok: false,
+              code:
+                get().persistenceStatus === "blocked"
+                  ? "persistence-blocked"
+                  : "persistence-error",
+              message: `未能保存学习记录：${error}`,
+            }
+          : mutation;
+      },
+
+      updateStudyLog: async (logId, input) => {
+        const existing = get().learningState.studyLogs.find(
+          (log) => log.id === logId,
+        );
+        if (!existing) {
+          return {
+            ok: false,
+            code: "missing-study-log",
+            message: `Study Log ${logId} 不存在。`,
+          };
+        }
+        const associationError = invalidStudyLogAssociation(input, existing);
+        if (associationError) {
+          return {
+            ok: false,
+            code: "invalid-study-log-association",
+            message: associationError,
+          };
+        }
+        const mutation = updateStudyLogMutation(existing, input, now());
+        if (!mutation.ok || !mutation.changed) return mutation;
+        const error = await commitStudyLogs(
+          get().learningState.studyLogs.map((log) =>
+            log.id === logId ? mutation.log : log,
+          ),
+        );
+        return error
+          ? {
+              ok: false,
+              code:
+                get().persistenceStatus === "blocked"
+                  ? "persistence-blocked"
+                  : "persistence-error",
+              message: `未能保存学习记录：${error}`,
+            }
+          : mutation;
+      },
+
+      deleteStudyLog: async (logId, userConfirmed) => {
+        if (!userConfirmed) {
+          return {
+            ok: false,
+            code: "confirmation-required",
+            message: "删除学习记录前需要明确确认。",
+          };
+        }
+        const currentLogs = get().learningState.studyLogs;
+        if (!currentLogs.some((log) => log.id === logId)) {
+          return {
+            ok: false,
+            code: "missing-study-log",
+            message: `Study Log ${logId} 不存在。`,
+          };
+        }
+        const error = await commitStudyLogs(
+          currentLogs.filter((log) => log.id !== logId),
+        );
+        return error
+          ? {
+              ok: false,
+              code:
+                get().persistenceStatus === "blocked"
+                  ? "persistence-blocked"
+                  : "persistence-error",
+              message: `未能删除学习记录：${error}`,
+            }
+          : { ok: true, changed: true, deletedId: logId };
       },
 
       createBackup: (localDate) => {

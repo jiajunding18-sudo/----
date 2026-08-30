@@ -778,6 +778,20 @@ function summarizeProgress(
   scope: ProgressSummary["scope"],
 ): ProgressSummary;
 
+interface StudyLogSummary {
+  todayMinutes: number;
+  weekMinutes: number; // 用户本地自然日，周一为周起点
+  recentLogs: StudyLog[];
+  lastStudyDate?: string;
+  streakDays: number;
+}
+
+function selectStudyLogSummary(
+  logs: StudyLog[],
+  todayLocalDate: string,
+  recentLimit?: number,
+): StudyLogSummary;
+
 interface StageReadiness {
   ready: boolean;
   entryReady: boolean;
@@ -833,6 +847,8 @@ type RecommendationResult =
 
 `summarizeProgress` 先按 scope 筛选 `published + required` 概念并按稳定 ID 去重；`notStarted`、`learning`、`understoodOnly`、`mastered` 是四种互斥状态计数，`started`、`understood`、`mastered` 分别表达累计接触、理解与掌握。`total === 0` 时三个 ratio 都返回 `null`，UI 显示“暂无必修内容”，不得伪装成 0% 或 100%。
 
+Study Log 的日期排序、今日/本周分钟数、最近记录、最近学习日期与连续天数均由纯 selector 派生，不在持久化状态中重复保存统计值。本周按用户本地日期从周一到周日计算；连续天数对同一自然日去重，只在今天或昨天存在有效日志时向前连续计算。打开页面、Concept/Project 状态变化和页面停留均不得创建日志、增加分钟数或改变连续天数。
+
 推荐服务必须按 `PRODUCT_SPEC.md` 的确定顺序解析 `activeStageId`，并输出一个主任务和最多三个备选。每个概念候选先按推荐上下文计算 `requiredStatus`：普通路线使用 `getRouteRequiredStatus(concept, tracks, preferences)`，主项目缺口再以 `minimumStatus` 提高门槛；达到该门槛的候选必须排除。候选所属 Stage 的 `entryGate` 必须先满足；未满足时沿 gate 返回第一个未通过 checkpoint 的可执行知识或项目，不能把 Stage 11 内容提前推荐。排序严格遵循：当前焦点且状态为 `learning` → 其他学习中节点 → 主项目的必需知识或首个可执行前置 → 当前阶段必修 → 当前重点方向必修 → 选修；同层再按 recommended 缺口、可用时间、路线优先级、`hard` 子图拓扑顺序和稳定 ID 排序。recommended 缺口只能成为提示或备选补充任务，不能抢占已就绪主任务。没有显式主项目时按 `updatedAt` 降序选择进行中项目，并以稳定 `Project.id` 字典序打破同时间戳平局。没有普通候选时依次处理数据/门槛错误、未满足的阶段入口、阶段项目、下一阶段、综合项目/周回顾和选修内容。v1 不使用 AI、随机数或黑盒评分。
 
 ## 9. Zustand 与持久化适配器
@@ -843,8 +859,9 @@ type RecommendationResult =
 
 - 持久化：`LearningStateV1`。
 - 不持久化：action、selector、hydration 状态、当前弹窗、搜索输入、临时错误。
-- UI 只能调用 `startConcept`、`markUnderstood`、`confirmMastery`、`addEvidence`、`updateNote` 等领域 action。
+- UI 只能调用 `startConcept`、`markUnderstood`、`confirmMastery`、`addEvidence`、`updateNote`、`createStudyLog`、`updateStudyLog`、`deleteStudyLog` 等领域 action。
 - action 必须先验证不变量，再一次性提交新状态；组件不能直接写任意 status。
+- Study Log action 只替换 `LearningStateV1.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
 
 Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 hydration（如 `skipHydration`），在根部的窄 Client Provider 挂载后调用 `rehydrate()`。hydration 完成前，进度相关 UI 显示中性占位，不得先渲染错误的 0%。
 

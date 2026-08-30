@@ -76,6 +76,7 @@ export function DataManagementPanel() {
 
   const conceptRecordCount = Object.keys(learningState.conceptProgress).length;
   const projectRecordCount = Object.keys(learningState.projectProgress).length;
+  const studyLogRecordCount = learningState.studyLogs.length;
   const orphanCount =
     orphanConceptIds.length +
     orphanProjectIds.length +
@@ -226,6 +227,10 @@ export function DataManagementPanel() {
             <dd className="mt-1 font-semibold">{projectRecordCount} 条</dd>
           </div>
           <div>
+            <dt className="text-[var(--color-muted)]">Study Log</dt>
+            <dd className="mt-1 font-semibold">{studyLogRecordCount} 条</dd>
+          </div>
+          <div>
             <dt className="text-[var(--color-muted)]">历史 orphan</dt>
             <dd className="mt-1 font-semibold">{orphanCount} 条</dd>
           </div>
@@ -338,10 +343,14 @@ export function DataManagementPanel() {
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6">
               <li>{preparedImport.preview.conceptRecordCount} 个 Concept 的学习记录</li>
               <li>{preparedImport.preview.projectRecordCount} 个 Project 的执行记录</li>
+              <li>{preparedImport.preview.studyLogRecordCount} 条 Study Log</li>
               <li>{preparedImport.preview.understoodCount} 个已理解（含已掌握）</li>
               <li>{preparedImport.preview.masteredCount} 个已掌握</li>
               <li>
                 预计新增 {preparedImport.preview.conceptChanges.added} 条、更新 {preparedImport.preview.conceptChanges.updated} 条、保持 {preparedImport.preview.conceptChanges.unchanged} 条 Concept 记录
+              </li>
+              <li>
+                Study Log 预计新增 {preparedImport.preview.studyLogChanges.added} 条、更新 {preparedImport.preview.studyLogChanges.updated} 条、保持 {preparedImport.preview.studyLogChanges.unchanged} 条
               </li>
               <li>
                 {preparedImport.preview.orphanConceptIds.length} 条当前课程中不存在的历史 Concept 记录

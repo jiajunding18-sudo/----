@@ -37,6 +37,7 @@ export interface ImportPreview {
   readonly exportedAt: string;
   readonly conceptRecordCount: number;
   readonly projectRecordCount: number;
+  readonly studyLogRecordCount: number;
   readonly understoodCount: number;
   readonly masteredCount: number;
   readonly orphanConceptIds: readonly string[];
@@ -44,6 +45,7 @@ export interface ImportPreview {
   readonly orphanStageIds: readonly string[];
   readonly orphanTrackIds: readonly string[];
   readonly conceptChanges: ImportRecordSummary;
+  readonly studyLogChanges: ImportRecordSummary;
 }
 
 export interface PreparedLearningStateImport {
@@ -167,6 +169,23 @@ function summarizeConceptChanges(
   return { added, updated, unchanged };
 }
 
+function summarizeStudyLogChanges(
+  current: readonly StudyLog[],
+  incoming: readonly StudyLog[],
+): ImportRecordSummary {
+  const currentById = new Map(current.map((log) => [log.id, log]));
+  let added = 0;
+  let updated = 0;
+  let unchanged = 0;
+  for (const log of incoming) {
+    const existing = currentById.get(log.id);
+    if (!existing) added += 1;
+    else if (log.updatedAt > existing.updatedAt) updated += 1;
+    else unchanged += 1;
+  }
+  return { added, updated, unchanged };
+}
+
 export function createLearningBackup(options: {
   readonly state: LearningStateV1;
   readonly contentVersion: string;
@@ -275,6 +294,7 @@ export function prepareLearningStateImport(options: {
         projectRecordCount: Object.keys(
           migrated.value.payload.projectProgress,
         ).length,
+        studyLogRecordCount: migrated.value.payload.studyLogs.length,
         understoodCount: records.filter(
           ({ status }) => status === "understood" || status === "mastered",
         ).length,
@@ -286,6 +306,10 @@ export function prepareLearningStateImport(options: {
         conceptChanges: summarizeConceptChanges(
           options.currentState.conceptProgress,
           migrated.value.payload.conceptProgress,
+        ),
+        studyLogChanges: summarizeStudyLogChanges(
+          options.currentState.studyLogs,
+          migrated.value.payload.studyLogs,
         ),
       },
     },

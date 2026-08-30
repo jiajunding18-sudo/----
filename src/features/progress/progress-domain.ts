@@ -568,15 +568,21 @@ export function inspectLearningStateAgainstCatalog(
   const projectIds = new Set(catalog.projects.map(({ id }) => id));
   const stageIds = new Set(catalog.stageIds);
   const errors: string[] = [];
-  const orphanConceptIds = Object.keys(state.conceptProgress).filter(
-    (conceptId) => !conceptsById.has(conceptId),
-  );
+  const orphanConceptIds = [
+    ...new Set([
+      ...Object.keys(state.conceptProgress),
+      ...state.studyLogs.flatMap(({ conceptIds }) => conceptIds),
+    ]),
+  ].filter((conceptId) => !conceptsById.has(conceptId));
   const orphanTrackIds = Object.keys(state.preferences.trackGoals).filter(
     (trackId) => !tracksById.has(trackId),
   );
-  const orphanProjectIds = Object.keys(state.projectProgress).filter(
-    (projectId) => !projectIds.has(projectId),
-  );
+  const orphanProjectIds = [
+    ...new Set([
+      ...Object.keys(state.projectProgress),
+      ...state.studyLogs.flatMap(({ projectIds }) => projectIds),
+    ]),
+  ].filter((projectId) => !projectIds.has(projectId));
   const orphanStageIds = Object.keys(state.stageCheckpoints).filter(
     (stageId) => !stageIds.has(stageId),
   );

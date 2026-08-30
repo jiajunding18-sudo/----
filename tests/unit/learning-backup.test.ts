@@ -18,6 +18,7 @@ import {
   prepareLearningStateImport,
   type StringStorage,
 } from "@/lib/storage";
+import type { LearningStateV1 } from "@/types";
 
 const early = "2026-08-28T01:00:00.000Z";
 const later = "2026-08-28T02:00:00.000Z";
@@ -130,7 +131,7 @@ function learningStateWithConcept(timestamp = early) {
   };
 }
 
-function backupJson(state = learningStateWithConcept()) {
+function backupJson(state: LearningStateV1 = learningStateWithConcept()) {
   return createLearningBackup({
     state,
     contentVersion: "2026.08.28",
@@ -200,6 +201,18 @@ describe("Learning OS JSON 备份", () => {
       updatedAt: later,
     });
     await source.getState().confirmMastery("concept.foundation", true);
+    expect(
+      await source.getState().createStudyLog({
+        localDate: "2026-08-28",
+        minutes: 75,
+        conceptIds: ["concept.foundation"],
+        projectIds: ["project.fixture"],
+        learned: "复盘基础概念并整理证据",
+        blockers: "解释边界条件仍不够清楚",
+        completed: "完成书面解释",
+        tomorrowPlan: "复测并补充反例",
+      }),
+    ).toMatchObject({ ok: true, changed: true });
     const backup = source.getState().createBackup("2026-08-28");
     expect(backup.ok).toBe(true);
     if (!backup.ok) return;
@@ -211,13 +224,23 @@ describe("Learning OS JSON 备份", () => {
         evidenceIds: ["evidence.concept-foundation.explain"],
       },
     });
+    expect(backup.envelope.payload.studyLogs).toMatchObject([
+      {
+        minutes: 75,
+        conceptIds: ["concept.foundation"],
+        projectIds: ["project.fixture"],
+        learned: "复盘基础概念并整理证据",
+      },
+    ]);
 
     expect((await source.getState().resetLearningData(true)).ok).toBe(true);
     expect(source.getState().learningState.conceptProgress).toEqual({});
+    expect(source.getState().learningState.studyLogs).toEqual([]);
 
     const prepared = source.getState().prepareImport(backup.json, "replace");
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
+    expect(prepared.value.preview.studyLogRecordCount).toBe(1);
     expect((await source.getState().applyImport(prepared.value, true)).ok).toBe(true);
 
     const refreshed = makeStore(storage);
@@ -231,6 +254,14 @@ describe("Learning OS JSON 备份", () => {
         evidenceIds: ["evidence.concept-foundation.explain"],
       },
     });
+    expect(refreshed.getState().learningState.studyLogs).toMatchObject([
+      {
+        minutes: 75,
+        learned: "复盘基础概念并整理证据",
+        conceptIds: ["concept.foundation"],
+        projectIds: ["project.fixture"],
+      },
+    ]);
   });
 
   it("导出 → reset → 导入后完整恢复笔记、收藏与自评难度", async () => {
@@ -456,6 +487,54 @@ describe("Learning OS JSON 备份", () => {
     );
   });
 
+  it("Study Log merge 按稳定 ID 与 updatedAt 选择，并报告变化摘要", () => {
+    const base = createInitialLearningState(catalog.tracks, early);
+    const olderLog = {
+      id: "study-log.shared",
+      localDate: "2026-08-27",
+      minutes: 30,
+      conceptIds: ["concept.foundation"],
+      projectIds: [],
+      learned: "旧内容",
+      blockers: "",
+      completed: "",
+      tomorrowPlan: "",
+      createdAt: early,
+      updatedAt: early,
+    };
+    const current = {
+      ...base,
+      studyLogs: [{ ...olderLog, minutes: 60, learned: "较新内容", updatedAt: later }],
+    };
+    const incoming = {
+      ...base,
+      studyLogs: [
+        olderLog,
+        { ...olderLog, id: "study-log.new", learned: "新增内容" },
+      ],
+    };
+
+    expect(mergeLearningStates(current, incoming).studyLogs).toMatchObject([
+      { id: "study-log.new", learned: "新增内容" },
+      { id: "study-log.shared", minutes: 60, learned: "较新内容" },
+    ]);
+    const prepared = prepareLearningStateImport({
+      raw: backupJson(incoming),
+      currentState: current,
+      catalog,
+      mode: "merge",
+    });
+    expect(prepared).toMatchObject({
+      ok: true,
+      value: {
+        preview: {
+          studyLogRecordCount: 2,
+          studyLogChanges: { added: 1, updated: 0, unchanged: 1 },
+        },
+      },
+    });
+  });
+
   it("Concept / Project / Stage / Track orphan 原样保留并进入预览", () => {
     const state = learningStateWithConcept();
     const withOrphans = {
@@ -489,6 +568,21 @@ describe("Learning OS JSON 备份", () => {
       stageCheckpoints: {
         "stage.retired": { criterionEvidence: {}, updatedAt: early },
       },
+      studyLogs: [
+        {
+          id: "study-log.orphan",
+          localDate: "2026-08-28",
+          minutes: 20,
+          conceptIds: ["concept.log-retired"],
+          projectIds: ["project.log-retired"],
+          learned: "保留历史关联",
+          blockers: "",
+          completed: "",
+          tomorrowPlan: "",
+          createdAt: early,
+          updatedAt: early,
+        },
+      ],
     };
     const result = prepareLearningStateImport({
       raw: backupJson(withOrphans),
@@ -500,8 +594,8 @@ describe("Learning OS JSON 备份", () => {
       ok: true,
       value: {
         preview: {
-          orphanConceptIds: ["concept.retired"],
-          orphanProjectIds: ["project.retired"],
+          orphanConceptIds: ["concept.retired", "concept.log-retired"],
+          orphanProjectIds: ["project.retired", "project.log-retired"],
           orphanStageIds: ["stage.retired"],
           orphanTrackIds: ["track.retired"],
         },
@@ -509,6 +603,7 @@ describe("Learning OS JSON 备份", () => {
     });
     if (result.ok) {
       expect(result.value.nextState.conceptProgress["concept.retired"]).toBeDefined();
+      expect(result.value.nextState.studyLogs[0]?.learned).toBe("保留历史关联");
     }
   });
 });

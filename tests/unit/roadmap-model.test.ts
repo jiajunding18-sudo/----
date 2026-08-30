@@ -27,8 +27,9 @@ describe("Roadmap manifest 派生视图", () => {
     ]);
     expect(roadmap.availableStages.map(({ stage }) => stage.id)).toEqual([
       "stage.tooling-foundations",
+      "stage.vision-math-immediate",
     ]);
-    expect(roadmap.plannedStageCount).toBe(16);
+    expect(roadmap.plannedStageCount).toBe(15);
     expect(
       roadmap.tracks.find(({ track }) => track.id === "track.common")?.stages,
     ).toHaveLength(14);

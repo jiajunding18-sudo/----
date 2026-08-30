@@ -1,0 +1,186 @@
+---
+schemaVersion: 1
+id: math.linear-transforms
+slug: linear-transforms-basis-rank
+title: 线性变换、基与秩
+englishTitle: Linear Transforms, Basis, and Rank
+aliases:
+  - 二维线性变换
+  - Linear Transformations
+searchKeywords:
+  - 线性变换
+  - basis
+  - rank
+  - 旋转矩阵
+  - 剪切
+summary: 把矩阵理解为作用在点和方向上的变换，能可视化二维缩放、旋转与剪切，并用秩判断信息是否被压缩丢失。
+why: 图像缩放、旋转、局部坐标和后续几何估计都依赖变换；理解矩阵怎样移动一组点，比背变换公式更能防止坐标约定错误。
+stageId: stage.vision-math-immediate
+trackIds:
+  - track.common
+order: 20
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 5
+  max: 7
+dependencies:
+  - conceptId: math.vectors-matrices
+    kind: hard
+    reason: 线性变换需要先能解释向量、矩阵乘法、单位矩阵与逆，并在计算前检查形状。
+tags:
+  - 数学基础
+  - 线性变换
+  - 几何直觉
+learningOutcomes:
+  - 能用矩阵作用于二维点，预测并检查缩放、旋转和剪切后的坐标与图形变化。
+  - 能用基向量的去向解释变换，并通过秩亏例子说明信息为何可能不可恢复。
+masteryCriteria:
+  - id: criterion.math-linear-transforms.visualize-transform
+    description: 独立实现并可视化二维缩放、旋转和剪切，对至少四个已知点核对预测坐标、形状约定和方向。
+    evidenceHint: 提交原始点、变换矩阵、手算点、程序结果与图示；明确采用行向量或列向量约定。
+    required: true
+  - id: criterion.math-linear-transforms.explain-rank-loss
+    description: 构造一个秩亏变换，展示两个不同输入得到相同输出，并解释为何不存在唯一逆变换。
+    evidenceHint: 保存矩阵、两组输入、相同输出和信息丢失解释，不以“库报告 singular”代替说明。
+    required: true
+resourceIds:
+  - resource.mit-ocw-linear-algebra
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 线性变换、基与秩（Linear Transforms, Basis, and Rank）
+
+本单元只建立视觉几何最常用的二维直觉：矩阵如何作用于点和方向，什么变化能恢复，什么变化已经丢失信息。
+
+## 1. 这是什么
+
+**线性变换（linear transformation）**把输入向量映射成输出向量，并保持加法与数乘关系。有限维情况下可写成 $y=Ax$。二维矩阵的两列分别告诉我们标准基向量 $e_1=[1,0]^T$、$e_2=[0,1]^T$ 被送到哪里。
+
+**基（basis）**是一组足以唯一表达空间中任意向量的方向。**秩（rank）**描述变换输出中仍保留多少个独立方向；二维满秩变换保留两个独立方向，秩 1 变换会把平面压到一条线。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+你已经会检查矩阵乘法的形状，下一步要理解矩阵乘法对坐标和图形究竟做了什么。Stage 2 的图像几何变换会调用现成函数；没有这里的直觉，很容易把旋转方向、坐标顺序或变换矩阵的放置方式弄反。
+
+### 在机器视觉中会在哪里使用
+
+- 图像缩放、旋转、剪切和局部仿射近似；
+- Stage 1B 的坐标系、基变换和 SVD；
+- 特征方向、相机几何、平面定位与点云处理；
+- 判断某个投影或退化配置是否已经丢失可恢复信息。
+
+## 3. 前置知识
+
+硬前置是 `math.vectors-matrices`。开始前应能写出 $2\times2$ 矩阵乘 $2\times1$ 向量的结果形状，并能解释单位矩阵与逆。平移不是二维线性变换；齐次坐标和平移组合将在 Stage 1B 的坐标系内容中学习。
+
+## 4. 核心概念
+
+- **矩阵是动作**：不要只把矩阵看成数字表。观察它把 $e_1,e_2$ 和一个简单方形送到哪里。
+- **缩放**：对角矩阵分别改变两个坐标轴上的尺度。
+- **旋转**：列向量约定下，逆时针旋转角度 $\theta$ 的矩阵为
+  $R=\begin{bmatrix}\cos\theta&-\sin\theta\\\sin\theta&\cos\theta\end{bmatrix}$。
+- **剪切**：一个坐标按另一个坐标成比例偏移，平行线仍保持平行。
+- **复合**：$BAx$ 表示先做 $A$，再做 $B$。矩阵乘法通常不可交换，顺序必须明确。
+- **基与坐标**：同一个几何向量在不同基下会有不同坐标；本页只理解“基向量的去向”，不展开完整坐标系链。
+- **秩与信息丢失**：若输出方向不再独立，不同输入可能映射为同一输出，无法唯一恢复。
+
+## 5. 初学者直觉解释
+
+在方格纸上画两根单位箭头和一个单位正方形。矩阵先移动两根箭头，其余所有点都按相同线性规则跟随。若两根箭头最后落在同一条线上，整个平面也被压扁到一条线；这就是秩亏的几何信号。
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能区分矩阵、线性变换、基和秩。
+- **理解**：能从矩阵的列解释基向量去向，说明复合顺序和秩亏的后果。
+- **应用**：能对二维点执行缩放、旋转、剪切，手算少量点并用程序或图示核对。
+- **达到本页 `master` 目标**：需要提交三类变换的可视化证据和一个可解释的秩亏实验。
+
+当前不要求证明秩定理，不要求学习一般向量空间，也不要求推导特征分解。平移、齐次坐标、坐标系往返和三维刚体变换留到后续正式节点。
+
+## 7. 常见误区
+
+- 行向量与列向量约定混用，矩阵放在错误一侧。
+- 把顺时针与逆时针、图像向下的 $y$ 轴与数学向上的 $y$ 轴混为一谈。
+- 认为 $AB=BA$，忽略复合顺序。
+- 把平移直接写成 $2\times2$ 线性矩阵。
+- 只看到变换后的图“像对了”，不检查已知点和秩。
+
+## 8. Worked Example：变换一个矩形的四个角点
+
+采用列向量约定，矩形角点为 $(0,0),(2,0),(2,1),(0,1)$。先用矩阵
+
+$$
+A=\begin{bmatrix}1&0.5\\0&1\end{bmatrix}
+$$
+
+做水平剪切。点 $(2,1)^T$ 变为 $(2.5,1)^T$，而 $(2,0)^T$ 保持为 $(2,0)^T$。
+
+```python
+points = [(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)]
+matrix = ((1.0, 0.5), (0.0, 1.0))
+
+
+def transform_point(point, transform):
+    x, y = point
+    return (
+        transform[0][0] * x + transform[0][1] * y,
+        transform[1][0] * x + transform[1][1] * y,
+    )
+
+
+transformed = [transform_point(point, matrix) for point in points]
+print(transformed)
+```
+
+再考虑
+
+$$
+P=\begin{bmatrix}1&0\\0&0\end{bmatrix}.
+$$
+
+$P(2,1)^T=P(2,-3)^T=(2,0)^T$。两个不同输入得到同一输出，原来的 $y$ 信息已经丢失，因此不存在唯一逆变换。这比只记住“行列式为零”更重要。
+
+## 9. Active Recall 主动回忆
+
+1. 矩阵的两列怎样说明标准基向量的去向？
+2. 为什么先旋转再缩放通常不同于先缩放再旋转？
+3. 哪个简单实验可以证明一个变换丢失了信息？
+4. 为什么二维平移不能直接由 $2\times2$ 线性矩阵表达？
+5. 图像坐标的 $y$ 轴方向可能怎样影响旋转直觉？
+
+## 10. Practice 练习
+
+### 理解检查
+
+分别画出矩阵 `[[2, 0], [0, 0.5]]` 对 $e_1,e_2$ 和单位正方形的作用。完成标准：图与四个角点手算一致。
+
+### 简单应用
+
+实现逆时针 90° 旋转并变换 `(1, 0)`、`(0, 1)`、`(1, 1)`。完成标准：结果在 `1e-9` 容差内分别为 `(0, 1)`、`(-1, 0)`、`(-1, 1)`，并说明列向量约定。
+
+### 视觉小练习
+
+把一张小图像的四个角点写成坐标列表，依次应用缩放和旋转，比较交换顺序后的坐标。完成标准：至少一个角点的结果不同，并用复合矩阵顺序解释差异；不要求真的重采样图像。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）未来会收录二维变换、基向量图示和秩亏检查；本轮不生成项目执行能力。
+- **Capability**：把公式转化为可检查的点坐标、图示和往返/退化证据。
+- **Application**：OpenCV 几何变换、平面目标定位、坐标链和重建都会依赖变换方向与信息保留判断。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一个最小二维变换实验：同一组四点分别经过缩放、旋转和剪切；每类至少手算一个点，并与程序结果对照；明确行/列向量、轴方向和复合顺序；另构造秩亏矩阵，证明两个不同输入得到同一输出并解释信息为何不可恢复。只展示漂亮图形不合格。
+
+## 13. 后续复用与复习
+
+ROADMAP 中 `math.coordinate-frames` 与 `math.eigen-svd` 直接建立在本节点上；planned 的 `opencv.geometric-transforms` 也把它作为 hard 前置。24 小时后从空白纸画基向量变换；7 天后换一组矩阵，先预测再运行，并加入一次秩亏诊断。
+
+## 14. 精选学习资源
+
+- **MIT OpenCourseWare 18.06SC Linear Algebra**：本阶段看“Linear Transformations and their Matrices”，并回看 Unit I 中矩阵乘法的几何解释；可选看“Basis and Dimension”问题讲解。看到能从基向量去向解释二维变换与秩亏即可；SVD、特征值和一般证明留到 Stage 1B。

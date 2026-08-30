@@ -21,7 +21,7 @@ test("Resources 在 360px 可筛选、可键盘操作且通过基础 axe", async
   page.on("pageerror", (error) => browserErrors.push(error.message));
 
   await page.goto("/resources/");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(8);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(11);
   const conceptFilter = page.getByLabel("按 Related Concept 浏览");
   await conceptFilter.focus();
   await expect(conceptFilter).toBeFocused();
@@ -35,7 +35,7 @@ test("Resources 在 360px 可筛选、可键盘操作且通过基础 axe", async
   const reset = page.getByRole("button", { name: "全部资源" });
   await reset.focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(8);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(11);
   await page
     .locator('[data-resource-id="resource.github-readme"]')
     .getByRole("link", { name: "About the repository README file" })

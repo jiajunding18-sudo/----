@@ -1,0 +1,191 @@
+---
+schemaVersion: 1
+id: math.calculus-gradients
+slug: calculus-and-gradients
+title: 微积分、偏导、链式法则与梯度
+englishTitle: Calculus, Partial Derivatives, Chain Rule, and Gradients
+aliases:
+  - 视觉梯度基础
+  - Calculus and Gradients
+searchKeywords:
+  - 导数
+  - 偏导
+  - gradient
+  - chain rule
+  - finite difference
+summary: 用变化率理解导数、偏导、链式法则和梯度，能手推简单损失并用有限差分检查实现，而不追求完整微积分证明体系。
+why: 边缘、光流、优化和模型训练都在回答输出如何随输入变化；先掌握可检查的梯度，才能判断方向、尺度与代码实现是否可信。
+stageId: stage.vision-math-immediate
+trackIds:
+  - track.common
+order: 30
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 9
+  max: 11
+dependencies:
+  - conceptId: tooling.python-core
+    kind: hard
+    reason: 数值梯度检查需要能实现函数、循环、浮点计算和误差断言。
+  - conceptId: math.vectors-matrices
+    kind: recommended
+    reason: 先理解向量形状和点积，会更容易把多个偏导组织成梯度并检查参数维度。
+tags:
+  - 数学基础
+  - 微积分
+  - 梯度检查
+learningOutcomes:
+  - 能把导数解释为局部变化率，对简单单变量和多变量损失计算导数、偏导与梯度。
+  - 能用中心有限差分检查一个手推梯度，选择合理步长并分析符号、尺度和数值误差。
+masteryCriteria:
+  - id: criterion.math-calculus-gradients.derive-simple-gradient
+    description: 对一个与像素或坐标误差相关的简单损失独立推导导数或梯度，并解释每一项的方向、单位和零点。
+    evidenceHint: 提交手推过程、关键中间量、至少两个参数点的预测方向，以及与函数图形或数值变化的核对。
+    required: true
+  - id: criterion.math-calculus-gradients.finite-difference-check
+    description: 实现中心有限差分梯度检查，在多个步长下比较解析梯度和数值梯度，并诊断至少一个故意注入的符号或链式法则错误。
+    evidenceHint: 保存代码、步长表、绝对/相对误差、错误版本与修复说明；不能只提交最终通过结果。
+    required: true
+resourceIds:
+  - resource.mit-ocw-multivariable-calculus
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 微积分、偏导、链式法则与梯度（Calculus and Gradients）
+
+本单元只学习视觉算法反复使用的变化率、链式法则和梯度检查。重点是“能解释、能手推、能数值验证”，不是覆盖完整微积分课程。
+
+## 1. 这是什么
+
+**导数（derivative）**描述函数输出对输入的局部变化率。多变量函数对一个变量的变化率叫**偏导数（partial derivative）**；把所有偏导按参数顺序组成向量，得到**梯度（gradient）**。
+
+若输出通过多层函数得到，**链式法则（chain rule）**把各层局部变化率相乘。**有限差分（finite difference）**用函数值近似导数，可作为检查手推或程序实现的独立方法。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+图像边缘是亮度随位置快速变化的地方，参数优化需要知道损失随参数怎样变化，训练则依赖梯度传播。现在先用简单标量和二维坐标建立检查方法，后续遇到卷积、光流或自动微分时才不会把梯度当作黑箱数字。
+
+### 在机器视觉中会在哪里使用
+
+- 灰度剖面的空间导数和边缘检测；
+- 光流中的亮度变化与空间梯度；
+- 标定、配准和重建中的损失最小化；
+- 深度学习的自动微分、反向传播和参数更新。
+
+## 3. 前置知识
+
+硬前置是 `tooling.python-core`。推荐先学 `math.vectors-matrices`，以便把多个偏导按明确形状组织成梯度。开始前只需会基本代数、函数和平方展开；遇到缺失的高中函数知识时按例子局部补齐，不扩张成整门预备课程。
+
+## 4. 核心概念
+
+- **局部变化率**：$f'(x)$ 说明在 $x$ 附近，输入增加一点时输出大约改变多少。
+- **切线近似**：$f(x+h)\approx f(x)+f'(x)h$，只在足够小的局部可信。
+- **偏导与梯度**：对 $L(x,y)$，梯度是 $[\partial L/\partial x,\partial L/\partial y]^T$，方向约定必须和参数排列一致。
+- **链式法则**：若 $L(g)=q(g)^2$，则 $dL/dg=2q\,dq/dg$。漏掉内层导数是常见错误。
+- **梯度方向**：梯度指向局部增长最快方向，负梯度是局部下降方向；这不保证任意步长都能得到更好结果。
+- **有限差分检查**：中心差分 $[f(x+h)-f(x-h)]/(2h)$ 通常比单边差分更准确。$h$ 太大有截断误差，太小会受浮点舍入影响。
+
+## 5. 初学者直觉解释
+
+把损失曲线想成山坡。导数是脚下坡度，不是整座山的地图；梯度是多维地形中最陡的上坡箭头。有限差分则是在脚前后各量一次高度，用两次测量估计坡度。若手推箭头和数值测量方向相反，先查公式或实现，不要直接调学习率。
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能说明导数、偏导、梯度和链式法则的用途。
+- **理解**：能解释梯度的方向、参数顺序和有限差分的近似性质。
+- **应用**：能对平方误差等简单损失手推梯度，并用代码做多步长数值检查。
+- **达到本页 `master` 目标**：必须通过一项独立推导和一项包含故意错误诊断的梯度检查证据。
+
+当前不要求严格的极限证明，不要求完整积分技巧，不要求 Hessian、复杂约束优化或神经网络反向传播推导。优化算法将在 Stage 1B，自动微分与训练将在 Stage 7A。
+
+## 7. 常见误区
+
+- 只背求导公式，不解释变量、单位和变化方向。
+- 多变量梯度的分量顺序与参数顺序不一致。
+- 使用链式法则时漏掉内层导数。
+- 只用一个有限差分步长，误把巧合接近当成正确。
+- 认为沿负梯度走任意大一步都会下降。
+
+## 8. Worked Example：检查灰度增益损失的梯度
+
+设一个像素原始灰度为 $p=80$，希望经简化增益 $g$ 后接近目标 $t=100$。定义平方损失：
+
+$$
+L(g)=(gp-t)^2.
+$$
+
+令 $q(g)=gp-t$，由链式法则：
+
+$$
+\frac{dL}{dg}=2q(g)\frac{dq}{dg}=2(gp-t)p.
+$$
+
+在 $g=1$ 时，$gp-t=-20$，所以梯度为 $-3200$。负号表示在足够小的局部范围内增大 $g$ 会减小损失。
+
+```python
+def loss(gain, pixel=80.0, target=100.0):
+    error = gain * pixel - target
+    return error * error
+
+
+def analytic_gradient(gain, pixel=80.0, target=100.0):
+    return 2.0 * (gain * pixel - target) * pixel
+
+
+def central_difference(function, x, step):
+    return (function(x + step) - function(x - step)) / (2.0 * step)
+
+
+gain = 1.0
+for step in (1e-2, 1e-4, 1e-6, 1e-8):
+    numerical = central_difference(loss, gain, step)
+    analytical = analytic_gradient(gain)
+    print(step, analytical, numerical, abs(analytical - numerical))
+```
+
+这个例子只验证复合函数和梯度检查，不是完整的相机曝光模型。真实曝光还受响应曲线、饱和、噪声和照明影响。
+
+## 9. Active Recall 主动回忆
+
+1. 导数为什么是局部信息，而不是整个函数的完整描述？
+2. 梯度分量的顺序由什么决定？
+3. $L(g)=(gp-t)^2$ 中最容易漏掉哪一项？
+4. 中心差分为何要比较多个步长？
+5. 解析梯度和数值梯度符号相反时，应先检查什么？
+
+## 10. Practice 练习
+
+### 理解检查
+
+对 $L(x)=(x-3)^2$ 写出导数，并判断 $x=0,3,5$ 处负梯度指向哪边。完成标准：方向判断与直接比较相邻函数值一致。
+
+### 简单应用
+
+对 $L(x,y)=(x-3)^2+2(y-1)^2$ 推导梯度，在 `(0, 0)` 手算结果。完成标准：两分量顺序明确，并用二维中心差分在 `1e-4` 步长下得到相对误差小于 `1e-6` 的核对。
+
+### 视觉小练习
+
+取一行灰度 `[20, 24, 35, 80, 132, 140]`，用中心差分估计内部位置的空间梯度，指出变化最强的位置。完成标准：列出每个内部位置的计算，并说明边界像素为何需要另定规则。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）未来会收录手推梯度、有限差分表和错误诊断；本轮不提供训练或优化执行流程。
+- **Capability**：用独立数值检查判断推导与实现是否一致，而不是看到损失下降就默认梯度正确。
+- **Application**：边缘、光流、标定/配准优化和模型训练都会复用局部变化率与链式法则。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一个简单视觉损失的完整梯度检查：定义输入、输出与单位；独立手推；在至少四个步长上记录解析值、数值值和误差；故意删除负号或内层导数，展示检查怎样失败；修复后在至少两个参数点复测。只贴自动微分输出或“loss 下降了”不合格。
+
+## 13. 后续复用与复习
+
+ROADMAP 中 `math.optimization`、`dip.edge-detection`、`cv.optical-flow` 和 `dl.tensor-autograd` 都把本节点作为 hard 前置；`math.lie-groups` 也会回用它，但保持 A 级。24 小时后从空白纸重推 Worked Example；7 天后换一个损失函数和错误类型重做检查。
+
+## 14. 精选学习资源
+
+- **MIT OpenCourseWare 18.02SC Multivariable Calculus**：只看“Partial Derivatives”的 Part A，以及 Part B 的“Chain Rule, Gradient and Directional Derivatives”；配合一两个有解答的练习。看到能解释偏导、梯度、方向导数和链式法则即可；积分、Lagrange 乘子、Green/Stokes 定理当前不需要。

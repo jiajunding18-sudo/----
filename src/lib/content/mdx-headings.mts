@@ -1,6 +1,7 @@
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { unified } from "unified";
 
 export interface ContentHeading {
@@ -11,7 +12,11 @@ export interface ContentHeading {
 
 type UnknownRecord = Record<string, unknown>;
 
-const headingParser = unified().use(remarkParse).use(remarkMdx).use(remarkGfm);
+const headingParser = unified()
+  .use(remarkParse)
+  .use(remarkMdx)
+  .use(remarkGfm)
+  .use(remarkMath);
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;

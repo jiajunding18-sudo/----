@@ -80,6 +80,9 @@ describe("Knowledge Graph 一跳邻域模型", () => {
     expect(graphEdgeIds).toEqual(listEdgeIds);
     expect(graphEdgeIds).toEqual([
       "tooling.computer-files->tooling.python-core:recommended",
+      "tooling.python-core->math.calculus-gradients:hard",
+      "tooling.python-core->math.probability-statistics:hard",
+      "tooling.python-core->math.vectors-matrices:hard",
       "tooling.python-core->tooling.debugging:hard",
       "tooling.python-core->tooling.dev-environment:recommended",
       "tooling.python-core->tooling.python-modules:hard",
@@ -142,6 +145,10 @@ describe("Knowledge Graph 全局 scope 与密度模型", () => {
       scope: { kind: "track", id: "track.common" },
       dependencyKinds: allKinds,
     });
+    const stageOneAView = selectGlobalKnowledgeGraphView(catalog, {
+      scope: { kind: "stage", id: "stage.vision-math-immediate" },
+      dependencyKinds: allKinds,
+    });
     const advancedTrackView = selectGlobalKnowledgeGraphView(catalog, {
       scope: { kind: "track", id: "track.industrial-3d" },
       dependencyKinds: allKinds,
@@ -161,13 +168,13 @@ describe("Knowledge Graph 全局 scope 与密度模型", () => {
     });
     expect(stageView.nodes).toHaveLength(8);
     expect(stageView.edges).toHaveLength(12);
-    expect(commonTrackView.nodes.map(({ id }) => id)).toEqual(
-      stageView.nodes.map(({ id }) => id),
-    );
+    expect(stageOneAView.nodes).toHaveLength(4);
+    expect(stageOneAView.edges).toHaveLength(2);
+    expect(commonTrackView.nodes).toHaveLength(12);
     expect(advancedTrackView.nodes).toEqual([]);
     expect(plannedStageView.nodes).toEqual([]);
-    expect(publishedView.nodes).toHaveLength(8);
-    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(8);
+    expect(publishedView.nodes).toHaveLength(12);
+    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(12);
   });
 
   it("dependency kind 与 Progress 筛选只改变视图，不修改正式依赖", () => {

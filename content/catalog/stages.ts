@@ -66,7 +66,7 @@ export const stages: readonly StageDefinition[] = [
     title: "Stage 1A：即时视觉数学",
     summary:
       "先建立向量、矩阵、线性变换、梯度与概率统计的最小数学语言，为首次图像计算与数值检查提供工具。",
-    contentStatus: "planned",
+    contentStatus: "available",
     trackIds: ["track.common"],
     categoryExitForTrackIds: [],
     outcomes: [

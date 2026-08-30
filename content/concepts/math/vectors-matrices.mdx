@@ -1,0 +1,194 @@
+---
+schemaVersion: 1
+id: math.vectors-matrices
+slug: vectors-and-matrices
+title: 向量、矩阵与基本运算
+englishTitle: Vectors, Matrices, and Basic Operations
+aliases:
+  - 视觉线性代数入门
+  - Vectors and Matrices
+searchKeywords:
+  - 向量
+  - 矩阵
+  - shape
+  - 点积
+  - 矩阵乘法
+summary: 用形状、方向和几何含义理解向量与矩阵，能在运行视觉代码前判断点积、矩阵乘法、转置和逆是否合理。
+why: 图像、像素坐标、颜色和模型参数都会写成向量或矩阵；先学会检查形状与含义，才能避免把维度错误包装成算法问题。
+stageId: stage.vision-math-immediate
+trackIds:
+  - track.common
+order: 10
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 8
+  max: 10
+dependencies:
+  - conceptId: tooling.python-core
+    kind: hard
+    reason: 数值检查需要能读写变量、列表、循环、函数和断言，并解释程序的输入与输出。
+tags:
+  - 数学基础
+  - 线性代数
+  - 形状检查
+learningOutcomes:
+  - 能写出向量与矩阵的形状，判断点积、矩阵乘法和转置后的结果形状，并解释每个维度代表什么。
+  - 能用手算和最小代码检查颜色向量、像素批次等视觉数据的线性组合，发现维度、顺序或单位错误。
+masteryCriteria:
+  - id: criterion.math-vectors-matrices.shape-and-operations
+    description: 对至少两个视觉数据例子写出操作数与结果的形状，手算点积和矩阵乘法，并在运行代码前判断运算是否合法。
+    evidenceHint: 提交带语义标签的形状表、手算过程、代码输出，以及一个故意构造的形状错误和修正说明。
+    required: true
+  - id: criterion.math-vectors-matrices.interpret-and-check
+    description: 能解释转置、单位矩阵和逆在一个简单变换中的作用，并说明直接求逆何时不是好的数值实现策略。
+    evidenceHint: 保存一个可逆 2×2 例子的往返检查、误差结果和对不可逆或近似问题不应盲目求逆的解释。
+    required: true
+resourceIds:
+  - resource.mit-ocw-linear-algebra
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 向量、矩阵与基本运算（Vectors, Matrices, and Basic Operations）
+
+本单元不是完整线性代数课。目标是让你看到视觉公式或数组时，先问清楚“每个数表示什么、形状是什么、这个乘法合法吗”。
+
+## 1. 这是什么
+
+**向量（vector）**是一组有顺序的数，可以表示一个像素的 RGB 颜色、一个二维坐标或一组测量值。**矩阵（matrix）**按行和列组织数，可以表示一批像素、多个点或一个线性变换。
+
+向量和矩阵不是只有数值：它们还带有**形状（shape）**和语义。例如一个 RGB 像素可以记为长度 3 的向量，一批 $N$ 个 RGB 像素可以记为 $N\times3$ 的矩阵。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+Stage 2 会把图像当作数组处理。若现在不能解释行、列、通道和矩阵乘法的形状，后面即使代码运行，也可能把宽高、RGB 顺序或点的排列方式弄错。Stage 0 的 Python 已足以做小规模手算和最小代码检查；NumPy 数组是后续 Stage 2 的推荐伴随知识，不是本页的伪造前置。
+
+### 在机器视觉中会在哪里使用
+
+- 图像数组、颜色转换和批量像素运算；
+- 卷积中小窗口与权重的乘加；
+- 像素点、相机参数、位姿和点云的形状表达；
+- 标定、重建与训练中对维度和数值结果的第一层检查。
+
+## 3. 前置知识
+
+硬前置是 `tooling.python-core`：你需要能使用列表、循环、函数和断言。暂时不要求已经掌握 NumPy；正文用手算和普通 Python 建立数学含义，后续发布 `python.numpy-arrays` 后再把相同检查迁移到数组代码。
+
+## 4. 核心概念
+
+- **形状**：矩阵 $A\in\mathbb{R}^{m\times n}$ 有 $m$ 行、$n$ 列。写形状时同时写语义，例如“3 个像素 × 3 个颜色通道”。
+- **加法与数乘**：只有形状相同的向量或矩阵才能逐项相加；数乘改变大小，不改变形状。
+- **点积（dot product）**：两个等长向量对应元素相乘后求和，结果是标量。它常表示加权和或相似程度，但具体意义取决于数据是否已归一化。
+- **矩阵乘法（matrix multiplication）**：$A_{m\times n}B_{n\times p}=C_{m\times p}$。中间维必须相同，外侧维决定结果形状。
+- **转置（transpose）**：$A^T$ 交换行列。转置不是“让报错消失”的工具；它会改变数据组织方式，必须解释新行列的含义。
+- **单位矩阵与逆（identity and inverse）**：$I$ 保持向量不变；若方阵 $A$ 可逆，则 $A^{-1}A=I$。工程代码通常优先求解线性方程，而不是显式计算逆；数值稳定性将在 Stage 1B 深入。
+
+## 5. 初学者直觉解释
+
+把形状想成插头规格。矩阵乘法要求前一个对象的“输出接口”与后一个对象的“输入接口”一致。两个维度恰好都是 3，不代表语义一定相同：三个颜色通道和三个位姿参数都写成长度 3，但不能因此随意相加。
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能认出标量、向量、矩阵、行、列和 shape。
+- **理解**：能在纸上解释点积、矩阵乘法、转置和逆分别改变什么。
+- **应用**：面对颜色向量或点集，能先写形状再手算，并用最小程序核对。
+- **达到本页 `master` 目标**：必须独立完成形状表、合法性判断、数值计算和失败诊断，并提交 frontmatter 中两项 mastery criterion 的通过证据。
+
+当前不要求证明所有矩阵定理，不要求学习抽象向量空间，也不要求推导通用矩阵分解。特征值、SVD、最小二乘和条件数属于 Stage 1B。
+
+## 7. 常见误区
+
+- 只看元素总数，不写行列含义。
+- 把逐元素乘法和矩阵乘法当成同一件事。
+- 为了通过 shape 检查随意转置，却无法解释新维度。
+- 认为任意方阵都有逆，或把显式求逆当作求解方程的默认方法。
+- 代码输出一个数字就相信结果，不核对颜色顺序、单位和数量级。
+
+## 8. Worked Example：一批 RGB 像素的灰度加权
+
+三个 RGB 像素按“每行一个像素”组织：
+
+$$
+P=
+\begin{bmatrix}
+100 & 150 & 200\\
+20 & 40 & 60\\
+255 & 255 & 255
+\end{bmatrix}
+\quad (3\text{ 个像素}\times3\text{ 个通道})
+$$
+
+取一组用于演示线性加权的系数 $w=[0.299,0.587,0.114]^T$，形状为 $3\times1$。因此 $Pw$ 合法，结果形状为 $3\times1$。第一行手算为：
+
+$$
+100\times0.299+150\times0.587+200\times0.114=140.75
+$$
+
+下面先用 Stage 0 已有的 Python 能力核对，不把 NumPy 当作已学前置：
+
+```python
+pixels = [
+    [100, 150, 200],
+    [20, 40, 60],
+    [255, 255, 255],
+]
+weights = [0.299, 0.587, 0.114]
+
+
+def dot(left, right):
+    if len(left) != len(right):
+        raise ValueError(f"长度不匹配：{len(left)} != {len(right)}")
+    return sum(a * b for a, b in zip(left, right, strict=True))
+
+
+gray_values = [dot(pixel, weights) for pixel in pixels]
+print(gray_values)
+```
+
+这里验证的是形状与加权和，不是要求你背诵某个颜色标准。真实图像库还涉及颜色空间、通道顺序、量化与舍入，必须查看对应 API 的约定。
+
+## 9. Active Recall 主动回忆
+
+1. $A_{4\times3}B_{3\times2}$ 的结果形状是什么？为什么？
+2. $A_{4\times3}B_{4\times2}$ 为什么不能相乘？
+3. “长度都是 3”为什么不足以证明两个向量可以相加？
+4. 转置会改变哪些维度？会不会自动修复语义错误？
+5. 可逆矩阵的往返检查应接近什么结果？
+
+## 10. Practice 练习
+
+### 理解检查
+
+为 $A_{2\times3}$、$x_{3\times1}$、$B_{3\times4}$ 列出所有合法的两两乘法，并写出结果形状。完成标准：每个判断都写出中间维，而不是只写答案。
+
+### 简单应用
+
+手算两个 RGB 像素的加权结果，再修改 `dot` 的输入使其触发长度错误。完成标准：手算与程序误差小于 `1e-9`，错误信息包含两个长度。
+
+### 视觉小练习
+
+把四个二维点组织成“4 个点 × 2 个坐标”的矩阵，设计一个 $2\times2$ 矩阵并预测乘法后的结果形状。完成标准：逐行解释每个点的变化，并指出采用的是行向量还是列向量约定。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）未来会把形状表、手算、代码核对和失败样例整理成数学实验册；当前没有正式执行页面。
+- **Capability**：用形状和数值检查解释数学工具的视觉意义，先验证数据契约，再讨论算法效果。
+- **Application**：图像数组、卷积、相机矩阵、点云和模型参数都会复用同一套维度检查方法。
+
+这些关系来自现有 ROADMAP 与 Project catalog，不表示你现在已经具备标定、重建或训练能力。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一份可复查记录，至少包含：两个视觉数据例子的语义 shape 表；点积与矩阵乘法手算；相同输入的代码核对；一个维度错误及诊断；一个可逆 $2\times2$ 变换的往返误差；以及“为什么不能靠随意转置或直接求逆修复问题”的解释。只阅读或只运行示例不构成掌握。
+
+## 13. 后续复用与复习
+
+直接后续是 `math.linear-transforms`。ROADMAP 中还会在 planned 的 `python.numpy-arrays`、`dip.convolution-lsi`、`optics.thin-lens` 以及几何视觉节点再次使用。24 小时后从空白纸重写矩阵乘法形状规则；7 天后用一组不同形状的点和矩阵重新完成检查。
+
+## 14. 精选学习资源
+
+- **MIT OpenCourseWare 18.06SC Linear Algebra**：本阶段只看 Unit I 中“Geometry of Linear Equations”“Matrix Multiplication and Inverse Matrices”相关讲解，并完成一两个带解答的小题。看到能解释形状、乘法和逆的用途即可；暂不进入特征值、SVD、正定矩阵和完整证明。

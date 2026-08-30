@@ -13,10 +13,10 @@ import {
 } from "@/lib/content/site-content";
 
 describe("正式 Resource 派生模型", () => {
-  it("完整保留 8 个 catalog Resource 及学习指导字段", () => {
+  it("完整保留 11 个 catalog Resource 及学习指导字段", () => {
     const view = getResourceCatalogView();
 
-    expect(view.resources).toHaveLength(8);
+    expect(view.resources).toHaveLength(11);
     expect(
       view.resources.every(
         ({ concepts, projects, resource }) =>
@@ -36,6 +36,9 @@ describe("正式 Resource 派生模型", () => {
         "resource.ubuntu-command-line",
         "resource.npm-package-lock",
         "resource.github-readme",
+        "resource.mit-ocw-linear-algebra",
+        "resource.mit-ocw-multivariable-calculus",
+        "resource.mit-ocw-probability-statistics",
       ]),
     );
   });
@@ -51,6 +54,7 @@ describe("正式 Resource 派生模型", () => {
 
     expect(view.stages.map(({ id }) => id)).toEqual([
       "stage.tooling-foundations",
+      "stage.vision-math-immediate",
     ]);
     expect(view.tracks.map(({ id }) => id)).toEqual(["track.common"]);
     expect(pythonTutorial?.concepts.map(({ concept }) => concept.id)).toEqual(
@@ -66,12 +70,12 @@ describe("正式 Resource 派生模型", () => {
     ]);
   });
 
-  it("从不可变 Resource ID 唯一派生 8 个站内详情路由", () => {
+  it("从不可变 Resource ID 唯一派生 11 个站内详情路由", () => {
     const view = getResourceCatalogView();
     const slugs = getResourceSlugs();
 
-    expect(slugs).toHaveLength(8);
-    expect(new Set(slugs.map(({ slug }) => slug)).size).toBe(8);
+    expect(slugs).toHaveLength(11);
+    expect(new Set(slugs.map(({ slug }) => slug)).size).toBe(11);
     expect(view.resources.every(({ href }) => href.startsWith("/resources/"))).toBe(
       true,
     );

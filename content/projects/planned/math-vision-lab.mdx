@@ -11,7 +11,23 @@ capabilitySummary:
   - 用形状、残差、数值误差和稳定性检查解释核心数学工具的视觉意义。
 realWorldApplications:
   - 为标定、几何估计、重建与模型训练提供可检查的数值基础。
-conceptRequirements: []
+conceptRequirements:
+  - conceptId: math.vectors-matrices
+    kind: hard
+    minimumStatus: understood
+    reason: 实验册必须能为矩阵运算写出语义 shape，并在运行前检查乘法是否合法。
+  - conceptId: math.linear-transforms
+    kind: hard
+    minimumStatus: understood
+    reason: 矩阵变换章节必须能解释二维缩放、旋转、剪切与秩亏的信息损失。
+  - conceptId: math.calculus-gradients
+    kind: hard
+    minimumStatus: understood
+    reason: 梯度章节必须包含手推结果与有限差分检查，不能把变化率当作黑箱输出。
+  - conceptId: math.probability-statistics
+    kind: hard
+    minimumStatus: understood
+    reason: 噪声章节必须报告样本、均值、方差与结论边界，并保留可复现抽样条件。
 estimatedHours:
   min: 20
   max: 30
@@ -21,13 +37,17 @@ environmentRequirements: []
 executionPaths: []
 acceptanceCriteria: []
 deliverableRequirements: []
-evidenceConceptIds: []
+evidenceConceptIds:
+  - math.vectors-matrices
+  - math.linear-transforms
+  - math.calculus-gradients
+  - math.probability-statistics
 resumeOutcome: 完成后将用数值检查说明变换、最小二乘、噪声、SVD 与梯度的视觉意义。
 tags:
   - 数学
   - 数值验证
 publicationStatus: draft
-contentVersion: 2026.08.29.1
+contentVersion: 2026.08.30.1
 ---
 
 # 视觉数学实验册

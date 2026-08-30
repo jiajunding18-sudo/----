@@ -27,7 +27,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   await page.goto("/resources/");
 
   await expect(page.getByRole("heading", { level: 1, name: "Resources" })).toBeVisible();
-  await expect(page.locator("[data-resource-id]")).toHaveCount(8);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(11);
   await expect(page.locator('[data-resource-id="resource.python-tutorial"]')).toContainText(
     "Python Software Foundation",
   );
@@ -66,7 +66,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   await reset.focus();
   await expect(reset).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(8);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(11);
 
   await page.goto(
     "/resources/?type=unknown&stage=missing&track=invalid&difficulty=expert&relatedConcept=ghost",
@@ -76,7 +76,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   await expect(trackFilter).toHaveValue("all");
   await expect(levelFilter).toHaveValue("all");
   await expect(conceptFilter).toHaveValue("all");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(8);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(11);
 
   const internalLink = page
     .locator('[data-resource-id="resource.python-tutorial"]')
@@ -94,7 +94,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   expect(browserErrors).toEqual([]);
 });
 
-test("8 个 Resource 均有静态详情，正式外链只由详情主动打开", async ({
+test("11 个 Resource 均有静态详情，正式外链只由详情主动打开", async ({
   page,
 }) => {
   const browserErrors = trackBrowserErrors(page);
@@ -103,8 +103,8 @@ test("8 个 Resource 均有静态详情，正式外链只由详情主动打开",
     .locator("[data-resource-id] h3 > a")
     .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
 
-  expect(detailHrefs).toHaveLength(8);
-  expect(new Set(detailHrefs).size).toBe(8);
+  expect(detailHrefs).toHaveLength(11);
+  expect(new Set(detailHrefs).size).toBe(11);
   for (const href of detailHrefs) {
     expect(href).not.toBeNull();
     await page.goto(href ?? "/resources/");

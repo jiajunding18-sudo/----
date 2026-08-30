@@ -34,6 +34,13 @@ const stageZeroConceptIds = [
   "tooling.reproducibility",
 ] as const;
 
+const stageOneAConceptIds = [
+  "math.vectors-matrices",
+  "math.linear-transforms",
+  "math.calculus-gradients",
+  "math.probability-statistics",
+] as const;
+
 function getStage(stageId: string): ContentManifest["stages"][number] {
   const stage = contentManifest.stages.find(({ id }) => id === stageId);
   if (!stage) {
@@ -83,7 +90,7 @@ describe("Phase 2B-1 路线 catalog", () => {
     );
   });
 
-  it("保留 Stage 0 八个真实 Concept，其他 checkpoint 不产生已发布 Concept", () => {
+  it("保留 Stage 0 与 Stage 1A 的正式 Concept，其余 checkpoint 不产生已发布 Concept", () => {
     const stageZeroConcepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.tooling-foundations")
       .sort((left, right) => left.order - right.order);
@@ -91,9 +98,19 @@ describe("Phase 2B-1 路线 catalog", () => {
     expect(stageZeroConcepts.map(({ id }) => id)).toEqual(stageZeroConceptIds);
     expect(stageZeroConcepts.every(({ publicationStatus }) => publicationStatus === "published"))
       .toBe(true);
+
+    const stageOneAConcepts = contentManifest.concepts
+      .filter(({ stageId }) => stageId === "stage.vision-math-immediate")
+      .sort((left, right) => left.order - right.order);
+
+    expect(stageOneAConcepts.map(({ id }) => id)).toEqual(stageOneAConceptIds);
+    expect(stageOneAConcepts.every(({ publicationStatus }) => publicationStatus === "published"))
+      .toBe(true);
     expect(
       contentManifest.concepts.filter(
-        ({ stageId }) => stageId !== "stage.tooling-foundations",
+        ({ stageId }) =>
+          stageId !== "stage.tooling-foundations" &&
+          stageId !== "stage.vision-math-immediate",
       ),
     ).toEqual([]);
     expect(getStage("stage.tooling-foundations").contentStatus).toBe(
@@ -101,9 +118,19 @@ describe("Phase 2B-1 路线 catalog", () => {
     );
     expect(
       contentManifest.stages
-        .filter(({ id }) => id !== "stage.tooling-foundations")
+        .filter(
+          ({ id }) =>
+            id !== "stage.tooling-foundations" &&
+            id !== "stage.vision-math-immediate",
+        )
         .every(({ contentStatus }) => contentStatus === "planned"),
     ).toBe(true);
+    expect(getStage("stage.vision-math-immediate").contentStatus).toBe(
+      "available",
+    );
+    expect(
+      getStage("stage.vision-math-geometry-optimization").contentStatus,
+    ).toBe("planned");
   });
 
   it("保留 ROADMAP 声明的非线性 entryGate 与高级方向 OR 门槛", () => {

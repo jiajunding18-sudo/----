@@ -12,6 +12,13 @@ const stageZeroConceptIds = [
   "tooling.reproducibility",
 ] as const;
 
+const stageOneAConceptIds = [
+  "math.vectors-matrices",
+  "math.linear-transforms",
+  "math.calculus-gradients",
+  "math.probability-statistics",
+] as const;
+
 function trackBrowserErrors(page: Page) {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -108,16 +115,38 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await expect(stageZeroOverview).toContainText("可学习");
   await expect(stageZeroOverview).toContainText("8 个 Concept");
 
-  const plannedStage = focusedStageList.locator(
+  const stageOneAOverview = focusedStageList.locator(
     '[data-overview-stage-id="stage.vision-math-immediate"]',
   );
-  await expect(plannedStage).toHaveAttribute("data-content-status", "planned");
-  await expect(plannedStage).toContainText("已规划 · 正式学习内容尚未展开");
-  await expect(plannedStage).toContainText("0 个已发布 Concept");
-  await expect(plannedStage.locator("[data-concept-id]")).toHaveCount(0);
-  await plannedStage.locator("summary").click();
-  await expect(plannedStage).toHaveAttribute("open", "");
-  await expect(plannedStage.locator("[data-exit-criterion-id]")).toHaveCount(2);
+  await expect(stageOneAOverview).toHaveAttribute(
+    "data-content-status",
+    "available",
+  );
+  await expect(stageOneAOverview).toContainText("可学习");
+  await expect(stageOneAOverview).toContainText("4 个 Concept");
+  await stageOneAOverview.locator("summary").click();
+  await expect(stageOneAOverview).toHaveAttribute("open", "");
+  await expect(
+    stageOneAOverview.locator("[data-exit-criterion-id]"),
+  ).toHaveCount(2);
+
+  const stageOneBOverview = focusedStageList.locator(
+    '[data-overview-stage-id="stage.vision-math-geometry-optimization"]',
+  );
+  await expect(stageOneBOverview).toHaveAttribute(
+    "data-content-status",
+    "planned",
+  );
+  await expect(stageOneBOverview).toContainText(
+    "已规划 · 正式学习内容尚未展开",
+  );
+  await expect(stageOneBOverview).toContainText("0 个已发布 Concept");
+  await expect(stageOneBOverview.locator("[data-concept-id]")).toHaveCount(0);
+  await stageOneBOverview.locator("summary").click();
+  await expect(stageOneBOverview).toHaveAttribute("open", "");
+  await expect(
+    stageOneBOverview.locator("[data-exit-criterion-id]"),
+  ).toHaveCount(2);
 
   await industrialButton.click();
   const industrial3d = focusedStageList.locator(
@@ -149,13 +178,12 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await expect(capstone.locator('[data-gate-operator="anyOf"]')).toHaveCount(1);
   await expect(capstone).toContainText("主修掌握");
 
-  const stageOneB = focusedStageList.locator(
-    '[data-overview-stage-id="stage.vision-math-geometry-optimization"]',
-  );
-  await stageOneB.locator("summary").click();
-  await expect(stageOneB.locator("[data-project-gate-id]")).toHaveCount(1);
-  await expect(stageOneB).toContainText("项目已规划 · 正文未发布");
-  const plannedProjectLink = stageOneB.getByRole("link", { name: /视觉数学实验册/ });
+  if ((await stageOneBOverview.getAttribute("open")) === null) {
+    await stageOneBOverview.locator("summary").click();
+  }
+  await expect(stageOneBOverview.locator("[data-project-gate-id]")).toHaveCount(1);
+  await expect(stageOneBOverview).toContainText("项目已规划 · 正文未发布");
+  const plannedProjectLink = stageOneBOverview.getByRole("link", { name: /视觉数学实验册/ });
   await expect(plannedProjectLink).toHaveAttribute(
     "href",
     "/projects/#project-math-vision-lab",
@@ -174,6 +202,17 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   expect(await conceptItems.evaluateAll((items) => items.map((item) => item.getAttribute("data-concept-id")))).toEqual(
     stageZeroConceptIds,
   );
+
+  const stageOneA = page.locator(
+    '[data-stage-id="stage.vision-math-immediate"]',
+  );
+  const stageOneAConcepts = stageOneA.locator("[data-concept-id]");
+  await expect(stageOneAConcepts).toHaveCount(4);
+  expect(
+    await stageOneAConcepts.evaluateAll((items) =>
+      items.map((item) => item.getAttribute("data-concept-id")),
+    ),
+  ).toEqual(stageOneAConceptIds);
   await expect(stage.locator('[data-dependency-kind="hard"]')).toHaveCount(7);
   await expect(stage.locator('[data-dependency-kind="recommended"]')).toHaveCount(5);
   await expect(stage.getByText("M · 必须掌握")).toHaveCount(7);

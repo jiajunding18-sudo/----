@@ -3,6 +3,7 @@ import { relative, resolve, sep } from "node:path";
 
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdx from "remark-mdx";
+import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { VFile } from "vfile";
@@ -15,6 +16,7 @@ import type { LoadedMdxEntity } from "./manifest-types";
 const mdxParser = unified()
   .use(remarkParse)
   .use(remarkMdx)
+  .use(remarkMath)
   .use(remarkFrontmatter, ["yaml"]);
 
 function toPortablePath(path: string) {

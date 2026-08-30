@@ -82,14 +82,14 @@ test("Concept 从未开始到主动确认 mastered，并同步 Dashboard / Knowl
 
   await page.goto("/");
   await expect(page.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
-    "1 / 8",
+    "1 / 12",
   );
   await expect(
     page.locator('[data-dashboard-progress-kind="understood"]'),
-  ).toHaveText("1 / 8");
+  ).toHaveText("1 / 12");
   await expect(
     page.locator('[data-dashboard-progress-kind="mastered"]'),
-  ).toHaveText("1 / 8");
+  ).toHaveText("1 / 12");
   await page.goto("/knowledge/");
   await expect(
     page.locator('[data-knowledge-concept-id="tooling.python-core"] [data-concept-status="mastered"]'),
@@ -186,14 +186,14 @@ test("完整 mastered 状态与 Evidence 可经 Export → Reset → Import 恢�
   );
   await page.goto("/");
   await expect(page.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
-    "1 / 8",
+    "1 / 12",
   );
   await expect(
     page.locator('[data-dashboard-progress-kind="understood"]'),
-  ).toHaveText("1 / 8");
+  ).toHaveText("1 / 12");
   await expect(
     page.locator('[data-dashboard-progress-kind="mastered"]'),
-  ).toHaveText("1 / 8");
+  ).toHaveText("1 / 12");
   await page.goto("/knowledge/");
   await page.locator('[data-knowledge-status-filter="mastered"]').click();
   await expect(page.locator("[data-knowledge-results]")).toContainText(
@@ -213,14 +213,14 @@ test("新用户看到正式 NextStep 与紧凑 Progress，planned Stage 不进�
   await expect(dashboard.getByRole("link", { name: "浏览 Roadmap" })).toBeVisible();
   await expect(dashboard.getByRole("link", { name: "浏览 Knowledge" })).toBeVisible();
   await expect(dashboard.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
-    "0 / 8",
+    "0 / 12",
   );
   await expect(
     dashboard.locator('[data-dashboard-progress-kind="understood"]'),
-  ).toHaveText("0 / 8");
+  ).toHaveText("0 / 12");
   await expect(
     dashboard.locator('[data-dashboard-progress-kind="mastered"]'),
-  ).toHaveText("0 / 8");
+  ).toHaveText("0 / 12");
   await expect(dashboard).not.toContainText("已规划 · 正式学习内容尚未展开");
   await expect(dashboard).not.toContainText("%");
   await expect(
@@ -263,14 +263,14 @@ test("Dashboard、Knowledge 与 Roadmap 使用同一状态并在刷新后保持"
     dashboard.locator('[data-dashboard-learning-concept-id="tooling.dev-environment"]'),
   ).toContainText("开发环境与依赖管理");
   await expect(dashboard.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
-    "3 / 8",
+    "3 / 12",
   );
   await expect(
     dashboard.locator('[data-dashboard-progress-kind="understood"]'),
-  ).toHaveText("2 / 8");
+  ).toHaveText("2 / 12");
   await expect(
     dashboard.locator('[data-dashboard-progress-kind="mastered"]'),
-  ).toHaveText("1 / 8");
+  ).toHaveText("1 / 12");
 
   await page.reload();
   await expect(
@@ -278,7 +278,7 @@ test("Dashboard、Knowledge 与 Roadmap 使用同一状态并在刷新后保持"
   ).toBeVisible();
   await expect(
     page.locator('[data-dashboard-progress-kind="understood"]'),
-  ).toHaveText("2 / 8");
+  ).toHaveText("2 / 12");
 
   await page.goto("/knowledge/");
   const knowledgeLearning = page.locator('[data-knowledge-status-filter="learning"]');

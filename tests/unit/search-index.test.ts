@@ -22,10 +22,10 @@ beforeAll(async () => {
 
 describe("构建期 SearchDocument", () => {
   it("只生成正式可搜索实体，并按稳定 ID 确定排序", () => {
-    expect(searchIndex.documents).toHaveLength(17);
+    expect(searchIndex.documents).toHaveLength(24);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "concept"),
-    ).toHaveLength(8);
+    ).toHaveLength(12);
     expect(
       searchIndex.documents
         .filter(({ kind }) => kind === "concept")
@@ -41,7 +41,7 @@ describe("构建期 SearchDocument", () => {
     ).toHaveLength(1);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "resource"),
-    ).toHaveLength(8);
+    ).toHaveLength(11);
     expect(searchIndex.documents.some(({ id }) => id === "project.stereo-or-pnp")).toBe(
       false,
     );
@@ -92,6 +92,17 @@ describe("构建期 SearchDocument", () => {
       expect.arrayContaining(["official-doc", "beginner", "essential"]),
     );
     expect(pythonTutorial?.relatedTitles.length).toBeGreaterThan(0);
+
+    const gradient = searchIndex.documents.find(
+      ({ id }) => id === "math.calculus-gradients",
+    );
+    expect(gradient).toMatchObject({
+      stageIds: ["stage.vision-math-immediate"],
+      trackIds: ["track.common"],
+      external: false,
+      href: "/knowledge/calculus-and-gradients/",
+    });
+    expect(gradient?.body).toContain("为什么现在学");
   });
 
   it("MDX 文本提取不执行代码，并保持确定性序列化", () => {

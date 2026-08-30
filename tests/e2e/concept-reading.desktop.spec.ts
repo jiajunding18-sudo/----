@@ -101,6 +101,39 @@ test("Concept 技术正文提供高亮代码、复制反馈与学习环节层级
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 1A 数学正文渲染公式、正式资源与 planned Project 映射", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/vectors-and-matrices/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator(".katex-display").first()).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /为什么现在学/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", {
+      level: 3,
+      name: /在机器视觉中会在哪里使用/u,
+    }),
+  ).toBeVisible();
+  await expect(document.getByText("当前不要求", { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "18.06SC Linear Algebra" }),
+  ).toHaveAttribute("href", "/resources/mit-ocw-linear-algebra/");
+
+  const projectUsage = page.locator(
+    '[data-concept-project-id="project.math-vision-lab"]',
+  );
+  await expect(projectUsage).toContainText("hard · 需要已理解");
+  await expect(projectUsage).toContainText("planned · 项目正文尚未发布");
+  await expectNoHorizontalOverflow(page);
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

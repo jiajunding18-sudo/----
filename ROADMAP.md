@@ -118,7 +118,7 @@ flowchart LR
 
 `entryGate` 引用的是 checkpoint 的完整通过状态，不可用若干相关概念已理解来替代其项目、出口证据或复测。Stage 11 的公共 `allOf` 精确包含表中 `track.common` 的九个分类出口，高级 `anyOf` 的两个 leaf 还分别要求对应 Track 当前目标为 `master`；完整永久 ID 展开与 `ARCHITECTURE.md` 一致。
 
-checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前只有 `stage.tooling-foundations` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
+checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations` 与 `stage.vision-math-immediate` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 
 ---
 

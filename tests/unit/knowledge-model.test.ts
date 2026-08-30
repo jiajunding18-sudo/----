@@ -15,15 +15,22 @@ const stageZeroConceptIds = [
   "tooling.reproducibility",
 ] as const;
 
+const stageOneAConceptIds = [
+  "math.vectors-matrices",
+  "math.linear-transforms",
+  "math.calculus-gradients",
+  "math.probability-statistics",
+] as const;
+
 describe("Knowledge manifest 派生视图", () => {
   it("只纳入已发布 Concept，并按正式 Stage / Concept order 返回推荐序位", () => {
     const knowledge = buildKnowledgeView(contentManifest);
 
     expect(knowledge.concepts.map(({ concept }) => concept.id)).toEqual(
-      stageZeroConceptIds,
+      [...stageZeroConceptIds, ...stageOneAConceptIds],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     );
     expect(
       knowledge.concepts.every(
@@ -40,6 +47,9 @@ describe("Knowledge manifest 派生视图", () => {
     const stageTwo = knowledge.stages.find(
       ({ id }) => id === "stage.image-computing",
     );
+    const stageOneA = knowledge.stages.find(
+      ({ id }) => id === "stage.vision-math-immediate",
+    );
 
     expect(knowledge.stages).toHaveLength(17);
     expect(knowledge.tracks.map(({ id }) => id)).toEqual([
@@ -51,14 +61,18 @@ describe("Knowledge manifest 派生视图", () => {
       contentStatus: "available",
       publishedConceptCount: 8,
     });
+    expect(stageOneA).toMatchObject({
+      contentStatus: "available",
+      publishedConceptCount: 4,
+    });
     expect(stageTwo).toMatchObject({
       contentStatus: "planned",
       publishedConceptCount: 0,
     });
-    expect(knowledge.availableStageCount).toBe(1);
-    expect(knowledge.plannedStageCount).toBe(16);
+    expect(knowledge.availableStageCount).toBe(2);
+    expect(knowledge.plannedStageCount).toBe(15);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      8, 0, 0,
+      12, 0, 0,
     ]);
   });
 
@@ -89,6 +103,9 @@ describe("Knowledge manifest 派生视图", () => {
     ).toEqual([
       ["tooling.python-modules", "hard"],
       ["tooling.debugging", "hard"],
+      ["math.vectors-matrices", "hard"],
+      ["math.calculus-gradients", "hard"],
+      ["math.probability-statistics", "hard"],
       ["tooling.dev-environment", "recommended"],
     ]);
   });

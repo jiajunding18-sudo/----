@@ -35,6 +35,35 @@ describe("MDX 正文目录与稳定 anchor", () => {
     expect(secondBuild).toEqual(firstBuild);
   });
 
+  it("正文含行内与块级数学公式时仍能提取稳定标题", () => {
+    expect(
+      extractMdxHeadings(
+        String.raw`# 页面标题
+
+向量 $p = [x, y]^T$。
+
+## Worked Example
+
+$$
+\nabla f = \begin{bmatrix} \partial f / \partial x \\ \partial f / \partial y \end{bmatrix}
+$$
+
+## Mastery Evidence`,
+      ),
+    ).toEqual([
+      {
+        depth: 2,
+        title: "Worked Example",
+        anchor: "section-worked-example",
+      },
+      {
+        depth: 2,
+        title: "Mastery Evidence",
+        anchor: "section-mastery-evidence",
+      },
+    ]);
+  });
+
   it("MDX 编译插件使用同一结果写入 heading id", () => {
     const tree: {
       type: string;

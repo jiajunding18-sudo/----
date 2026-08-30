@@ -24,6 +24,9 @@ describe("网站只读内容接口", () => {
     expect(getPublishedConceptBySlug("python-core")?.id).toBe(
       "tooling.python-core",
     );
+    expect(getPublishedConceptBySlug("vectors-and-matrices")?.id).toBe(
+      "math.vectors-matrices",
+    );
     expect(getPublishedProjectBySlug("pixel-lab")?.id).toBe(
       "project.pixel-lab",
     );
@@ -36,7 +39,7 @@ describe("网站只读内容接口", () => {
       throw new Error("测试需要已发布的 Pixel Lab");
     }
 
-    expect(getPublishedConceptSlugs()).toHaveLength(8);
+    expect(getPublishedConceptSlugs()).toHaveLength(12);
     expect(getConceptsForProject(slice.project)).toHaveLength(8);
   });
 });

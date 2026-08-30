@@ -141,6 +141,34 @@ test("多类型结果、Project 导航与 Resource 站内落点正确", async ({
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 1A 新 Concept 自动进入搜索并落到正式学习页", async ({ page }) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/search/?q=梯度");
+
+  const result = page.locator(
+    '[data-search-result-id="math.calculus-gradients"]',
+  );
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("available · 正式内容");
+  const link = result.getByRole("link", {
+    name: "微积分、偏导、链式法则与梯度",
+  });
+  await expect(link).toHaveAttribute(
+    "href",
+    "/knowledge/calculus-and-gradients/",
+  );
+  await link.click();
+  await expect(page).toHaveURL(/\/knowledge\/calculus-and-gradients\/$/u);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /微积分、偏导、链式法则与梯度/u,
+    }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  expect(browserErrors).toEqual([]);
+});
+
 test("正文标题命中直接进入 Concept 对应稳定章节", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/search/?q=9.%20Active%20Recall%20主动回忆");

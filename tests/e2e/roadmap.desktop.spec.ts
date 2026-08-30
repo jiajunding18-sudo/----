@@ -135,13 +135,10 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   );
   await expect(stageOneBOverview).toHaveAttribute(
     "data-content-status",
-    "planned",
+    "available",
   );
-  await expect(stageOneBOverview).toContainText(
-    "已规划 · 正式学习内容尚未展开",
-  );
-  await expect(stageOneBOverview).toContainText("0 个已发布 Concept");
-  await expect(stageOneBOverview.locator("[data-concept-id]")).toHaveCount(0);
+  await expect(stageOneBOverview).toContainText("可学习");
+  await expect(stageOneBOverview).toContainText("4 个 Concept");
   await stageOneBOverview.locator("summary").click();
   await expect(stageOneBOverview).toHaveAttribute("open", "");
   await expect(
@@ -213,6 +210,20 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
       items.map((item) => item.getAttribute("data-concept-id")),
     ),
   ).toEqual(stageOneAConceptIds);
+
+  const stageOneB = page.locator(
+    '[data-stage-id="stage.vision-math-geometry-optimization"]',
+  );
+  await stageOneB.locator("summary").click();
+  await expect(stageOneB.locator("details")).toHaveAttribute("open", "");
+  await expect(stageOneB.locator("[data-concept-id]")).toHaveCount(4);
+  await expect(
+    stageOneB.locator('[data-concept-id="math.coordinate-frames"]'),
+  ).toBeVisible();
+  await expect(stageOneB.locator('[data-dependency-kind="hard"]')).toHaveCount(5);
+  await expect(
+    stageOneB.locator('[data-dependency-kind="recommended"]'),
+  ).toHaveCount(3);
   await expect(stage.locator('[data-dependency-kind="hard"]')).toHaveCount(7);
   await expect(stage.locator('[data-dependency-kind="recommended"]')).toHaveCount(5);
   await expect(stage.getByText("M · 必须掌握")).toHaveCount(7);

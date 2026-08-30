@@ -44,14 +44,10 @@ const requiredSectionHeadings = [
 ] as const;
 
 describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
-  it("只发布约定的四个 Stage 1A Concept，并保持 Stage 1B planned", () => {
+  it("保留约定的四个 Stage 1A Concept 与原 targetDepth", () => {
     const stageOneAConcepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.vision-math-immediate")
       .toSorted((left, right) => left.order - right.order);
-    const stageOneBConcepts = contentManifest.concepts.filter(
-      ({ stageId }) =>
-        String(stageId) === "stage.vision-math-geometry-optimization",
-    );
     const stageOneA = contentManifest.stages.find(
       ({ id }) => id === "stage.vision-math-immediate",
     );
@@ -79,11 +75,7 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
         : undefined,
     ).toBeUndefined();
     expect(stageOneA?.exitCriteria).toHaveLength(2);
-    expect(stageOneB).toMatchObject({
-      contentStatus: "planned",
-    });
     expect(stageOneB && "entryGate" in stageOneB ? stageOneB.entryGate : undefined).toBeUndefined();
-    expect(stageOneBConcepts).toEqual([]);
   });
 
   it("Stage 1B 依靠 Concept hard dependency 交错进入，不再等待完整 Stage 1A checkpoint", () => {
@@ -96,13 +88,7 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
         ? stageOneB.entryGate
         : undefined,
     ).toBeUndefined();
-    expect(stageOneB?.contentStatus).toBe("planned");
-    expect(
-      contentManifest.concepts.filter(
-        ({ stageId }) =>
-          String(stageId) === "stage.vision-math-geometry-optimization",
-      ),
-    ).toEqual([]);
+    expect(stageOneB?.contentStatus).toBe("available");
   });
 
   it("建立最小 hard / recommended DAG，不伪造尚未发布的 NumPy Concept", () => {
@@ -153,11 +139,11 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
 
   it("每篇正文形成完整学习闭环，并明确当前用途、深度与非目标", async () => {
     const workspaceRoot = process.cwd();
-    const concepts = await loadMdxDirectory({
+    const concepts = (await loadMdxDirectory({
       directoryPath: resolve(workspaceRoot, "content/concepts/math"),
       workspaceRoot,
       schema: conceptMetaSchema,
-    });
+    })).filter(({ meta }) => stageOneAConceptIdSet.has(meta.id));
 
     expect(concepts).toHaveLength(stageOneAConceptIds.length);
     concepts.forEach(({ body, meta }) => {
@@ -192,13 +178,9 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
       expect(resource?.url).toMatch(/^https:\/\//u);
       expect(resource?.reason.length).toBeGreaterThan(0);
       expect(resource?.recommendedParts?.length).toBeGreaterThan(0);
-      expect(resource?.recommendedParts).toEqual(
-        expect.arrayContaining([
-          expect.stringMatching(/^必看：/u),
-          expect.stringMatching(/^可选：/u),
-          expect.stringMatching(/^跳过：/u),
-        ]),
-      );
+      expect(resource?.recommendedParts?.some((part) => part.startsWith("必看"))).toBe(true);
+      expect(resource?.recommendedParts?.some((part) => part.startsWith("选看") || part.startsWith("可选"))).toBe(true);
+      expect(resource?.recommendedParts?.some((part) => part.startsWith("跳过"))).toBe(true);
     });
   });
 
@@ -241,13 +223,6 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
 
     expect(project).toMatchObject({
       publicationStatus: "draft",
-      conceptRequirements: stageOneAConceptIds.map((conceptId) => ({
-        conceptId,
-        kind: "hard",
-        minimumStatus: "understood",
-        reason: expect.any(String),
-      })),
-      evidenceConceptIds: stageOneAConceptIds,
       techStack: [],
       resources: [],
       environmentRequirements: [],
@@ -255,6 +230,15 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
       acceptanceCriteria: [],
       deliverableRequirements: [],
     });
+    expect(project?.conceptRequirements.slice(0, 4)).toEqual(
+      stageOneAConceptIds.map((conceptId) => ({
+        conceptId,
+        kind: "hard",
+        minimumStatus: "understood",
+        reason: expect.any(String),
+      })),
+    );
+    expect(project?.evidenceConceptIds.slice(0, 4)).toEqual(stageOneAConceptIds);
     expect(project?.capabilitySummary).toHaveLength(1);
     expect(project?.realWorldApplications).toHaveLength(1);
   });

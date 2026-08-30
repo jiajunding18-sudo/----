@@ -28,6 +28,22 @@ conceptRequirements:
     kind: hard
     minimumStatus: understood
     reason: 噪声章节必须报告样本、均值、方差与结论边界，并保留可复现抽样条件。
+  - conceptId: math.coordinate-frames
+    kind: hard
+    minimumStatus: understood
+    reason: 坐标章节必须区分几何对象与坐标表示，写清变换方向，并用正逆变换检查点和方向的闭环误差。
+  - conceptId: math.least-squares
+    kind: hard
+    minimumStatus: understood
+    reason: 拟合章节必须建立带噪超定方程，报告残差，并解释普通最小二乘为何会受异常值影响。
+  - conceptId: math.eigen-svd
+    kind: hard
+    minimumStatus: understood
+    reason: SVD 章节必须用奇异值和主要方向解释秩、低秩近似与信息损失，不能只调用分解函数。
+  - conceptId: math.optimization
+    kind: hard
+    minimumStatus: understood
+    reason: 优化章节必须实现可检查的梯度下降，对照步长与最小 L2 正则化，并用有限差分验证梯度。
 estimatedHours:
   min: 20
   max: 30
@@ -42,12 +58,16 @@ evidenceConceptIds:
   - math.linear-transforms
   - math.calculus-gradients
   - math.probability-statistics
+  - math.coordinate-frames
+  - math.least-squares
+  - math.eigen-svd
+  - math.optimization
 resumeOutcome: 完成后将用数值检查说明变换、最小二乘、噪声、SVD 与梯度的视觉意义。
 tags:
   - 数学
   - 数值验证
 publicationStatus: draft
-contentVersion: 2026.08.30.1
+contentVersion: 2026.08.30.2
 ---
 
 # 视觉数学实验册

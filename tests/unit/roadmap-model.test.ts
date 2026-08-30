@@ -28,8 +28,9 @@ describe("Roadmap manifest 派生视图", () => {
     expect(roadmap.availableStages.map(({ stage }) => stage.id)).toEqual([
       "stage.tooling-foundations",
       "stage.vision-math-immediate",
+      "stage.vision-math-geometry-optimization",
     ]);
-    expect(roadmap.plannedStageCount).toBe(15);
+    expect(roadmap.plannedStageCount).toBe(14);
     expect(
       roadmap.tracks.find(({ track }) => track.id === "track.common")?.stages,
     ).toHaveLength(14);
@@ -83,7 +84,7 @@ describe("Roadmap manifest 派生视图", () => {
     ).toContain("深度");
   });
 
-  it("为 planned Stage 派生能力出口与已规划 Project gate，不伪造 Concept", () => {
+  it("为 available Stage 1B 派生正式 Concept、能力出口与 draft Project gate", () => {
     const roadmap = buildRoadmapView(contentManifest);
     const stageOneB = roadmap.overview.stages.find(
       ({ id }) => id === "stage.vision-math-geometry-optimization",
@@ -92,8 +93,8 @@ describe("Roadmap manifest 派生视图", () => {
       ({ id }) => id === "stage.image-computing",
     );
 
-    expect(stageOneB?.contentStatus).toBe("planned");
-    expect(stageOneB?.conceptCount).toBe(0);
+    expect(stageOneB?.contentStatus).toBe("available");
+    expect(stageOneB?.conceptCount).toBe(4);
     expect(stageOneB?.outcomes).toHaveLength(2);
     expect(stageOneB?.exitCriteria).toHaveLength(2);
     expect(stageOneB?.retestAfterDays).toBe(7);

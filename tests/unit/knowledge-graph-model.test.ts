@@ -170,11 +170,11 @@ describe("Knowledge Graph 全局 scope 与密度模型", () => {
     expect(stageView.edges).toHaveLength(12);
     expect(stageOneAView.nodes).toHaveLength(4);
     expect(stageOneAView.edges).toHaveLength(2);
-    expect(commonTrackView.nodes).toHaveLength(12);
+    expect(commonTrackView.nodes).toHaveLength(16);
     expect(advancedTrackView.nodes).toEqual([]);
     expect(plannedStageView.nodes).toEqual([]);
-    expect(publishedView.nodes).toHaveLength(12);
-    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(12);
+    expect(publishedView.nodes).toHaveLength(16);
+    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(16);
   });
 
   it("dependency kind 与 Progress 筛选只改变视图，不修改正式依赖", () => {

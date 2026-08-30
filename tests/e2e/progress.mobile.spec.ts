@@ -37,7 +37,7 @@ test("Dashboard Progress 在 360px 下可继续学习且无页面级横向溢出
   );
   await expect(learningLink).toBeVisible();
   await expect(dashboard.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
-    "1 / 12",
+    "1 / 16",
   );
 
   const overflow = await page.evaluate(() => ({

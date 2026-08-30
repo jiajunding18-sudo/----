@@ -1,0 +1,259 @@
+---
+schemaVersion: 1
+id: math.coordinate-frames
+slug: coordinate-frames
+title: 坐标系、坐标表示与变换方向
+englishTitle: Coordinate Frames, Coordinate Representations, and Transform Direction
+aliases:
+  - 坐标系变换
+  - Coordinate Frames
+searchKeywords:
+  - 坐标系
+  - 坐标表示
+  - frame
+  - change of basis
+  - 变换方向
+  - 坐标链
+summary: 区分几何点、方向、坐标表示和坐标系，能写清变换方向与复合顺序，并用正逆变换验证二维坐标往返。
+why: 相机、物体和世界会使用不同坐标系；若不先写清一个坐标“在哪个系中表达”和矩阵“从哪里变到哪里”，数值看似合理也可能表示完全错误的位置。
+stageId: stage.vision-math-geometry-optimization
+trackIds:
+  - track.common
+order: 10
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 5
+  max: 7
+dependencies:
+  - conceptId: math.linear-transforms
+    kind: hard
+    reason: 坐标变换需要先理解矩阵如何作用于基向量、复合顺序、逆变换和信息是否可恢复。
+tags:
+  - 视觉数学
+  - 坐标系
+  - 几何基础
+learningOutcomes:
+  - 能区分几何点、方向向量、坐标系和坐标列，并说明同一个对象为何在不同坐标系中具有不同数值。
+  - 能用带方向的旋转与平移关系变换二维点和方向，正确组合正逆变换并报告往返误差。
+masteryCriteria:
+  - id: criterion.math-coordinate-frames.direction-and-roundtrip
+    description: 对至少三个二维点和两个方向向量写出坐标系定义、变换方向与正逆公式，完成往返计算并用数值误差验证闭环。
+    evidenceHint: 提交坐标系草图、带上下标或箭头的公式、手算一个点、程序输出，以及最大往返误差和容差说明。
+    required: true
+  - id: criterion.math-coordinate-frames.compose-and-diagnose
+    description: 独立组合两个坐标变换，并诊断至少一个由方向写反、乘法顺序错误或把点当方向造成的失败。
+    evidenceHint: 保存正确与错误版本的中间坐标、最终坐标和修正解释；不能只写“矩阵顺序错了”。
+    required: true
+resourceIds:
+  - resource.mit-ocw-linear-algebra
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 坐标系、坐标表示与变换方向（Coordinate Frames, Coordinate Representations, and Transform Direction）
+
+本单元只建立后续视觉几何需要的坐标语言：对象是什么、坐标在哪个系中表达、变换从哪里到哪里，以及怎样用往返检查方向和顺序。
+
+## 1. 这是什么
+
+几何世界中的一个**点（point）**可以表示物体角点或相机位置；**方向向量（direction vector）**表示朝向或位移，没有固定起点。**坐标系（coordinate frame）**由原点和一组坐标轴组成。把点或方向投影到这些轴上得到的一列数，才是它在该坐标系中的**坐标表示（coordinate representation）**。
+
+因此，点 $P$ 与坐标列 $[P]_A$ 不是同一件事：$P$ 是几何对象，$[P]_A$ 是它在坐标系 $A$ 中的数值描述。同一个点换到坐标系 $B$ 后，$[P]_B$ 通常不同，但点本身没有移动。
+
+本文用箭头 $A\leftarrow B$ 表示“把在 $B$ 中写出的坐标转换为在 $A$ 中的坐标”。写公式前先读箭头，可以减少仅凭矩阵名字猜方向的错误。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+Stage 1A 已经说明矩阵怎样变换点和方向。现在要进一步区分两件容易混淆的事：真的移动一个几何对象，以及保持对象不动但更换描述它的坐标系。后续相机、物体和世界坐标会同时出现；若方向和顺序没有写清，误差可能来自坐标约定而不是视觉算法。
+
+### 在机器视觉中会在哪里使用
+
+- `geometry.homogeneous-coordinates` 会把点、方向与平移写入统一计算形式；
+- `geometry.rigid-transforms` 会建立世界、相机与物体坐标链；
+- 标定、位姿估计和重建需要把观测转换到可比较的共同坐标系；
+- 机器人或测量系统需要明确结果究竟相对相机、工件还是世界基准表达。
+
+这些是后续用途，不表示本页已经教授相机模型、三维刚体变换或机器人标定。
+
+## 3. 前置知识
+
+硬前置是 `math.linear-transforms`。开始前应能采用列向量约定完成二维矩阵乘法，解释 $BAx$ 的先后顺序，并理解正逆变换的往返检查。
+
+本页会使用二维旋转与平移，但不使用完整齐次矩阵。三维例子只用于识别坐标轴名称，不要求现在建立完整 3D 变换体系。
+
+## 4. 核心概念
+
+- **对象与表示分离**：点 $P$ 不随记号改变；$[P]_A$、$[P]_B$ 是不同坐标系给它的两组数字。
+- **坐标系包含原点和轴**：仅知道轴方向还不够；点的坐标也会受原点位置影响。
+- **点与方向不同**：点变换需要旋转和原点偏移，方向只需要旋转。若 $A\leftarrow B$ 的旋转为 $R_{A\leftarrow B}$，坐标系 $B$ 原点在 $A$ 中的位置为 $t_{A\leftarrow B}$，则
+
+  $$
+  [P]_A=R_{A\leftarrow B}[P]_B+t_{A\leftarrow B},\qquad
+  [d]_A=R_{A\leftarrow B}[d]_B.
+  $$
+
+- **逆方向**：二维旋转矩阵满足 $R^{-1}=R^T$。点的逆变换要先减去原点偏移，再旋转回来：
+
+  $$
+  [P]_B=R_{A\leftarrow B}^{T}([P]_A-t_{A\leftarrow B}).
+  $$
+
+- **复合顺序**：若已知 $A\leftarrow B$ 和 $B\leftarrow C$，则从 $C$ 到 $A$ 时先做右侧的 $B\leftarrow C$，再做左侧的 $A\leftarrow B$。矩阵部分为 $R_{A\leftarrow B}R_{B\leftarrow C}$。
+- **数值闭环**：正确的正逆变换应让 $[P]_B\rightarrow[P]_A\rightarrow[P]_B'$ 满足 $[P]_B'\approx[P]_B$。浮点计算比较误差，不直接要求逐位相等。
+
+## 5. 初学者直觉解释
+
+想象你和同伴站在房间不同位置，朝向也不同。桌角没有移动，但你可能说“向右 1 米、向前 2 米”，同伴却说“向左 2 米、向前 1 米”。两组数字都可以正确，因为参照的原点和轴不同。
+
+先画下面这个最小草图，再写公式：
+
+```text
+         A-y
+          ^       B-x
+          |      ^
+          |     /
+     B-o  •----/----> A-x
+        t_A<-B
+```
+
+手绘步骤：标出 $A$ 的原点与轴；在 $A$ 中标出 $B$ 的原点；画出 $B$ 的两根轴；最后标出点 $P$。任何坐标数值旁都写所属坐标系，任何矩阵旁都写变换箭头。
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能区分点、方向、坐标表示和坐标系。
+- **理解**：能解释同一点为何有不同坐标，点与方向为什么对平移反应不同。
+- **应用**：能按明确箭头完成二维正向、逆向和两段复合变换，并用误差验证闭环。
+- **达到本页 `master` 目标**：需要提交坐标草图、手算、程序闭环和一次方向/顺序错误诊断，覆盖两项 mastery criterion。
+
+当前不要求完整齐次变换体系，不要求相机内外参模型，不要求 SE(3)、Lie Group、手眼标定或三维旋转参数化。
+
+## 7. 常见误区
+
+- 把几何点和它的一列坐标当成同一对象。
+- 只写 $R$、$T$，不写它从哪个坐标系变到哪个坐标系。
+- 对方向向量错误地加上坐标系原点偏移。
+- 求逆时只转置旋转，却忘记先处理平移。
+- 看到 $R_1R_2$ 就按从左到右的口头顺序执行。
+- 图画得像对了，却没有用已知点和往返误差检查。
+
+## 8. Worked Example：同一点在两个二维坐标系中的表示
+
+采用列向量。坐标系 $B$ 的原点在 $A$ 中为
+
+$$
+t_{A\leftarrow B}=\begin{bmatrix}2\\1\end{bmatrix},
+$$
+
+且 $B$ 的两根轴在 $A$ 中分别指向 $A$ 的正 $y$ 与负 $x$，所以
+
+$$
+R_{A\leftarrow B}=\begin{bmatrix}0&-1\\1&0\end{bmatrix}.
+$$
+
+点 $P$ 在 $B$ 中的坐标为 $[P]_B=[1,2]^T$。转换到 $A$：
+
+$$
+[P]_A=
+\begin{bmatrix}0&-1\\1&0\end{bmatrix}
+\begin{bmatrix}1\\2\end{bmatrix}
++\begin{bmatrix}2\\1\end{bmatrix}
+=\begin{bmatrix}0\\2\end{bmatrix}.
+$$
+
+逆向时先减平移，再乘 $R^T$：
+
+$$
+[P]_B'=R^T([P]_A-t)=
+\begin{bmatrix}0&1\\-1&0\end{bmatrix}
+\begin{bmatrix}-2\\1\end{bmatrix}
+=\begin{bmatrix}1\\2\end{bmatrix}.
+$$
+
+方向 $[d]_B=[1,0]^T$ 转到 $A$ 后是 $[d]_A=[0,1]^T$，不加 $t$，因为方向没有原点位置。
+
+```python
+from math import hypot
+
+rotation_a_from_b = ((0.0, -1.0), (1.0, 0.0))
+origin_b_in_a = (2.0, 1.0)
+
+
+def rotate(vector, rotation):
+    x, y = vector
+    return (
+        rotation[0][0] * x + rotation[0][1] * y,
+        rotation[1][0] * x + rotation[1][1] * y,
+    )
+
+
+def transpose(matrix):
+    return ((matrix[0][0], matrix[1][0]), (matrix[0][1], matrix[1][1]))
+
+
+def point_a_from_b(point_b):
+    rotated = rotate(point_b, rotation_a_from_b)
+    return (rotated[0] + origin_b_in_a[0], rotated[1] + origin_b_in_a[1])
+
+
+def point_b_from_a(point_a):
+    shifted = (point_a[0] - origin_b_in_a[0], point_a[1] - origin_b_in_a[1])
+    return rotate(shifted, transpose(rotation_a_from_b))
+
+
+point_b = (1.0, 2.0)
+point_a = point_a_from_b(point_b)
+roundtrip_b = point_b_from_a(point_a)
+error = hypot(roundtrip_b[0] - point_b[0], roundtrip_b[1] - point_b[1])
+
+print(point_a, roundtrip_b, error)
+assert error < 1e-12
+```
+
+这里检查的是坐标表示与方向，不是让点先旋转再物理移动。若把 $R$ 换成 $R^T$ 或把平移加在逆变换末尾，闭环会暴露错误。
+
+## 9. Active Recall 主动回忆
+
+1. 几何点 $P$ 与 $[P]_A$ 有什么区别？
+2. 为什么同一点在两个坐标系中可以有不同数值？
+3. 为什么方向向量变换时不加坐标系原点偏移？
+4. $A\leftarrow B$ 和 $B\leftarrow C$ 组合时，哪个变换先作用？
+5. 点的逆变换为什么要先减平移再旋转？
+6. 往返误差接近零能检查什么，又不能证明什么？
+
+## 10. Practice 练习
+
+### 理解检查
+
+给出一个固定几何点，分别说明“点移动了”和“只更换坐标系描述”会改变什么。完成标准：答案明确区分对象、坐标值、原点和轴，且不把两种情况混写。
+
+### 简单应用
+
+令 $R_{A\leftarrow B}=I$、$t_{A\leftarrow B}=[3,-2]^T$，把 $[P]_B=[4,5]^T$ 与 $[d]_B=[4,5]^T$ 分别转换到 $A$ 并逆向恢复。完成标准：点的结果是 `[7, 3]`，方向仍是 `[4, 5]`，两个往返误差均小于 `1e-12`。
+
+### 视觉小练习
+
+在 Worked Example 基础上增加坐标系 $C$：令 $B\leftarrow C$ 为平移 `(1, -1)`、无旋转。实现 $C\rightarrow B\rightarrow A$，再反向恢复三个点。完成标准：列出每段中间坐标，最大闭环误差小于 `1e-10`；随后故意交换两段顺序，保存至少一个不同结果并解释错误方向。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）把本节点列为 hard / understood requirement，未来证据是坐标草图、点与方向往返和错误顺序诊断；项目正文与执行能力仍未发布。
+- **Capability**：复用 Project catalog 的正式能力——用形状、残差、数值误差和稳定性检查解释核心数学工具的视觉意义；本页具体贡献是坐标方向与闭环误差检查。
+- **Application**：复用 Project catalog 的正式应用边界——为标定、几何估计、重建与模型训练提供可检查的数值基础；当前只建立标定与几何所需的坐标语言。
+
+ROADMAP 中直接后续为 `geometry.homogeneous-coordinates` 与 `geometry.rigid-transforms`，不把 planned 用途伪装成当前能力。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一份可复查的坐标变换记录：画出两个坐标系；明确点、方向和每个坐标列所属的 frame；手算至少一个正逆变换；用程序对三个点和两个方向报告最大闭环误差；再加入第三个 frame 完成复合，并保存一次方向写反、顺序错误或点/方向混淆的失败与修正。只给最终坐标或只画示意图不构成掌握。
+
+## 13. 后续复用与复习
+
+本节点是 `geometry.homogeneous-coordinates` 与 `geometry.rigid-transforms` 的 hard 前置，也是 Stage 6A 进入条件之一；`image.digital-representation`、`opencv.geometric-transforms` 与 `optics.fov-magnification` 会推荐回用。24 小时后从空白纸重写点/方向正逆公式；7 天后换一组旋转和平移，先预测方向再运行闭环。
+
+## 14. 精选学习资源
+
+- **MIT OpenCourseWare 18.06SC Linear Algebra**：必看 Lecture 30“Linear Transformations and their Matrices”中矩阵列与输入/输出的关系；再看 Lecture 31“Change of Basis; Image Compression”中 change of basis 的坐标直觉，只回答“同一向量为何换一组坐标”。选看一个 Change of Basis problem-solving 例题。看到能标出旧坐标、新坐标和变换方向即可；跳过 image compression 后半、伪逆、一般向量空间证明与考试。

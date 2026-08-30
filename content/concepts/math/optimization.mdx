@@ -1,0 +1,255 @@
+---
+schemaVersion: 1
+id: math.optimization
+slug: optimization-and-regularization
+title: 优化、梯度下降与最小正则化
+englishTitle: Optimization, Gradient Descent, and Minimal Regularization
+aliases:
+  - 梯度下降
+  - Optimization and Regularization
+searchKeywords:
+  - optimization
+  - objective
+  - loss
+  - gradient descent
+  - learning rate
+  - regularization
+  - finite difference
+summary: 把梯度转化为参数更新，能实现并检查简单梯度下降，比较步长与最小 L2 正则化如何影响收敛和最终参数。
+why: 配准、标定、重建和训练都需要让参数逐步改善；只有同时检查目标值、梯度、步长和终止结果，才能区分正确下降、震荡、发散与过强约束。
+stageId: stage.vision-math-geometry-optimization
+trackIds:
+  - track.common
+order: 40
+level: intermediate
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 9
+  max: 12
+dependencies:
+  - conceptId: math.calculus-gradients
+    kind: hard
+    reason: 梯度下降需要先能解释参数梯度、负梯度方向、链式法则，并用有限差分检查解析梯度。
+  - conceptId: math.least-squares
+    kind: hard
+    reason: 视觉优化通常把多条测量残差汇总为目标函数，需要先理解 residual、平方残差和参数拟合。
+  - conceptId: math.probability-statistics
+    kind: recommended
+    reason: 噪声和抽样直觉有助于解释损失波动与正则化取舍，但不阻塞确定性的一维梯度下降实验。
+tags:
+  - 视觉数学
+  - 优化
+  - 梯度下降
+  - 正则化
+learningOutcomes:
+  - 能区分 parameter、prediction、residual、objective/loss 与 gradient，并解释负梯度更新和 step size 的作用。
+  - 能实现简单梯度下降、用有限差分检查梯度，并通过学习率与最小 L2 正则化对照诊断慢速、震荡、发散和偏置。
+masteryCriteria:
+  - id: criterion.math-optimization.implement-and-check-gradient-descent
+    description: 为一个简单视觉参数目标实现梯度下降，记录每步参数、损失与梯度，并用有限差分在至少两个参数点检查解析梯度。
+    evidenceHint: 提交目标函数、手推梯度、梯度检查误差、迭代表和停止条件；不能只提交最终参数或绘图库结果。
+    required: true
+  - id: criterion.math-optimization.compare-step-and-regularization
+    description: 对同一问题比较至少三种 step size 和有/无最小 L2 regularization，解释收敛速度、震荡/发散与最终参数偏移。
+    evidenceHint: 保存相同初值下的对照表或曲线、最终损失与参数，并说明正则化减少参数幅度所付出的拟合代价。
+    required: true
+resourceIds:
+  - resource.stanford-cs231n-optimization
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 优化、梯度下降与最小正则化（Optimization, Gradient Descent, and Minimal Regularization）
+
+本单元只完成一个可检查的优化闭环：定义目标、计算并验证梯度、选择步长、迭代更新、观察失败，再加入 ROADMAP 要求的最小 L2 正则化对照。
+
+## 1. 这是什么
+
+**参数（parameter）**是算法可以调整的量，例如简化配准中的位移、标定中的某个模型参数或训练中的权重。**目标函数（objective）/损失（loss）**把当前参数的好坏压缩成一个可比较的数值。优化（optimization）尝试找到使目标较小的参数：
+
+$$
+\theta^*=\arg\min_\theta L(\theta).
+$$
+
+若能计算参数梯度 $\nabla_\theta L$，最简单的**梯度下降（gradient descent）**更新是
+
+$$
+\theta_{k+1}=\theta_k-\alpha\nabla_\theta L(\theta_k),
+$$
+
+其中 $\alpha$ 是**步长（step size）**或 **learning rate**。梯度给出局部上升最快方向，负梯度给出局部下降方向；它不告诉我们一步应该走多远。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+`math.calculus-gradients` 已经教会你计算和检查梯度，`math.least-squares` 已经把测量残差汇成目标。现在要把两者连接起来：怎样利用梯度让参数逐步变好，以及怎样通过迭代记录判断更新是否可信。
+
+### 在机器视觉中会在哪里使用
+
+- 图像配准中调整位移、旋转或形变参数；
+- 标定与 `geometry.bundle-adjustment` 中减小重投影残差；
+- 重建和计算成像逆问题中平衡数据拟合与先验；
+- `dl.nn-backprop`、`dl.loss-optimizer` 中更新模型参数。
+
+本页的一维位移损失只是优化语言的最小模型，不是完整图像配准算法。
+
+## 3. 前置知识
+
+硬前置是 `math.calculus-gradients` 与 `math.least-squares`。开始前应能对平方损失手推梯度、用中心差分核对，并解释残差平方和。`math.probability-statistics` 是 recommended，用于后续理解噪声与数据波动。
+
+本页只使用 Python 标准库即可完成实验，不要求自动微分框架或高级优化库。
+
+## 4. 核心概念
+
+- **参数不是输入数据**：参数 $\theta$ 会被更新；观测数据和目标在一次公平对照中保持固定。
+- **目标连接任务与数值**：目标必须说明每一项代表什么。损失下降只说明该目标改善，不保证真实任务一定改善。
+- **梯度方向**：$\nabla L$ 指向局部增长最快方向，更新使用负号。先用有限差分验证方向和尺度，再调步长。
+- **步长**：太小会进展缓慢，合适时稳定下降，太大可能越过低点、震荡甚至发散。
+- **迭代记录**：至少保存 step、parameter、loss、gradient。只看最终值会掩盖中途发散或偶然停止。
+- **停止条件**：可在梯度足够小、参数变化足够小或达到最大步数时停止；阈值必须报告。
+- **局部最优直觉**：简单二次函数只有一个最低点；真实配准损失可能有多个低谷，梯度下降从不同初值可能落到不同局部最优。本页只建立直觉，不解决全局搜索。
+- **最小 L2 正则化**：在数据损失后加 $\lambda\theta^2$，惩罚过大的参数。它会改变最优解，是拟合与参数幅度的取舍，不是免费的稳定开关。
+
+## 5. 初学者直觉解释
+
+把参数想成站在山坡上的位置，把 loss 想成高度。梯度告诉你脚下哪边上坡最快，于是向反方向迈步。脚步太小会走得很慢，太大会跨过谷底来回跳。
+
+```text
+loss
+ ^          large step:  跨过谷底，可能越跳越远
+ | \      /
+ |  \____/    suitable step: 逐步靠近低点
+ +----------------------------> parameter
+```
+
+L2 正则化像在远离零点时增加一条拉回来的橡皮筋。它可能减少不合理的大参数，但也可能让参数无法完全贴合观测。
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能区分 parameter、objective/loss、gradient、step size 和 regularization。
+- **理解**：能解释负梯度更新、步长失败模式、局部最优和 L2 取舍。
+- **应用**：能实现简单梯度下降，记录迭代轨迹，用有限差分检查梯度，并完成步长/正则化对照。
+- **达到本页 `master` 目标**：需要提交可复现的实现、梯度检查和对照诊断，覆盖两项 mastery criterion。
+
+当前不要求 Hessian 理论，不要求推导牛顿法，不要求完整凸优化体系，不要求学习 momentum、Adam 等优化器百科，也不要求神经网络反向传播。
+
+## 7. 常见误区
+
+- 把图像空间梯度 $\nabla I(x,y)$ 与参数梯度 $\nabla_\theta L$ 混为同一对象。
+- 更新式漏掉负号，或在梯度未经检查时直接调 learning rate。
+- 只比较最终 loss，不保持初值、数据和步数一致。
+- 步长太大导致震荡，却误判为目标函数或数据错误。
+- 认为梯度接近零一定是理想全局最优。
+- 加正则化后仍拿未正则化目标的最优参数作为唯一正确答案。
+
+## 8. Worked Example：简化图像位移的一维梯度下降
+
+假设一个独立匹配步骤已经告诉我们目标相对当前位置约向右偏移 3 像素。这里只研究优化器，定义简化数据损失
+
+$$
+L_{data}(\theta)=(\theta-3)^2,
+$$
+
+其中 $\theta$ 是估计的水平位移。解析梯度为
+
+$$
+\frac{dL_{data}}{d\theta}=2(\theta-3).
+$$
+
+从 $\theta_0=0$、步长 $\alpha=0.25$ 开始：梯度为 $-6$，所以 $\theta_1=0-0.25(-6)=1.5$，loss 从 9 降为 2.25；下一步得到 $\theta_2=2.25$，loss 降为 0.5625。
+
+加入最小 L2 项：
+
+$$
+L(\theta)=(\theta-3)^2+\lambda\theta^2,
+\qquad
+\frac{dL}{d\theta}=2(\theta-3)+2\lambda\theta.
+$$
+
+当 $\lambda=0.5$ 时，最优参数从 3 移到 2：参数幅度更小，但不再完全贴合 3 像素目标。
+
+```python
+def loss(parameter, regularization=0.0):
+    data_error = parameter - 3.0
+    return data_error * data_error + regularization * parameter * parameter
+
+
+def gradient(parameter, regularization=0.0):
+    return 2.0 * (parameter - 3.0) + 2.0 * regularization * parameter
+
+
+def central_difference(function, value, step=1e-5):
+    return (function(value + step) - function(value - step)) / (2.0 * step)
+
+
+def gradient_descent(step_size, regularization=0.0, steps=12):
+    parameter = 0.0
+    history = []
+    for step in range(steps):
+        current_loss = loss(parameter, regularization)
+        current_gradient = gradient(parameter, regularization)
+        history.append((step, parameter, current_loss, current_gradient))
+        parameter -= step_size * current_gradient
+    history.append((steps, parameter, loss(parameter, regularization), gradient(parameter, regularization)))
+    return history
+
+
+for value in (0.0, 2.0):
+    analytical = gradient(value, regularization=0.5)
+    numerical = central_difference(lambda x: loss(x, 0.5), value)
+    assert abs(analytical - numerical) < 1e-8
+
+for alpha in (0.05, 0.25, 1.1):
+    trace = gradient_descent(alpha)
+    print("alpha:", alpha, "final:", trace[-1])
+
+print("with L2:", gradient_descent(0.25, regularization=0.5)[-1])
+```
+
+在这个二次问题中，`0.05` 稳定但慢，`0.25` 较快，`1.1` 会因反复跨过低点而发散。该结论只针对当前目标尺度；不能把 `0.25` 当作所有视觉任务的通用 learning rate。
+
+## 9. Active Recall 主动回忆
+
+1. parameter、prediction、residual 与 loss 分别是什么？
+2. 梯度下降更新为什么有负号？
+3. 梯度给出方向后，为什么仍需要 step size？
+4. 如何从迭代表区分步长太小、合适和太大？
+5. 有限差分检查通过能证明什么，不能证明什么？
+6. L2 regularization 为什么会改变最终参数？它交换了什么？
+7. 真实图像配准为什么可能出现不同初值落到不同结果？
+
+## 10. Practice 练习
+
+### 理解检查
+
+对 $L(\theta)=(\theta-4)^2$，判断 $\theta=0,4,6$ 处梯度与负梯度方向。完成标准：每个方向都与比较相邻函数值的结果一致，并指出最低点处梯度为 0。
+
+### 简单应用
+
+从 $\theta_0=0$ 手算 $L=(\theta-3)^2$ 在 `alpha=0.25` 下前三次更新。完成标准：列出每步 parameter、loss、gradient，且与程序误差小于 `1e-12`。
+
+### 视觉小练习
+
+用相同初值和 20 步比较 `alpha=0.05, 0.25, 0.9, 1.1`，再在 `alpha=0.25` 下比较 `lambda=0, 0.1, 0.5`。完成标准：保存完整迭代表或曲线；有限差分在两个参数点误差小于 `1e-7`；指出慢速、稳定、震荡或发散案例，并用最终参数和数据残差说明 L2 的代价。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）把本节点列为 hard / understood requirement，未来证据包括梯度检查、迭代轨迹、step size 与 L2 对照；不新增项目正文、执行路径或验收能力。
+- **Capability**：复用正式 Project capability——用形状、残差、数值误差和稳定性检查解释核心数学工具的视觉意义；本页具体贡献是用梯度误差和迭代轨迹诊断更新。
+- **Application**：复用正式 Project application——为标定、几何估计、重建与模型训练提供可检查的数值基础。
+
+ROADMAP 中 `geometry.bundle-adjustment`、`dl.nn-backprop`、`dl.loss-optimizer` 与 `ci.inverse-problems` 会直接复用；本页不提前教授这些系统。
+
+## 12. Mastery Evidence 掌握证据
+
+提交一个简单视觉参数目标的完整优化记录：定义 parameter、固定数据、loss 和单位；独立推导梯度并在至少两个参数点做中心差分检查；记录每步 parameter/loss/gradient 与停止条件；用相同初值比较至少三种 step size；再比较有/无 L2，说明参数幅度、数据残差与总目标的取舍。只给最终 loss、调用现成 optimizer 或展示一条下降曲线不合格。
+
+## 13. 后续复用与复习
+
+本节点是 `geometry.bundle-adjustment`、`dl.nn-backprop` 与 `ci.inverse-problems` 的 hard 前置，并会在配准、标定优化、重建和模型训练中反复使用。24 小时后从空白纸写出更新式和梯度检查；7 天后更换初值、目标尺度与正则化强度，先预测失败模式再运行。
+
+## 14. 精选学习资源
+
+- **Stanford CS231n Optimization: Stochastic Gradient Descent**：必看“Strategy #3: Following the Gradient”“Computing the gradient”“Numerically with finite differences”“Gradient Descent”与“Effect of step size”。只把其中的高维权重 $W$ 对照成本页的一维参数 $\theta$。选看 loss landscape 的一维/二维切片来建立局部最优直觉。看到能解释负梯度、步长、有限差分和迭代更新即可；跳过 SVM 公式、Random Search、mini-batch/SGD 规模讨论、反向传播与高级训练技巧。

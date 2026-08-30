@@ -28,7 +28,7 @@ test("真实 Stage 0 内容可从 Knowledge、Roadmap 与 Projects 浏览", asyn
   await page.goto("/knowledge/");
   await expect(page.getByRole("heading", { level: 1, name: "Knowledge" })).toBeVisible();
   const knowledgeList = page.getByRole("main").locator("ol");
-  await expect(knowledgeList.locator("[data-knowledge-concept-id] h2 a")).toHaveCount(12);
+  await expect(knowledgeList.locator("[data-knowledge-concept-id] h2 a")).toHaveCount(16);
   await expect(page.getByText("Computer, Files, and Terminal")).toBeVisible();
 
   const firstConcept = page

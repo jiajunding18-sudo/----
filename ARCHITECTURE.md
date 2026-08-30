@@ -531,7 +531,7 @@ Stage→Track 关系只维护在 `StageDefinition.trackIds`；`TrackDefinition` 
 
 `CheckpointGate` 是无法只靠概念 hard edge 表达的阶段入口唯一事实来源：无条件 leaf 只含 checkpoint ID，条件 leaf 必须同时包含 Track ID 和最低目标；`allOf / anyOf` 至少各含一个子 gate。目标次序固定为 `understand < master`。条件 leaf 只有在所指 checkpoint 已通过且 Track 目标达到 `minimumTrackGoal` 时才满足；不满足 Track 条件时在 `anyOf` 中返回 false，而不是被忽略。
 
-`ROADMAP.md` 第 1.5 节是 checkpoint gate 的 catalog 契约：1B 引用 1A；4B、4C 和 Stage 5 引用 4A；6B 引用 6A；7B 引用 7A；Stage 9 对 Stage 6B 与 Stage 8 使用 `allOf`。`stage.computational-imaging.entryGate` 必须直接引用 `stage.imaging-quality-advanced`，不能用“相关概念已理解”代替 Stage 4C 的出口证据和复测。
+`ROADMAP.md` 第 1.5 节是 checkpoint gate 的 catalog 契约：Stage 1B 有意不设置阶段级 `entryGate`，由各 Concept 的 `hard` dependency 支持即时、交错进入；4B、4C 和 Stage 5 引用 4A；6B 引用 6A；7B 引用 7A；Stage 9 对 Stage 6B 与 Stage 8 使用 `allOf`。`stage.computational-imaging.entryGate` 必须直接引用 `stage.imaging-quality-advanced`，不能用“相关概念已理解”代替 Stage 4C 的出口证据和复测。
 
 `stage.capstone.entryGate` 的根节点是 `allOf`：它包含公共出口 `stage.tooling-foundations`、`stage.vision-math-geometry-optimization`、`stage.image-computing`、`stage.digital-image-processing`、`stage.industrial-imaging`、`stage.planar-vision`、`stage.depth-reconstruction`、`stage.modern-vision-tasks`、`stage.industrial-vision`，并包含一个由“`stage.industrial-3d` 且对应 Track 目标为 `master`”与“`stage.computational-imaging` 且对应 Track 目标为 `master`”组成的 `anyOf`。因此以 Stage 9 为主修时不额外要求 Stage 4C；以 Stage 10 为主修时会通过 Stage 10 的入口门槛要求 Stage 4C。
 

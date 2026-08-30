@@ -136,6 +136,55 @@ test("Stage 1A 数学正文渲染公式、正式资源与 planned Project 映射
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 1B 正文渲染公式、代码、表格、TOC、深链接与正式映射", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/least-squares-and-residuals/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /最小二乘、残差与超定方程/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator(".katex-display").first()).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toBeVisible();
+  await expect(document.getByRole("table")).toBeVisible();
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await expect(workedExampleLink).toHaveAttribute(
+    "href",
+    "#section-8-worked-example-四次带噪测量拟合直线",
+  );
+  await workedExampleLink.click();
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example-四次带噪测量拟合直线");
+  await page.reload();
+  await expect(
+    page.locator("#section-8-worked-example-四次带噪测量拟合直线"),
+  ).toBeVisible();
+
+  await expect(
+    page.getByRole("link", { name: "Linear algebra — NumPy Manual" }),
+  ).toHaveAttribute("href", "/resources/numpy-linear-algebra/");
+  const projectUsage = page.locator(
+    '[data-concept-project-id="project.math-vision-lab"]',
+  );
+  await expect(projectUsage).toContainText("hard · 需要已理解");
+  await expect(projectUsage).toContainText("planned · 项目正文尚未发布");
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

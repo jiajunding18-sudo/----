@@ -169,6 +169,29 @@ test("Stage 1A 新 Concept 自动进入搜索并落到正式学习页", async ({
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 1B 新 Concept 自动进入搜索并落到正式学习页", async ({ page }) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/search/?q=SVD");
+
+  const result = page.locator('[data-search-result-id="math.eigen-svd"]');
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("available · 正式内容");
+  const link = result.getByRole("link", {
+    name: "特征方向、奇异值分解与低秩信息",
+  });
+  await expect(link).toHaveAttribute("href", "/knowledge/eigenvalues-and-svd/");
+  await link.click();
+  await expect(page).toHaveURL(/\/knowledge\/eigenvalues-and-svd\/$/u);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /特征方向、奇异值分解与低秩信息/u,
+    }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  expect(browserErrors).toEqual([]);
+});
+
 test("正文标题命中直接进入 Concept 对应稳定章节", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/search/?q=9.%20Active%20Recall%20主动回忆");

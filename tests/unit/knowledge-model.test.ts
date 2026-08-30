@@ -22,15 +22,22 @@ const stageOneAConceptIds = [
   "math.probability-statistics",
 ] as const;
 
+const stageOneBConceptIds = [
+  "math.coordinate-frames",
+  "math.least-squares",
+  "math.eigen-svd",
+  "math.optimization",
+] as const;
+
 describe("Knowledge manifest 派生视图", () => {
   it("只纳入已发布 Concept，并按正式 Stage / Concept order 返回推荐序位", () => {
     const knowledge = buildKnowledgeView(contentManifest);
 
     expect(knowledge.concepts.map(({ concept }) => concept.id)).toEqual(
-      [...stageZeroConceptIds, ...stageOneAConceptIds],
+      [...stageZeroConceptIds, ...stageOneAConceptIds, ...stageOneBConceptIds],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
     );
     expect(
       knowledge.concepts.every(
@@ -50,6 +57,9 @@ describe("Knowledge manifest 派生视图", () => {
     const stageOneA = knowledge.stages.find(
       ({ id }) => id === "stage.vision-math-immediate",
     );
+    const stageOneB = knowledge.stages.find(
+      ({ id }) => id === "stage.vision-math-geometry-optimization",
+    );
 
     expect(knowledge.stages).toHaveLength(17);
     expect(knowledge.tracks.map(({ id }) => id)).toEqual([
@@ -65,14 +75,18 @@ describe("Knowledge manifest 派生视图", () => {
       contentStatus: "available",
       publishedConceptCount: 4,
     });
+    expect(stageOneB).toMatchObject({
+      contentStatus: "available",
+      publishedConceptCount: 4,
+    });
     expect(stageTwo).toMatchObject({
       contentStatus: "planned",
       publishedConceptCount: 0,
     });
-    expect(knowledge.availableStageCount).toBe(2);
-    expect(knowledge.plannedStageCount).toBe(15);
+    expect(knowledge.availableStageCount).toBe(3);
+    expect(knowledge.plannedStageCount).toBe(14);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      12, 0, 0,
+      16, 0, 0,
     ]);
   });
 

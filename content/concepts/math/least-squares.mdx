@@ -1,0 +1,238 @@
+---
+schemaVersion: 1
+id: math.least-squares
+slug: least-squares-and-residuals
+title: 最小二乘、残差与超定方程
+englishTitle: Least Squares, Residuals, and Overdetermined Systems
+aliases:
+  - 最小二乘拟合
+  - Least Squares
+searchKeywords:
+  - least squares
+  - residual
+  - overdetermined
+  - 直线拟合
+  - 残差
+  - numpy.linalg.lstsq
+summary: 理解带噪视觉测量为何通常无法同时满足所有方程，能建立简单超定模型、求最小二乘解并用残差和异常值检查结果。
+why: 标定、几何估计和重复测量都会产生多于未知参数的近似方程；最小二乘提供一个可计算的折中，但只有读懂残差才能判断这个折中是否可信。
+stageId: stage.vision-math-geometry-optimization
+trackIds:
+  - track.common
+order: 20
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 8
+  max: 10
+dependencies:
+  - conceptId: math.vectors-matrices
+    kind: hard
+    reason: 建立 Ax≈b 需要能写出矩阵、参数和测量向量的 shape，并检查矩阵乘法与单位含义。
+  - conceptId: math.probability-statistics
+    kind: recommended
+    reason: 均值、方差、噪声与异常值直觉有助于解释残差分布和多次测量为何不完全一致，但不阻塞最小拟合入门。
+tags:
+  - 视觉数学
+  - 最小二乘
+  - 残差
+learningOutcomes:
+  - 能把带噪重复测量或直线拟合写成超定的 Ax≈b，解释参数、预测、残差与平方残差目标的工程意义。
+  - 能用手算检查小例子并使用 numpy.linalg.lstsq 求解，报告 shape、参数、残差和异常值对结果的影响。
+masteryCriteria:
+  - id: criterion.math-least-squares.model-solve-interpret
+    description: 从至少四个带噪测量建立一个两参数超定模型，用最小二乘求解并解释设计矩阵、参数、预测和每个残差的含义与单位。
+    evidenceHint: 提交模型方程与 shape、至少一个手算检查、lstsq 输出、残差表、平方残差和对“为什么不是精确解”的解释。
+    required: true
+  - id: criterion.math-least-squares.residual-and-outlier-diagnosis
+    description: 对同一拟合加入一个异常值，比较参数与残差变化，并判断普通最小二乘的建模结论是否仍合理。
+    evidenceHint: 保存加入异常值前后的参数、逐点残差、总平方残差和结论边界；不能只说“异常值有影响”。
+    required: true
+resourceIds:
+  - resource.mit-ocw-linear-algebra
+  - resource.numpy-linear-algebra
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 最小二乘、残差与超定方程（Least Squares, Residuals, and Overdetermined Systems）
+
+本单元只学习视觉工程最常用的最小二乘闭环：从测量建立方程、求一个总体折中、检查残差，并识别普通最小二乘何时会被异常值误导。
+
+## 1. 这是什么
+
+若未知参数为 $x$，理想模型可以写成 $Ax=b$。现实测量含噪声、量化和建模误差，多条方程往往无法被同一个 $x$ 精确满足，所以更诚实的写法是 $Ax\approx b$。
+
+预测与观测之差叫**残差（residual）**。本文约定
+
+$$
+r=b-Ax.
+$$
+
+普通**最小二乘（least squares）**寻找让残差平方和最小的参数：
+
+$$
+x^*=\arg\min_x\|b-Ax\|_2^2
+=\arg\min_x\sum_{i=1}^{m}r_i^2.
+$$
+
+当方程数 $m$ 大于未知参数数 $n$ 时，称为**超定系统（overdetermined system）**。这不是“方程太多”的错误；在视觉工程中，多次观测常用来约束少量参数并暴露不一致。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+Stage 1A 已经提供矩阵 shape 和噪声/抽样语言。现在可以把“多次测量不完全一致”转化为一个可计算、可检查的参数估计问题。后续调用标定或几何估计 API 时，核心问题不只是能否返回参数，而是残差是否支持该结果。
+
+### 在机器视觉中会在哪里使用
+
+- 从多次测量拟合直线、平面或简单响应关系；
+- `geometry.homography` 与 `camera.calibration` 中由多组对应建立参数；
+- `robust.ransac` 中比较普通拟合与离群点抵抗；
+- `pointcloud.icp` 中反复减小配准残差；
+- 光流和局部几何估计中的小型超定方程。
+
+## 3. 前置知识
+
+硬前置是 `math.vectors-matrices`：开始前应能解释 $A_{m\times n}x_{n\times1}$ 的结果 shape，并给每列参数写出语义。`math.probability-statistics` 是 recommended：它帮助解释噪声、异常值和残差波动，但不要求先完成统计推断。
+
+代码使用 `numpy.linalg.lstsq` 作为一个局部工具。尚未发布的 `python.numpy-arrays` 不会被伪造成 dependency；示例会把数组 shape 和返回值逐项写清，纸面模型仍是核心。
+
+## 4. 核心概念
+
+- **模型与数据分开**：$A$ 描述每次观测怎样依赖参数，$b$ 保存实际测量，$x$ 是待估参数。
+- **超定不等于矛盾**：若 $m>n$，多条近似约束共同估计少量参数；带噪后通常没有精确交点。
+- **预测与残差**：$\hat b=Ax^*$ 是模型预测，$r=b-\hat b$ 是每条观测没有被解释的部分。必须声明符号约定。
+- **平方残差目标**：平方让正负残差都增加代价，并使大残差受到更强惩罚。它不自动证明噪声模型正确。
+- **参数解不等于可信结论**：总残差小可能因为单位、尺度或数据范围有限；还要逐项看残差、图形和异常点。
+- **异常值敏感性**：平方会放大大残差，因此普通最小二乘容易被少数异常点拉动。鲁棒估计将在后续 `robust.ransac` 正式学习。
+- **工程求解**：使用 `lstsq` 直接求解，不通过显式形成 $(A^TA)^{-1}$。当前不推导正规方程，也不学习 QR/SVD 的内部算法。
+
+## 5. 初学者直觉解释
+
+想象四把尺子都在估计同一条直线，但读数有一点偏差。没有哪条直线能穿过全部点，最小二乘会寻找一个总体上“离这些点不太远”的折中。
+
+残差不是算法失败提示，而是结果的一部分：
+
+| 对象 | 问题 |
+|---|---|
+| 参数 $x^*$ | 最终选择了什么模型？ |
+| 预测 $Ax^*$ | 该模型认为每次观测应是多少？ |
+| 残差 $b-Ax^*$ | 每次观测还有多少没有解释？ |
+| 残差图/表 | 错误是随机散布、系统偏差还是单个异常？ |
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能说明 residual、least squares 和 overdetermined system。
+- **理解**：能解释为什么现实测量没有精确公共解，以及平方残差为何对异常值敏感。
+- **应用**：能从简单拟合建立 $A,x,b$，用 `lstsq` 求解并检查逐项残差与总平方残差。
+- **达到本页 `master` 目标**：必须提交完整建模、求解、残差解释和异常值对照，覆盖两项 mastery criterion。
+
+当前不要求推导正规方程，不要求证明伪逆，不要求学习 QR、SVD 的数值求解细节，也不要求进入回归推断、置信区间或假设检验。
+
+## 7. 常见误区
+
+- 只报告斜率和截距，不报告数据、单位或残差。
+- 把 residual、测量噪声和真实参数误差当作同一个量。
+- 看到 $m>n$ 就认为方程无解，而不区分精确解和近似解。
+- 直接计算矩阵逆，把“公式能写”误当作稳定实现。
+- 用总残差掩盖一个明显异常点或系统性弯曲。
+- 把拟合线画得顺眼当作完成标准。
+
+## 8. Worked Example：四次带噪测量拟合直线
+
+对位置 $u=[0,1,2,3]$ 取得测量 $v=[1.1,2.0,2.9,4.2]$，拟合
+
+$$
+v\approx mu+c.
+$$
+
+令参数 $x=[m,c]^T$，则
+
+$$
+A=\begin{bmatrix}
+0&1\\1&1\\2&1\\3&1
+\end{bmatrix}_{4\times2},\quad
+x=\begin{bmatrix}m\\c\end{bmatrix}_{2\times1},\quad
+b=\begin{bmatrix}1.1\\2.0\\2.9\\4.2\end{bmatrix}_{4\times1}.
+$$
+
+这是 4 条方程估计 2 个参数的超定系统。最小二乘结果为 $m=1.02,c=1.02$。预测是 `[1.02, 2.04, 3.06, 4.08]`，按 $r=b-Ax$ 得到残差 `[0.08, -0.04, -0.16, 0.12]`，平方残差和为 $0.048$。
+
+```python
+import numpy as np
+
+positions = np.array([0.0, 1.0, 2.0, 3.0])
+measurements = np.array([1.1, 2.0, 2.9, 4.2])
+
+# 每行是一条观测；两列分别乘斜率 m 与截距 c。
+design = np.column_stack((positions, np.ones_like(positions)))
+parameters, returned_residuals, rank, singular_values = np.linalg.lstsq(
+    design,
+    measurements,
+    rcond=None,
+)
+
+predictions = design @ parameters
+residuals = measurements - predictions
+squared_residual_sum = residuals @ residuals
+
+print("A shape:", design.shape)
+print("m, c:", parameters)
+print("residuals:", residuals)
+print("sum of squared residuals:", squared_residual_sum)
+print("reported by lstsq:", returned_residuals)
+print("rank:", rank, "singular values:", singular_values)
+
+assert design.shape == (4, 2)
+assert abs(squared_residual_sum - 0.048) < 1e-12
+```
+
+这里的 `rank` 与 `singular_values` 先只作为求解器诊断输出记录；它们的含义在 `math.eigen-svd` 学习。不要因为 API 返回了这些值就提前把 SVD 当作已掌握。
+
+若把最后一个测量从 `4.2` 改成 `8.0`，新直线会明显被拉向异常点。这个对照说明普通最小二乘提供的是平方残差意义下的折中，不是自动可靠的真实模型。
+
+## 9. Active Recall 主动回忆
+
+1. 为什么 $Ax=b$ 在带噪测量中常要写成 $Ax\approx b$？
+2. 超定系统的方程数与未知参数数是什么关系？为什么它在工程中有价值？
+3. 本页的 residual 符号约定是什么？改成相反符号会影响什么、不影响什么？
+4. 为什么最小化平方残差会特别在意大残差？
+5. 参数已经求出后，为什么仍必须查看逐项残差？
+6. 为什么本页使用 `lstsq` 而不把显式矩阵求逆作为默认实现？
+
+## 10. Practice 练习
+
+### 理解检查
+
+三个测量方程估计一个未知长度：$x\approx10.0$、$x\approx10.2$、$x\approx9.8$。写出 $A,x,b$ 的 shape，并说明为何没有必要丢掉其中两条。完成标准：$A$ 为 `3×1`，并能用残差说明三条信息如何共同约束参数。
+
+### 简单应用
+
+手算常数模型对 `[10.0, 10.2, 9.8]` 的最小二乘估计、三个残差和平方残差和，再用 `lstsq` 核对。完成标准：估计为 `10.0`，残差和接近 0，手算与代码误差小于 `1e-12`。
+
+### 视觉小练习
+
+复现 Worked Example，再把最后一个测量改成 `8.0`。完成标准：提交前后两组参数、逐点残差和平方残差和；指出哪个点影响最大，并用具体数值解释普通最小二乘为何不再代表大多数测量。无需实现 RANSAC。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）把本节点列为 hard / understood requirement，未来证据包括超定模型、拟合参数、残差表和异常值对照；项目仍无正式执行正文。
+- **Capability**：复用正式 Project capability——用形状、残差、数值误差和稳定性检查解释核心数学工具的视觉意义；本页具体贡献是残差驱动的拟合诊断。
+- **Application**：复用正式 Project application——为标定、几何估计、重建与模型训练提供可检查的数值基础。
+
+ROADMAP 中 `geometry.homography`、`robust.ransac`、`camera.calibration` 与 `pointcloud.icp` 会直接复用，不表示本页已教授这些算法。
+
+## 12. Mastery Evidence 掌握证据
+
+提交同一数据的正常与异常值两版实验：从问题文字建立 $A,x,b$ 和 shape；手算至少一个预测与残差；用 `numpy.linalg.lstsq` 求解；列出每条残差、平方残差和、rank 输出及单位；最后比较异常值加入前后的参数与残差，并判断普通最小二乘的结论边界。只贴一条拟合线或一组参数不合格。
+
+## 13. 后续复用与复习
+
+本节点是 `math.optimization`、`geometry.homography`、`robust.ransac`、`camera.calibration` 与 `pointcloud.icp` 的 hard 前置；`math.eigen-svd` 和 `cv.optical-flow` 会推荐回用。24 小时后从空白纸重建直线拟合的 $A,x,b$；7 天后换一组数据和异常点，先预测参数移动方向再运行。
+
+## 14. 精选学习资源
+
+- **MIT OpenCourseWare 18.06SC Linear Algebra**：必看 Lecture 16“Projection Matrices and Least Squares”的 Session Overview、lecture summary 与一个 Check Yourself 问题，只理解“无精确解时寻找最接近列空间的预测”和 residual。选看 Problem Solving: Least Squares Approximation。看到能解释拟合与残差即可；跳过 Gram-Schmidt、正规方程完整推导、伪逆和后续证明。
+- **NumPy Linear Algebra Manual**：必看 `numpy.linalg.lstsq` 的参数/返回值表和直线拟合 example，逐项核对 `x`、`residuals`、`rank`、`s` 与输入 shape。选看 `rcond` 的一句作用说明；当前保持默认 `None`。跳过 LAPACK、QR/SVD 算法、批处理和其他求解器比较。

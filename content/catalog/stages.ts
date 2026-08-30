@@ -99,7 +99,7 @@ export const stages: readonly StageDefinition[] = [
     title: "Stage 1B：几何与优化数学",
     summary:
       "按后续几何、标定、重建与训练任务的需要，补齐坐标系、最小二乘、SVD、优化与数值稳定性。",
-    contentStatus: "planned",
+    contentStatus: "available",
     trackIds: ["track.common"],
     categoryExitForTrackIds: ["track.common"],
     outcomes: [

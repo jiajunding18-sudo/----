@@ -113,10 +113,6 @@ export const stages: readonly StageDefinition[] = [
         when: { kind: "always" },
       },
     ],
-    entryGate: {
-      kind: "checkpoint",
-      stageId: "stage.vision-math-immediate",
-    },
     exitCriteria: [
       {
         id: "stage-criterion.vision-math-geometry-optimization.coordinate-roundtrip",

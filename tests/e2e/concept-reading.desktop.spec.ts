@@ -118,7 +118,9 @@ test("Stage 1A 数学正文渲染公式、正式资源与 planned Project 映射
       name: /在机器视觉中会在哪里使用/u,
     }),
   ).toBeVisible();
-  await expect(document.getByText("当前不要求", { exact: false })).toBeVisible();
+  await expect(
+    document.getByText("当前不要求证明所有矩阵定理", { exact: false }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "18.06SC Linear Algebra" }),
   ).toHaveAttribute("href", "/resources/mit-ocw-linear-algebra/");

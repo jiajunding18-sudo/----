@@ -57,7 +57,11 @@ contentVersion: 2026.08.30
 
 ## 1. 这是什么
 
-**向量（vector）**是一组有顺序的数，可以表示一个像素的 RGB 颜色、一个二维坐标或一组测量值。**矩阵（matrix）**按行和列组织数，可以表示一批像素、多个点或一个线性变换。
+**标量（scalar）**是单独一个数，例如灰度值 `128`、增益 `1.2` 或测量误差 `0.3 mm`。它只有一个数值，不像向量那样同时组织多个分量。
+
+**向量（vector）**是一组有顺序的数，可以表示一个像素的 RGB 颜色、一个二维坐标或一组测量值。本文默认把向量写成**列向量（column vector）**：例如 $x=[3,1]^T$ 表示先写成一行，再用上标 $T$ 转置为 $2\times1$ 的一列。采用别的约定也可以，但一次计算中必须保持一致。
+
+**矩阵（matrix）**按行和列组织数，可以表示一批像素、多个点或一个线性变换。记号 $A\in\mathbb{R}^{m\times n}$ 的意思是：$A$ 的元素都是实数（real numbers），并且有 $m$ 行、$n$ 列；它不是要求你先学习一个新的抽象空间。
 
 向量和矩阵不是只有数值：它们还带有**形状（shape）**和语义。例如一个 RGB 像素可以记为长度 3 的向量，一批 $N$ 个 RGB 像素可以记为 $N\times3$ 的矩阵。
 
@@ -80,12 +84,12 @@ Stage 2 会把图像当作数组处理。若现在不能解释行、列、通道
 
 ## 4. 核心概念
 
-- **形状**：矩阵 $A\in\mathbb{R}^{m\times n}$ 有 $m$ 行、$n$ 列。写形状时同时写语义，例如“3 个像素 × 3 个颜色通道”。
+- **形状**：矩阵 $A\in\mathbb{R}^{m\times n}$ 有 $m$ 行、$n$ 列。写形状时同时写语义，例如“3 个像素 × 3 个颜色通道”。标量没有行列轴；列向量可视为 $n\times1$ 矩阵。
 - **加法与数乘**：只有形状相同的向量或矩阵才能逐项相加；数乘改变大小，不改变形状。
 - **点积（dot product）**：两个等长向量对应元素相乘后求和，结果是标量。它常表示加权和或相似程度，但具体意义取决于数据是否已归一化。
 - **矩阵乘法（matrix multiplication）**：$A_{m\times n}B_{n\times p}=C_{m\times p}$。中间维必须相同，外侧维决定结果形状。
 - **转置（transpose）**：$A^T$ 交换行列。转置不是“让报错消失”的工具；它会改变数据组织方式，必须解释新行列的含义。
-- **单位矩阵与逆（identity and inverse）**：$I$ 保持向量不变；若方阵 $A$ 可逆，则 $A^{-1}A=I$。工程代码通常优先求解线性方程，而不是显式计算逆；数值稳定性将在 Stage 1B 深入。
+- **单位矩阵与逆（identity and inverse）**：$I$ 保持向量不变；若方阵 $A$ 可逆，则 $A^{-1}A=I$。这里“可逆”表示由 $x$ 经过 $A$ 得到 $y$ 后，仍能从 $y$ 唯一恢复原来的 $x$。这是一项信息是否保留的判断，不等于工程代码应该默认显式计算 $A^{-1}$；实际求解 $Ax=y$ 时通常直接使用线性方程求解器，数值稳定性将在 Stage 1B 深入。
 
 ## 5. 初学者直觉解释
 
@@ -151,6 +155,36 @@ print(gray_values)
 
 这里验证的是形状与加权和，不是要求你背诵某个颜色标准。真实图像库还涉及颜色空间、通道顺序、量化与舍入，必须查看对应 API 的约定。
 
+### 最小往返：一个可逆的 $2\times2$ 变换
+
+采用列向量约定，令
+
+$$
+A=\begin{bmatrix}2&1\\1&1\end{bmatrix},\quad
+x=\begin{bmatrix}3\\1\end{bmatrix},\quad
+A^{-1}=\begin{bmatrix}1&-1\\-1&2\end{bmatrix}.
+$$
+
+先正向变换：
+
+$$
+y=Ax=
+\begin{bmatrix}2&1\\1&1\end{bmatrix}
+\begin{bmatrix}3\\1\end{bmatrix}
+=\begin{bmatrix}7\\4\end{bmatrix}.
+$$
+
+再把结果送入逆变换：
+
+$$
+A^{-1}y=
+\begin{bmatrix}1&-1\\-1&2\end{bmatrix}
+\begin{bmatrix}7\\4\end{bmatrix}
+=\begin{bmatrix}3\\1\end{bmatrix}=x.
+$$
+
+这个 $x\rightarrow Ax\rightarrow A^{-1}(Ax)$ 往返恢复了原输入，说明这次变换没有把两个输入方向压到一起。你只需手算并用乘法验证给出的逆；当前不要求推导通用求逆公式或行列式理论。对于真实问题，若已知 $A$ 与 $y$，工程实现优先直接求解 $Ax=y$，因为显式形成逆通常会增加计算和数值误差风险。
+
 ## 9. Active Recall 主动回忆
 
 1. $A_{4\times3}B_{3\times2}$ 的结果形状是什么？为什么？
@@ -191,4 +225,4 @@ print(gray_values)
 
 ## 14. 精选学习资源
 
-- **MIT OpenCourseWare 18.06SC Linear Algebra**：本阶段只看 Unit I 中“Geometry of Linear Equations”“Matrix Multiplication and Inverse Matrices”相关讲解，并完成一两个带解答的小题。看到能解释形状、乘法和逆的用途即可；暂不进入特征值、SVD、正定矩阵和完整证明。
+- **MIT OpenCourseWare 18.06SC Linear Algebra**：必看 Unit I 的“Matrix Multiplication and Inverse Matrices”，只跟随矩阵乘法、单位矩阵和逆的解释，并做一个带解答的乘法/逆检查题；“The Geometry of Linear Equations”只在需要几何直觉时选看。看到能解释形状、乘法与可恢复性即可。跳过消元法全套技巧、行列式、特征值、SVD、正定矩阵和完整证明。

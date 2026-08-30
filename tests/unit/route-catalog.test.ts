@@ -134,10 +134,9 @@ describe("Phase 2B-1 路线 catalog", () => {
   });
 
   it("保留 ROADMAP 声明的非线性 entryGate 与高级方向 OR 门槛", () => {
-    expect(getStage("stage.vision-math-geometry-optimization").entryGate).toEqual({
-      kind: "checkpoint",
-      stageId: "stage.vision-math-immediate",
-    });
+    expect(
+      getStage("stage.vision-math-geometry-optimization").entryGate,
+    ).toBeUndefined();
     expect(getStage("stage.industrial-imaging").entryGate).toEqual({
       kind: "checkpoint",
       stageId: "stage.imaging-foundations",

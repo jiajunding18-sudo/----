@@ -62,6 +62,14 @@ contentVersion: 2026.08.30
 
 **导数（derivative）**描述函数输出对输入的局部变化率。多变量函数对一个变量的变化率叫**偏导数（partial derivative）**；把所有偏导按参数顺序组成向量，得到**梯度（gradient）**。
 
+先看一个不用正式符号的差商。沿图像一行观察灰度，位置 9 的灰度是 38，位置 11 的灰度是 46，那么位置 10 附近的平均变化率可以估为
+
+$$
+\frac{46-38}{11-9}=4\quad\text{灰度级/像素}.
+$$
+
+它表示“向右移动 1 个像素，灰度在这里大约增加 4”，而不是说整行图像都按这个速度变化。把两次取样的位置逐渐靠近当前点，就得到导数的局部思想；现在再用 $f'(x)$ 表示函数 $f$ 在位置 $x$ 的导数。
+
 若输出通过多层函数得到，**链式法则（chain rule）**把各层局部变化率相乘。**有限差分（finite difference）**用函数值近似导数，可作为检查手推或程序实现的独立方法。
 
 ## 2. 为什么机器视觉需要它
@@ -89,6 +97,13 @@ contentVersion: 2026.08.30
 - **链式法则**：若 $L(g)=q(g)^2$，则 $dL/dg=2q\,dq/dg$。漏掉内层导数是常见错误。
 - **梯度方向**：梯度指向局部增长最快方向，负梯度是局部下降方向；这不保证任意步长都能得到更好结果。
 - **有限差分检查**：中心差分 $[f(x+h)-f(x-h)]/(2h)$ 通常比单边差分更准确。$h$ 太大有截断误差，太小会受浮点舍入影响。
+
+### 视觉里两种常见的“梯度”
+
+- **图像空间梯度** $\nabla I(x,y)$：变量是空间坐标 $x,y$，对象是图像亮度函数 $I$。它描述亮度随图像位置怎样变化，后续用于边缘和光流等问题。
+- **参数梯度** $\nabla_{\theta}L$：变量是模型或优化参数 $\theta$，对象是损失函数 $L$。它描述参数改变时损失怎样变化，后续用于配准、优化和模型训练。
+
+它们使用同一种导数/梯度数学语言，但不是同一个具体对象。看到 $\nabla$ 时必须先问“对哪些变量求导、被求导的函数是什么”。本页 Worked Example 的 $dL/dg$ 是参数梯度的一维版本；视觉小练习中的灰度差分是在估计图像空间梯度。
 
 ## 5. 初学者直觉解释
 
@@ -157,6 +172,7 @@ for step in (1e-2, 1e-4, 1e-6, 1e-8):
 3. $L(g)=(gp-t)^2$ 中最容易漏掉哪一项？
 4. 中心差分为何要比较多个步长？
 5. 解析梯度和数值梯度符号相反时，应先检查什么？
+6. $\nabla I(x,y)$ 与 $\nabla_{\theta}L$ 分别对什么变量求导，为什么不能把它们当成同一个具体对象？
 
 ## 10. Practice 练习
 
@@ -188,4 +204,4 @@ ROADMAP 中 `math.optimization`、`dip.edge-detection`、`cv.optical-flow` 和 `
 
 ## 14. 精选学习资源
 
-- **MIT OpenCourseWare 18.02SC Multivariable Calculus**：只看“Partial Derivatives”的 Part A，以及 Part B 的“Chain Rule, Gradient and Directional Derivatives”；配合一两个有解答的练习。看到能解释偏导、梯度、方向导数和链式法则即可；积分、Lagrange 乘子、Green/Stokes 定理当前不需要。
+- **MIT OpenCourseWare 18.02SC Multivariable Calculus**：必看 Part A 的 Session 26“Partial Derivatives”、Part B 的 Session 32“Total Differentials and the Chain Rule”和 Session 35“Gradient: Definition, Perpendicular to Level Curves”；每项只做一个带解答的小例子。若图形直觉不足，可选看 Session 24–25；若想理解任意方向的变化率，可选看 Session 38。看到能解释偏导、链式法则和梯度方向即可；跳过 Part A 的优化/最小二乘/二阶导测试、Session 36 的证明、Part C、积分与考试范围。

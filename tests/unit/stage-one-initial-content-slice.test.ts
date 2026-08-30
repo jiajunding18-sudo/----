@@ -81,12 +81,28 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
     expect(stageOneA?.exitCriteria).toHaveLength(2);
     expect(stageOneB).toMatchObject({
       contentStatus: "planned",
-      entryGate: {
-        kind: "checkpoint",
-        stageId: "stage.vision-math-immediate",
-      },
     });
+    expect(stageOneB && "entryGate" in stageOneB ? stageOneB.entryGate : undefined).toBeUndefined();
     expect(stageOneBConcepts).toEqual([]);
+  });
+
+  it("Stage 1B 依靠 Concept hard dependency 交错进入，不再等待完整 Stage 1A checkpoint", () => {
+    const stageOneB = contentManifest.stages.find(
+      ({ id }) => id === "stage.vision-math-geometry-optimization",
+    );
+
+    expect(
+      stageOneB && "entryGate" in stageOneB
+        ? stageOneB.entryGate
+        : undefined,
+    ).toBeUndefined();
+    expect(stageOneB?.contentStatus).toBe("planned");
+    expect(
+      contentManifest.concepts.filter(
+        ({ stageId }) =>
+          String(stageId) === "stage.vision-math-geometry-optimization",
+      ),
+    ).toEqual([]);
   });
 
   it("建立最小 hard / recommended DAG，不伪造尚未发布的 NumPy Concept", () => {
@@ -176,7 +192,46 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
       expect(resource?.url).toMatch(/^https:\/\//u);
       expect(resource?.reason.length).toBeGreaterThan(0);
       expect(resource?.recommendedParts?.length).toBeGreaterThan(0);
+      expect(resource?.recommendedParts).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^必看：/u),
+          expect.stringMatching(/^可选：/u),
+          expect.stringMatching(/^跳过：/u),
+        ]),
+      );
     });
+  });
+
+  it("R1 教学桥梁覆盖逆变换、基向量、两类梯度与样本方差直觉", async () => {
+    const workspaceRoot = process.cwd();
+    const concepts = await loadMdxDirectory({
+      directoryPath: resolve(workspaceRoot, "content/concepts/math"),
+      workspaceRoot,
+      schema: conceptMetaSchema,
+    });
+    const bodyById = new Map(concepts.map(({ body, meta }) => [meta.id, body]));
+
+    expect(bodyById.get("math.vectors-matrices")).toContain(
+      "x\\rightarrow Ax\\rightarrow A^{-1}(Ax)",
+    );
+    expect(bodyById.get("math.linear-transforms")).toContain(
+      "T(u+v)",
+    );
+    expect(bodyById.get("math.linear-transforms")).toContain(
+      "逆时针 90° 后",
+    );
+    expect(bodyById.get("math.calculus-gradients")).toContain(
+      "图像空间梯度",
+    );
+    expect(bodyById.get("math.calculus-gradients")).toContain(
+      "参数梯度",
+    );
+    expect(bodyById.get("math.probability-statistics")).toContain(
+      "少一个独立自由度",
+    );
+    expect(bodyById.get("math.probability-statistics")).toContain(
+      "rng.gauss(mean, standard_deviation)",
+    );
   });
 
   it("math-vision-lab 仍为 draft，只补 requirement、evidence、capability 与 application 映射", () => {

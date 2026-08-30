@@ -100,7 +100,7 @@ flowchart LR
 |---|---|---:|---|---|---|---:|
 | `stage.tooling-foundations` | Stage 0 | 0 | — | —；Pixel Lab 最小版本仅作出口证据 | `track.common` | 7 |
 | `stage.vision-math-immediate` | Stage 1A | 1 | — | — | — | — |
-| `stage.vision-math-geometry-optimization` | Stage 1B | 1 | `stage.vision-math-immediate` | `project.math-vision-lab` | `track.common` | 7 |
+| `stage.vision-math-geometry-optimization` | Stage 1B | 1 | — | `project.math-vision-lab` | `track.common` | 7 |
 | `stage.image-computing` | Stage 2 | 2 | — | `project.pixel-lab`；Classical Inspection v1 仅作出口证据 | `track.common` | 7 |
 | `stage.digital-image-processing` | Stage 3 | 3 | — | `project.classical-inspection` | `track.common` | 7 |
 | `stage.imaging-foundations` | Stage 4A | 4 | — | —；Imaging Quality Lab 最小版本仅作出口证据 | — | — |
@@ -117,6 +117,8 @@ flowchart LR
 | `stage.capstone` | Stage 11 | 11 | 公共 Stage 0–8 分类出口 `allOf`，再加 Stage 9/10 主修 checkpoint `anyOf` | `project.capstone` | `track.common` | 7 |
 
 `entryGate` 引用的是 checkpoint 的完整通过状态，不可用若干相关概念已理解来替代其项目、出口证据或复测。Stage 11 的公共 `allOf` 精确包含表中 `track.common` 的九个分类出口，高级 `anyOf` 的两个 leaf 还分别要求对应 Track 当前目标为 `master`；完整永久 ID 展开与 `ARCHITECTURE.md` 一致。
+
+Stage 1B 有意不设置阶段级 `entryGate`：Stage 1 采用即时、交错学习，坐标系可以在概率统计与梯度全部掌握前按任务进入。Stage 1B 内每个 Concept 仍必须满足第 3.1 节声明的自身 `hard` 前置；移除整段 checkpoint 门槛不表示可以绕过这些知识依赖。Stage 1A checkpoint 继续独立记录该子阶段的完整能力证据。
 
 checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations` 与 `stage.vision-math-immediate` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 

@@ -9,7 +9,7 @@ import {
 } from "@/lib/content/site-content";
 
 describe("DashboardPage", () => {
-  it("hydration 后先展示正式 NextStep，再展示 Progress 总览与 Stage 进度", async () => {
+  it("hydration 后先展示正式 NextStep，再展示动态学习控制台", async () => {
     const { container } = render(
       <LearningStoreProvider
         catalog={getProgressCatalog()}
@@ -23,6 +23,9 @@ describe("DashboardPage", () => {
       container.querySelector('[data-dashboard-next-step="loading"]'),
     ).toBeInTheDocument();
     expect(
+      container.querySelector('[data-dashboard-console="loading"]'),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", {
         level: 1,
         name: "Dashboard",
@@ -30,7 +33,7 @@ describe("DashboardPage", () => {
     ).toBeInTheDocument();
     expect(
       await screen.findByText(
-        "当前没有正在学习的知识点。是否有可执行入口，以上方正式 NextStep 结果为准。",
+        "当前没有处于“学习中”的已发布 Concept。上方 Next Step 是正式可执行入口。",
       ),
     ).toBeInTheDocument();
     expect(
@@ -53,17 +56,23 @@ describe("DashboardPage", () => {
     expect(
       screen.getByRole("link", { name: "开始学习" }),
     ).toHaveAttribute("href", "/knowledge/computer-files-and-terminal");
-    expect(screen.getByRole("heading", { name: "学习进度总览" }))
+    expect(screen.getByRole("heading", { name: "当前学习中" }))
       .toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Stage 学习情况" }))
+    expect(screen.getByRole("heading", { name: "当前 Project" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "今日与本周学习" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Progress 总览" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "最近 Study Log" }))
       .toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "浏览 8 个 Concept" }),
+      screen.getByRole("link", { name: "浏览 Projects" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /Pixel Lab/ })).toHaveLength(2);
     expect(screen.getAllByText("0 / 8")).toHaveLength(3);
     expect(screen.getAllByRole("heading", { name: "下一步学习" })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "学习中" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Stage 学习情况" }))
+      .not.toBeInTheDocument();
     expect(screen.queryByText(/总进度/)).not.toBeInTheDocument();
   });
 });

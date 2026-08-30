@@ -24,21 +24,20 @@ test("Concept Progress 在 360px 下可操作、无页面级横向溢出且可�
   expect(accessibilityScan.violations).toEqual([]);
 });
 
-test("Progress 总览在 360px 下可筛选、继续学习且无页面级横向溢出", async ({
+test("Dashboard Progress 在 360px 下可继续学习且无页面级横向溢出", async ({
   page,
 }) => {
   await page.goto("/knowledge/python-core/");
   await page.locator("[data-concept-progress]").getByRole("button", { name: "开始学习" }).click();
 
   await page.goto("/");
-  const overview = page.locator("[data-progress-overview]");
-  await expect(overview.locator('[data-continue-concept-id="tooling.python-core"]')).toBeVisible();
-  const learningFilter = overview.locator('[data-progress-filter="learning"]');
-  await learningFilter.focus();
-  await page.keyboard.press("Enter");
-  await expect(learningFilter).toHaveAttribute("aria-pressed", "true");
-  await expect(overview.locator("[data-progress-concept-results]")).toContainText(
-    "Python 核心语法",
+  const dashboard = page.locator('[data-dashboard-console="ready"]');
+  const learningLink = dashboard.locator(
+    '[data-dashboard-learning-concept-id="tooling.python-core"]',
+  );
+  await expect(learningLink).toBeVisible();
+  await expect(dashboard.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
+    "1 / 8",
   );
 
   const overflow = await page.evaluate(() => ({
@@ -49,4 +48,8 @@ test("Progress 总览在 360px 下可筛选、继续学习且无页面级横向�
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
+
+  await learningLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/knowledge\/python-core\/$/);
 });

@@ -81,8 +81,15 @@ test("Concept 从未开始到主动确认 mastered，并同步 Dashboard / Knowl
   );
 
   await page.goto("/");
-  const summary = page.locator("[data-stage-progress]");
-  await expect(summary.getByText("1 / 8")).toHaveCount(3);
+  await expect(page.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
+    "1 / 8",
+  );
+  await expect(
+    page.locator('[data-dashboard-progress-kind="understood"]'),
+  ).toHaveText("1 / 8");
+  await expect(
+    page.locator('[data-dashboard-progress-kind="mastered"]'),
+  ).toHaveText("1 / 8");
   await page.goto("/knowledge/");
   await expect(
     page.locator('[data-knowledge-concept-id="tooling.python-core"] [data-concept-status="mastered"]'),
@@ -178,49 +185,44 @@ test("完整 mastered 状态与 Evidence 可经 Export → Reset → Import 恢�
     "Python 数据处理与控制流证据",
   );
   await page.goto("/");
-  await expect(page.locator('[data-overview-status-count="mastered"]')).toHaveText("1");
-  await expect(page.locator('[data-stage-metric="started"]')).toHaveText("1 / 8");
-  await expect(page.locator('[data-stage-metric="understood"]')).toHaveText("1 / 8");
-  await expect(page.locator('[data-stage-metric="mastered"]')).toHaveText("1 / 8");
-  await page.locator('[data-progress-filter="mastered"]').click();
-  await expect(page.locator("[data-progress-concept-results]")).toContainText(
+  await expect(page.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
+    "1 / 8",
+  );
+  await expect(
+    page.locator('[data-dashboard-progress-kind="understood"]'),
+  ).toHaveText("1 / 8");
+  await expect(
+    page.locator('[data-dashboard-progress-kind="mastered"]'),
+  ).toHaveText("1 / 8");
+  await page.goto("/knowledge/");
+  await page.locator('[data-knowledge-status-filter="mastered"]').click();
+  await expect(page.locator("[data-knowledge-results]")).toContainText(
     "Python 核心语法",
   );
   expect(browserErrors).toEqual([]);
 });
 
-test("新用户看到正式 NextStep、Progress 总览与 planned Stage", async ({ page }) => {
+test("新用户看到正式 NextStep 与紧凑 Progress，planned Stage 不进入统计", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/");
-  const overview = page.locator("[data-progress-overview]");
+  const dashboard = page.locator('[data-dashboard-console="ready"]');
 
-  await expect(overview.locator('[data-overview-status-count="not_started"]')).toHaveText("8");
-  await expect(overview.locator('[data-overview-status-count="learning"]')).toHaveText("0");
-  await expect(overview.locator('[data-overview-status-count="understood"]')).toHaveText("0");
-  await expect(overview.locator('[data-overview-status-count="mastered"]')).toHaveText("0");
-  await expect(overview.locator("[data-no-continuing-concepts]")).toContainText(
-    "以上方正式 NextStep 结果为准",
+  await expect(dashboard.locator("[data-dashboard-learning-empty]")).toContainText(
+    "上方 Next Step 是正式可执行入口",
   );
-  await expect(overview.getByRole("link", { name: "浏览 Roadmap" })).toBeVisible();
-  await expect(overview.getByRole("link", { name: "浏览 Knowledge" })).toBeVisible();
-
-  const stage = overview.locator('[data-stage-progress="stage.tooling-foundations"]');
-  await expect(stage.locator('[data-stage-status="not_started"]')).toHaveText("8");
-  await expect(stage.locator('[data-stage-metric="started"]')).toHaveText("0 / 8");
-  await expect(stage.locator('[data-stage-metric="understood"]')).toHaveText("0 / 8");
-  await expect(stage.locator('[data-stage-metric="mastered"]')).toHaveText("0 / 8");
-  await expect(stage).not.toContainText("%");
-  await expect(overview.locator("[data-planned-stages]")).toContainText(
-    "已规划 · 正式学习内容尚未展开",
+  await expect(dashboard.getByRole("link", { name: "浏览 Roadmap" })).toBeVisible();
+  await expect(dashboard.getByRole("link", { name: "浏览 Knowledge" })).toBeVisible();
+  await expect(dashboard.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
+    "0 / 8",
   );
-
-  const learningFilter = overview.locator('[data-progress-filter="learning"]');
-  await learningFilter.focus();
-  await page.keyboard.press("Enter");
-  await expect(learningFilter).toHaveAttribute("aria-pressed", "true");
-  await expect(overview.locator("[data-progress-filter-empty]")).toContainText(
-    "当前没有处于“学习中”状态",
-  );
+  await expect(
+    dashboard.locator('[data-dashboard-progress-kind="understood"]'),
+  ).toHaveText("0 / 8");
+  await expect(
+    dashboard.locator('[data-dashboard-progress-kind="mastered"]'),
+  ).toHaveText("0 / 8");
+  await expect(dashboard).not.toContainText("已规划 · 正式学习内容尚未展开");
+  await expect(dashboard).not.toContainText("%");
   await expect(
     page.locator('[data-dashboard-next-step="recommendation"]'),
   ).toHaveAttribute("data-next-step-target-id", "tooling.computer-files");
@@ -256,34 +258,27 @@ test("Dashboard、Knowledge 与 Roadmap 使用同一状态并在刷新后保持"
   await progress.getByRole("button", { name: "开始学习" }).click();
 
   await page.goto("/");
-  const overview = page.locator("[data-progress-overview]");
-  await expect(overview.locator('[data-overview-status-count="not_started"]')).toHaveText("5");
-  await expect(overview.locator('[data-overview-status-count="learning"]')).toHaveText("1");
-  await expect(overview.locator('[data-overview-status-count="understood"]')).toHaveText("1");
-  await expect(overview.locator('[data-overview-status-count="mastered"]')).toHaveText("1");
-  await expect(overview.locator("[data-continue-learning-list]")).toContainText(
-    "开发环境与依赖管理",
+  const dashboard = page.locator('[data-dashboard-console="ready"]');
+  await expect(
+    dashboard.locator('[data-dashboard-learning-concept-id="tooling.dev-environment"]'),
+  ).toContainText("开发环境与依赖管理");
+  await expect(dashboard.locator('[data-dashboard-progress-kind="started"]')).toHaveText(
+    "3 / 8",
   );
-  const stage = overview.locator('[data-stage-progress="stage.tooling-foundations"]');
-  await expect(stage.locator('[data-stage-metric="started"]')).toHaveText("3 / 8");
-  await expect(stage.locator('[data-stage-metric="understood"]')).toHaveText("2 / 8");
-  await expect(stage.locator('[data-stage-metric="mastered"]')).toHaveText("1 / 8");
-
-  await overview.locator('[data-progress-filter="understood"]').click();
-  await expect(overview.locator("[data-progress-concept-results]")).toContainText(
-    "Python 核心语法",
-  );
-  await expect(overview.locator("[data-progress-concept-results]")).not.toContainText(
-    "计算机、文件与终端",
-  );
-  await overview.locator('[data-progress-filter="mastered"]').click();
-  await expect(overview.locator("[data-progress-concept-results]")).toContainText(
-    "计算机、文件与终端",
-  );
+  await expect(
+    dashboard.locator('[data-dashboard-progress-kind="understood"]'),
+  ).toHaveText("2 / 8");
+  await expect(
+    dashboard.locator('[data-dashboard-progress-kind="mastered"]'),
+  ).toHaveText("1 / 8");
 
   await page.reload();
-  await expect(page.locator('[data-overview-status-count="learning"]')).toHaveText("1");
-  await expect(page.locator('[data-stage-metric="understood"]')).toHaveText("2 / 8");
+  await expect(
+    page.locator('[data-dashboard-learning-concept-id="tooling.dev-environment"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-dashboard-progress-kind="understood"]'),
+  ).toHaveText("2 / 8");
 
   await page.goto("/knowledge/");
   const knowledgeLearning = page.locator('[data-knowledge-status-filter="learning"]');

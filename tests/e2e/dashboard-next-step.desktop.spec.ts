@@ -197,6 +197,9 @@ test("静态 HTML 在 hydration 前只提供中性初始化状态", async ({ req
   const html = await response.text();
 
   expect(html).toContain('data-dashboard-next-step="loading"');
+  expect(html).toContain('data-dashboard-console="loading"');
   expect(html).toContain("正在恢复浏览器本地学习状态");
   expect(html).not.toContain('data-dashboard-next-step="recommendation"');
+  expect(html).not.toContain('data-dashboard-console="ready"');
+  expect(html).not.toContain("data-dashboard-today-minutes");
 });

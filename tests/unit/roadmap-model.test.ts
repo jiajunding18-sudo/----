@@ -94,7 +94,7 @@ describe("Roadmap manifest 派生视图", () => {
     );
 
     expect(stageOneB?.contentStatus).toBe("available");
-    expect(stageOneB?.conceptCount).toBe(4);
+    expect(stageOneB?.conceptCount).toBe(5);
     expect(stageOneB?.outcomes).toHaveLength(2);
     expect(stageOneB?.exitCriteria).toHaveLength(2);
     expect(stageOneB?.retestAfterDays).toBe(7);

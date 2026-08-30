@@ -192,6 +192,43 @@ test("Stage 1B 新 Concept 自动进入搜索并落到正式学习页", async ({
   expect(browserErrors).toEqual([]);
 });
 
+test("Phase 9C 数值稳定性中英文术语进入搜索并落到正式学习页", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/search/?q=condition%20number");
+
+  const result = page.locator(
+    '[data-search-result-id="math.numerical-stability"]',
+  );
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("available · 正式内容");
+  const link = result.getByRole("link", {
+    name: "数值稳定性、条件数与误差传播",
+  });
+  await expect(link).toHaveAttribute(
+    "href",
+    "/knowledge/numerical-stability-and-conditioning/",
+  );
+
+  await submitSearch(page, "病态矩阵");
+  await expect(
+    page.locator('[data-search-result-id="math.numerical-stability"]'),
+  ).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(
+    /\/knowledge\/numerical-stability-and-conditioning\/$/u,
+  );
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /数值稳定性、条件数与误差传播/u,
+    }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  expect(browserErrors).toEqual([]);
+});
+
 test("正文标题命中直接进入 Concept 对应稳定章节", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/search/?q=9.%20Active%20Recall%20主动回忆");

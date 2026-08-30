@@ -1,0 +1,294 @@
+---
+schemaVersion: 1
+id: math.numerical-stability
+slug: numerical-stability-and-conditioning
+title: 数值稳定性、条件数与误差传播
+englishTitle: Numerical Stability, Condition Numbers, and Error Propagation
+aliases:
+  - 数值稳定性与条件数
+  - Numerical Stability and Conditioning
+  - 可信数值结果
+searchKeywords:
+  - numerical stability
+  - conditioning
+  - condition number
+  - floating point
+  - absolute error
+  - relative error
+  - ill-conditioned
+  - scaling
+  - normalization
+  - 病态矩阵
+summary: 理解数学上可解不等于数值上可靠，能借助残差、奇异值、条件数、扰动与尺度检查判断一个视觉计算结果是否值得进一步核查。
+why: 标定、几何估计和重建程序可能成功返回低残差结果，但数据尺度或独立约束不足仍会让参数对微小扰动高度敏感；工程上必须学会识别这种“算出了但不可信”。
+stageId: stage.vision-math-geometry-optimization
+trackIds:
+  - track.common
+order: 50
+level: intermediate
+requiredness: required
+targetDepth: understand
+estimatedHours:
+  min: 6
+  max: 8
+dependencies:
+  - conceptId: math.least-squares
+    kind: hard
+    reason: 需要先能建立 Ax≈b、解释 least-squares solution 与 residual，才能区分拟合误差和参数可靠性。
+  - conceptId: math.eigen-svd
+    kind: hard
+    reason: 需要先理解 singular values、rank 以及小奇异值代表的弱信息方向，才能建立 conditioning 直觉。
+  - conceptId: math.probability-statistics
+    kind: recommended
+    reason: 噪声、抽样和相对波动直觉有助于设计扰动实验，但不阻塞确定性的小矩阵诊断。
+tags:
+  - 视觉数学
+  - 数值稳定性
+  - 条件数
+  - 误差诊断
+learningOutcomes:
+  - 能区分问题的 conditioning 与计算过程的 numerical stability，并用绝对/相对误差、尺度和奇异值解释敏感性。
+  - 能在示例代码帮助下完成近病态 least-squares 扰动实验，比较 residual 与参数变化，并提出合理的 scaling 和 sanity checks。
+masteryCriteria:
+  - id: criterion.math-numerical-stability.diagnose-sensitive-least-squares
+    description: 在提供的实验框架上修改近病态 least-squares 系统的扰动幅度，记录 residual、参数、奇异值和 condition indicator，并解释为什么小 residual 不足以证明参数可靠。
+    evidenceHint: 提交至少三档扰动的结果表、参数变化量、residual、singular values 与文字诊断；可以使用正文代码骨架，不要求从零实现分解或求解算法。
+    required: true
+  - id: criterion.math-numerical-stability.check-scale-and-mitigations
+    description: 在示例帮助下比较一个尺度失衡问题的 scaling 前后结果，正确映射回原单位，并判断还需要哪些工程检查。
+    evidenceHint: 提交 scaling 规则、参数单位还原、condition indicator 对照，以及至少两项合理检查或缓解措施；必须说明 normalization 不能补回缺失的独立信息。
+    required: true
+resourceIds:
+  - resource.numpy-linear-algebra
+publicationStatus: published
+contentVersion: 2026.08.30
+---
+
+# 数值稳定性、条件数与误差传播（Numerical Stability, Condition Numbers, and Error Propagation）
+
+本单元只建立视觉工程所需的数值可靠性判断：程序成功返回结果以后，还要检查这个结果是否会被有限精度、尺度或微小输入扰动轻易改变。目标是会解释、会在代码骨架上做小型诊断，并知道何时需要继续核查；不是学习完整数值分析。
+
+## 1. 这是什么
+
+数学模型有解，只表示在理想实数运算和给定假设下存在答案。计算机使用有限精度的**浮点数（floating-point numbers）**，输入也含测量误差，因此“算出了一个数”不自动等于“这个数可靠”。
+
+先区分两个容易混用的概念：
+
+- **条件性（conditioning）**描述问题本身对输入扰动有多敏感。同一个正确算法遇到病态问题，也可能因极小数据变化得到明显不同的参数。
+- **数值稳定性（numerical stability）**描述计算过程是否在问题本身的敏感性之外，又额外、无必要地放大舍入或运算误差。
+
+本页只使用工程直觉：先判断问题是否敏感，再选择可靠库接口并做数值检查。当前不进入严格的 backward-error 理论。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+你已经会用 `lstsq` 得到 least-squares solution，也会从 SVD 读取 singular values。现在需要把这些输出变成可靠性诊断：为什么两次几乎相同的测量可能给出明显不同的参数，以及为什么 residual 很小仍不足以证明参数可信。
+
+机器视觉中的相机标定、几何估计、三角化、重建和点云配准都可能出现同一种失败：程序正常结束，甚至报告很小的 residual，但观测几何或尺度让参数缺乏可靠约束。本页训练的是识别这种情况，而不是提前学习这些完整算法。
+
+### 在机器视觉中会在哪里使用
+
+- `geometry.homography` 中检查退化点配置和估计尺度；
+- `geometry.rigid-transforms` 中检查单位、坐标链与往返误差；
+- `camera.calibration` 中区分低重投影 residual 与参数稳定性；
+- `geometry.triangulation`、`geometry.uncertainty` 中观察小像素扰动如何放大到深度或位姿；
+- `dl.nn-backprop` 和 `ci.forward-models` 中识别尺度失衡或敏感计算。
+
+这些都是 ROADMAP 中的后续用途；本页不教授相机模型、标定、三角化或训练算法。
+
+## 3. 前置知识
+
+硬前置是 `math.least-squares` 与 `math.eigen-svd`。开始前应能解释 $A x\approx b$、solution、residual、rank、singular value，并知道 `numpy.linalg.lstsq` 返回的 `s` 不是矩阵 $\Sigma$。`math.probability-statistics` 是 recommended，用于理解噪声和重复扰动，但本页的核心实验是确定性的。
+
+代码只局部使用 NumPy 的 `lstsq`、`svd` 和 `cond`。尚未正式发布的 `python.numpy-arrays` 不会被伪造成 dependency；示例提供完整数组和 shape，可先读懂结果，再在 Stage 2 补系统数组知识。
+
+## 4. 核心概念
+
+- **有限精度**：浮点数只能表示有限集合中的数。数量级很大时，两个相邻可表示数之间的间隔也会变大，一些较小差异会被舍去。
+- **绝对误差（absolute error）**：$|\hat x-x|$，回答“相差多少原单位”。
+- **相对误差（relative error）**：当 $x\ne0$ 时为 $|\hat x-x|/|x|$，回答“相对真实尺度偏了多少”。真实值接近 0 时相对误差会失去稳定解释，应同时报告绝对误差和任务容差。
+- **尺度（scale）**：变量的单位和数量级会影响数值运算。像素、毫米和米不能只看裸数值；数量级差异很大的矩阵列也值得先检查。
+- **条件数直觉**：对满列秩矩阵，在二维范数下可用
+
+  $$
+  \kappa_2(A)=\frac{\sigma_{\max}}{\sigma_{\min}}
+  $$
+
+  建立直觉。值较小通常表示输入小扰动不会被巨大放大；值很大表示问题更敏感。若矩阵 rank-deficient，$\sigma_{\min}=0$，条件数为无穷；若 $\sigma_{\min}\approx0$，条件数会很大，但“多大算不可用”取决于精度、单位、噪声和任务容差，没有万能阈值。
+- **小奇异值**：表示某个参数方向获得的独立信息很弱。沿这个方向稍微改变参数，预测可能几乎不变，所以 residual 无法单独约束参数。
+- **residual 不等于 reliability**：residual 衡量模型预测和当前观测的差距；参数可靠性还要看约束几何、奇异值、扰动后的参数变化和任务容差。
+- **稳定求解接口**：工程中通常优先使用 `solve`、`lstsq` 等库接口，而不是显式形成逆矩阵再相乘。求逆并非在所有场景都“永远错误”，但它通常不是求解线性方程或最小二乘的默认数值方法。
+- **scaling / normalization**：合理缩放可改善由单位或数量级失衡造成的数值表现，求解后必须映射回原单位。它不能创造缺失的独立观测，因此不能修复结构性列相关或退化几何。
+- **sanity checks**：至少检查 shape、单位、rank、singular values、condition indicator、逐项 residual、参数量级，以及小扰动或重复采样下的参数变化。
+
+## 5. 初学者直觉解释
+
+想象要从一张几乎正对直线边缘的小图块中同时估计斜率和截距。所有横坐标都挤在同一个很窄的范围里，许多“斜率稍大、截距稍小”的组合都会穿过这小块数据。拟合线看起来都很好，residual 也都很小，但斜率和截距各自并没有被可靠区分。
+
+```text
+观测范围很窄
+
+v
+^             几条参数差异明显的直线
+|          ////   在小范围内几乎重合
+|        ••••
++----------------------------> u
+         窄小的 u 范围
+```
+
+这不是求解器“算错了”，而是数据没有给两个参数足够独立的方向信息。扩大有效观测范围可能真正改善问题；只把同一列乘一个常数，最多改善尺度表达，不能补回缺失信息。
+
+最小浮点直觉也类似：在精确数学中 `(10^16 + 1) - 10^16 = 1`，但常见双精度浮点数在这个尺度上可能已经无法保留 `+1`，计算结果会变成 0。重点不是背具体位数，而是知道大数旁边的小差异可能丢失。
+
+## 6. 必须掌握到什么程度
+
+- **知道是什么**：能说出 floating-point error、absolute/relative error、conditioning、condition number 和 numerical stability 的用途。
+- **理解**：能区分“问题本身敏感”与“计算过程额外放大误差”，并解释 small singular value、低 residual 和参数敏感性之间的关系。
+- **在帮助下应用**：能运行并修改正文提供的 NumPy 实验，记录扰动、参数、residual、singular values 与 condition indicator，完成 scaling 和单位还原。
+- **达到本页 `understand` 目标**：能依据实验输出判断结果是否值得进一步检查，并提出至少两项合理检查或缓解措施；不要求独立设计完整数值分析流程。
+
+当前不要求 IEEE-754 位级细节、machine epsilon 严格分析、backward error 理论、condition number 定理证明、QR/SVD 算法实现、iterative refinement 或高级预条件技术。
+
+## 7. 常见误区
+
+- 看到 residual 很小，就宣布参数和模型都可靠。
+- 把 condition number 当作跨任务通用的“质量分数”或固定及格线。
+- 把病态问题归因于 `lstsq` 的程序错误，而不检查输入几何和 singular values。
+- 只报告 absolute error，不写相对尺度、单位或任务容差。
+- 认为 normalization 能修复所有退化或缺少观测的问题。
+- 显式计算 $(A^TA)^{-1}A^Tb$，并把公式形式当作稳定实现保证。
+- 缩放后忘记把参数映射回原单位。
+
+## 8. Worked Example：小 residual，明显参数变化
+
+用极窄横坐标范围内的四个点拟合 $v\approx mu+c$。原始数据由 $m=3,c=2$ 生成：
+
+$$
+u=[1,1.0001,0.9999,1.0002],
+$$
+
+$$
+b=[5,5.0003,4.9997,5.0006].
+$$
+
+设计矩阵 $A=[u,\mathbf 1]$ 的两列几乎相同。现在只给第二和第三个观测分别加入 $+10^{-4}$ 与 $-10^{-4}$：扰动向量的二范数约为 $1.41\times10^{-4}$。
+
+```python
+import numpy as np
+
+u = np.array([1.0, 1.0001, 0.9999, 1.0002])
+design = np.column_stack((u, np.ones_like(u)))
+
+observed = 3.0 * u + 2.0
+perturbation = np.array([0.0, 1e-4, -1e-4, 0.0])
+observed_perturbed = observed + perturbation
+
+
+def diagnose(matrix, measurements):
+    parameters, _, rank, singular_values = np.linalg.lstsq(
+        matrix,
+        measurements,
+        rcond=None,
+    )
+    residual = measurements - matrix @ parameters
+    return {
+        "parameters": parameters,
+        "residual_norm": np.linalg.norm(residual),
+        "rank": rank,
+        "singular_values": singular_values,
+        "condition": np.linalg.cond(matrix),
+    }
+
+
+base = diagnose(design, observed)
+changed = diagnose(design, observed_perturbed)
+
+print("A shape:", design.shape)
+print("input perturbation norm:", np.linalg.norm(perturbation))
+print("base:", base)
+print("perturbed:", changed)
+print(
+    "parameter change norm:",
+    np.linalg.norm(changed["parameters"] - base["parameters"]),
+)
+
+assert design.shape == (4, 2)
+assert base["rank"] == 2
+assert changed["residual_norm"] < 2e-4
+assert np.linalg.norm(changed["parameters"] - base["parameters"]) > 0.5
+assert base["condition"] > 1e4
+```
+
+典型输出可整理为：
+
+| 检查项 | 原始数据 | 加入小扰动后 |
+|---|---:|---:|
+| 参数 $[m,c]$ | 约 `[3.0, 2.0]` | 约 `[3.4, 1.59998]` |
+| residual norm | 接近浮点舍入误差 | 约 `1.10e-4` |
+| singular values | 约 `[2.8285, 1.5811e-4]` | 设计矩阵未变，因此相同 |
+| $\kappa_2(A)$ | 约 `1.79e4` | 设计矩阵未变，因此相同 |
+
+输入只变化约 $1.41\times10^{-4}$，拟合后的 residual 仍约为 $1.10\times10^{-4}$，但参数变化范数超过 `0.56`。原因是斜率增大约 `0.4` 时，截距可以减小约 `0.40002`，两者在狭窄的 $u$ 范围内互相抵消；很小的 singular value 和较大的 condition indicator 已经提示这一弱约束方向。
+
+这不是 `numpy.linalg.lstsq` 的程序错误。求解器正确找到了每组数据的最小二乘解；不可靠的是“用如此狭窄的数据范围分别估计斜率和截距”这个问题。真正的改进可以是扩大观测范围或增加提供独立约束的数据，而不只是更换求解器。
+
+### 最小 scaling 对照
+
+若矩阵一列以百万为数量级、另一列约为 1，可先把第一列除以 $10^6$ 后求解。若缩放后的参数为 $z_1$，原参数必须恢复为 $x_1=z_1/10^6$。这种操作可以改善单位/数量级失衡，但若两列本来就几乎相同，缩放后仍缺少独立信息；应继续做扰动实验，而不能把 condition number 下降误当成问题已经全部解决。
+
+## 9. Active Recall 主动回忆
+
+1. 数学上存在解与数值上容易可靠求解有什么区别？
+2. conditioning 与 numerical stability 分别描述什么？
+3. absolute error 与 relative error 各回答什么问题？真实值接近零时要注意什么？
+4. small singular value 为什么意味着某个参数方向容易受扰动影响？
+5. residual 很小为什么仍不能证明参数可靠？
+6. scaling 为什么可能改善数值表现，又为什么不能补回缺失的独立信息？
+7. 为什么工程求解通常优先 `solve` / `lstsq`，而不是默认显式求逆？
+8. 为什么同一段正确代码换一组观测几何后，结果可能突然变得敏感？
+
+## 10. Practice 练习
+
+### 理解检查
+
+判断并解释：“`lstsq` 返回 full rank 且 residual 很小，所以参数一定可靠。”完成标准：明确该说法不成立，并至少指出 singular values / condition indicator、输入尺度、扰动后的参数变化三项中的两项仍需检查。
+
+### 简单应用
+
+真实像素位移为 `0.002 pixel`，估计为 `0.003 pixel`；另一个真实位置为 `1000 pixel`，估计为 `1000.001 pixel`。分别计算 absolute error 与 relative error。完成标准：两者 absolute error 都是 `0.001 pixel`，relative error 分别为 `0.5` 和 `1e-6`，并说明不能脱离尺度和任务容差只比较绝对误差。
+
+### 视觉小练习
+
+使用 Worked Example 代码骨架，把扰动倍率改为 `0`、`0.1`、`1`、`10`，记录输入扰动范数、两项参数、residual norm、singular values 和 condition indicator。再把 `u` 的离散范围扩大 100 倍，重复实验。完成标准：提交表格；指出固定 `A` 时 condition indicator 不随 $b$ 扰动改变；比较扩大观测范围前后的参数变化；用一句话区分“小 residual”与“可靠参数”。无需从零实现 `lstsq` 或 SVD。
+
+### 工程诊断
+
+给定输出：`residual norm=1e-8`、`condition=1e12`，输入改变约 `1e-6` 后参数改变 30%。完成标准：把参数标记为“需要进一步检查”，而不是直接判定正确或错误；列出至少三项下一检查，其中必须包含单位/尺度、singular values 或 rank、扰动/重复测量中的两类。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Project**：`project.math-vision-lab`（planned）把本节点列为 hard / understood requirement；证据是病态 least-squares、扰动和 scaling 实验卡片。项目仍为 draft，没有正式执行正文。
+- **Capability**：复用正式 Project capability——用形状、残差、数值误差和稳定性检查解释核心数学工具的视觉意义；本页具体贡献是诊断敏感性和尺度问题。
+- **Application**：复用正式 Project application——为标定、几何估计、重建与模型训练提供可检查的数值基础。
+
+ROADMAP 中 Homography、刚体变换、标定、三角化、几何不确定性、反向传播和计算成像前向模型把本节点作为 recommended 工具；这不表示本页已经教授这些完整算法。
+
+## 12. Mastery Evidence 掌握证据
+
+可以直接使用本页代码骨架，不要求从零实现数值线性代数算法。
+
+1. 修改近病态 least-squares 实验的扰动幅度，提交至少三档扰动的结果表；记录参数、residual、singular values、condition indicator，并解释为什么小 residual 不足以证明参数可靠。
+2. 在给定尺度失衡例子上完成 scaling，正确映射回原单位；比较前后 condition indicator，提出至少两项合理检查或缓解措施，并说明 normalization 为什么不能修复缺少独立约束的结构性病态。
+
+达到本页 `understand` 目标的核心是能读懂输出、完成小型对照并作出有边界的诊断。独立设计求解器、证明误差界或实现分解算法不属于验收范围。
+
+## 13. 后续复用与复习
+
+本节点将在标定、几何估计、三角化、重建、配准、训练和计算成像中作为数值检查工具反复出现。24 小时后不看正文解释 conditioning 与 stability；7 天后重新运行扰动实验，先预测哪项参数更敏感，再核对输出。
+
+Stage 1B 不会因本页发布自动完成：`project.math-vision-lab` 仍为 draft，阶段出口证据和 7 天复测仍需实际满足。`math.lie-groups` 继续等待 `geometry.rigid-transforms`，本页不提供其前置或占位正文。
+
+## 14. 精选学习资源
+
+- **NumPy Linear Algebra Manual**：正文是主教材。必看 `numpy.linalg.cond` 的输入与返回值，以及 `numpy.linalg.lstsq` / `numpy.linalg.svd` 中本页实际读取的 rank、`s` 和 shape；看到能复现实验并解释输出即可。选看 `cond` 的其他 norm 参数，只需知道 condition number 可以基于不同范数定义。跳过矩阵范数证明、LAPACK、QR/SVD 算法实现、广播批处理、复杂度与其余分解 API。

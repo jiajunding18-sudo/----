@@ -18,6 +18,7 @@ const conceptIds = [
   "math.least-squares",
   "math.eigen-svd",
   "math.optimization",
+  "math.numerical-stability",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -50,7 +51,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空
   await page.goto("/knowledge/");
 
   const results = page.locator("[data-knowledge-concept-id]");
-  await expect(results).toHaveCount(16);
+  await expect(results).toHaveCount(17);
   expect(
     await results.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-knowledge-concept-id")),
@@ -63,8 +64,8 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空
   const trackFilter = page.getByLabel("按 Track 浏览");
   await expect(stageFilter.locator("option")).toHaveCount(18);
   await expect(trackFilter.locator("option")).toHaveText([
-    "全部 Track（16）",
-    "公共主干（16）",
+    "全部 Track（17）",
+    "公共主干（17）",
     "3D 工业视觉高级分支（0）",
     "计算成像高级分支（0）",
   ]);
@@ -77,7 +78,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空
     page.locator('[data-knowledge-concept-id="math.vectors-matrices"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.vision-math-geometry-optimization");
-  await expect(results).toHaveCount(4);
+  await expect(results).toHaveCount(5);
   await expect(
     page.locator('[data-knowledge-concept-id="math.coordinate-frames"]'),
   ).toBeVisible();
@@ -94,7 +95,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空
     "目前没有已发布 Concept",
   );
   await page.getByRole("button", { name: "全部知识", exact: true }).click();
-  await expect(results).toHaveCount(16);
+  await expect(results).toHaveCount(17);
 
   const developmentEnvironment = page.locator(
     '[data-knowledge-concept-id="tooling.dev-environment"]',

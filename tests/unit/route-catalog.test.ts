@@ -46,6 +46,7 @@ const stageOneBConceptIds = [
   "math.least-squares",
   "math.eigen-svd",
   "math.optimization",
+  "math.numerical-stability",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

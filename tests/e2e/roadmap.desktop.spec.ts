@@ -19,6 +19,14 @@ const stageOneAConceptIds = [
   "math.probability-statistics",
 ] as const;
 
+const stageOneBConceptIds = [
+  "math.coordinate-frames",
+  "math.least-squares",
+  "math.eigen-svd",
+  "math.optimization",
+  "math.numerical-stability",
+] as const;
+
 function trackBrowserErrors(page: Page) {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -138,7 +146,7 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
     "available",
   );
   await expect(stageOneBOverview).toContainText("可学习");
-  await expect(stageOneBOverview).toContainText("4 个 Concept");
+  await expect(stageOneBOverview).toContainText("5 个 Concept");
   await stageOneBOverview.locator("summary").click();
   await expect(stageOneBOverview).toHaveAttribute("open", "");
   await expect(
@@ -216,14 +224,20 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   );
   await stageOneB.locator("summary").click();
   await expect(stageOneB.locator("details")).toHaveAttribute("open", "");
-  await expect(stageOneB.locator("[data-concept-id]")).toHaveCount(4);
+  const stageOneBConcepts = stageOneB.locator("[data-concept-id]");
+  await expect(stageOneBConcepts).toHaveCount(5);
+  expect(
+    await stageOneBConcepts.evaluateAll((items) =>
+      items.map((item) => item.getAttribute("data-concept-id")),
+    ),
+  ).toEqual(stageOneBConceptIds);
   await expect(
     stageOneB.locator('[data-concept-id="math.coordinate-frames"]'),
   ).toBeVisible();
-  await expect(stageOneB.locator('[data-dependency-kind="hard"]')).toHaveCount(5);
+  await expect(stageOneB.locator('[data-dependency-kind="hard"]')).toHaveCount(7);
   await expect(
     stageOneB.locator('[data-dependency-kind="recommended"]'),
-  ).toHaveCount(3);
+  ).toHaveCount(4);
   await expect(stage.locator('[data-dependency-kind="hard"]')).toHaveCount(7);
   await expect(stage.locator('[data-dependency-kind="recommended"]')).toHaveCount(5);
   await expect(stage.getByText("M · 必须掌握")).toHaveCount(7);

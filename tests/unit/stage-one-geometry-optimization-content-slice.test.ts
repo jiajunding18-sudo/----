@@ -18,13 +18,11 @@ const stageOneBConceptIds = [
   "math.least-squares",
   "math.eigen-svd",
   "math.optimization",
+  "math.numerical-stability",
 ] as const;
 const stageOneBConceptIdSet = new Set<string>(stageOneBConceptIds);
 
-const unpublishedStageOneBConceptIds = [
-  "math.numerical-stability",
-  "math.lie-groups",
-] as const;
+const unpublishedStageOneBConceptIds = ["math.lie-groups"] as const;
 
 const expectedDependencies = [
   ["math.linear-transforms", "math.coordinate-frames", "hard"],
@@ -35,6 +33,9 @@ const expectedDependencies = [
   ["math.calculus-gradients", "math.optimization", "hard"],
   ["math.least-squares", "math.optimization", "hard"],
   ["math.probability-statistics", "math.optimization", "recommended"],
+  ["math.least-squares", "math.numerical-stability", "hard"],
+  ["math.eigen-svd", "math.numerical-stability", "hard"],
+  ["math.probability-statistics", "math.numerical-stability", "recommended"],
 ] as const;
 
 const requiredSectionHeadings = [
@@ -54,8 +55,8 @@ const requiredSectionHeadings = [
   "## 14. 精选学习资源",
 ] as const;
 
-describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
-  it("只发布约定的四个 Stage 1B Concept，并把 checkpoint 标记为 available", () => {
+describe("Phase 9 Stage 1B 正式学习内容", () => {
+  it("发布五个 Stage 1B 必修 Concept，并保持 checkpoint 为 available", () => {
     const concepts = contentManifest.concepts
       .filter(
         ({ stageId }) =>
@@ -67,16 +68,22 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
     );
 
     expect(concepts.map(({ id }) => id)).toEqual(stageOneBConceptIds);
-    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40]);
+    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40, 50]);
     expect(
       concepts.every(
-        ({ publicationStatus, requiredness, targetDepth, trackIds }) =>
+        ({ publicationStatus, requiredness, trackIds }) =>
           publicationStatus === "published" &&
           requiredness === "required" &&
-          targetDepth === "master" &&
           trackIds.includes("track.common"),
       ),
     ).toBe(true);
+    expect(concepts.slice(0, 4).every(({ targetDepth }) => targetDepth === "master")).toBe(
+      true,
+    );
+    expect(concepts[4]).toMatchObject({
+      id: "math.numerical-stability",
+      targetDepth: "understand",
+    });
     expect(stage).toMatchObject({ contentStatus: "available" });
     expect(stage && "entryGate" in stage ? stage.entryGate : undefined).toBeUndefined();
     expect(stage?.exitCriteria).toHaveLength(2);
@@ -91,7 +98,7 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
     });
   });
 
-  it("依赖与 ROADMAP 一致，保持五条 hard 与三条 recommended 边", () => {
+  it("依赖与 ROADMAP 一致，保持七条 hard 与四条 recommended 边", () => {
     const dependencies = contentManifest.dependencies.filter(({ targetId }) =>
       stageOneBConceptIdSet.has(targetId),
     );
@@ -104,10 +111,10 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
       ]),
     ).toEqual(expect.arrayContaining([...expectedDependencies]));
     expect(dependencies).toHaveLength(expectedDependencies.length);
-    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(5);
+    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(7);
     expect(
       dependencies.filter(({ kind }) => kind === "recommended"),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       dependencies.flatMap(({ prerequisiteId, targetId }) => [
         String(prerequisiteId),
@@ -116,7 +123,7 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
     ).not.toContain("python.numpy-arrays");
   });
 
-  it("四篇正文形成完整学习闭环，且 mastery 要求均有正文支架", async () => {
+  it("五篇正文形成完整学习闭环，且 mastery 要求均有正文支架", async () => {
     const workspaceRoot = process.cwd();
     const concepts = await loadMdxDirectory({
       directoryPath: resolve(workspaceRoot, "content/concepts/math"),
@@ -157,6 +164,12 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
     expect(bodyById.get("math.eigen-svd")).toContain("rank-1");
     expect(bodyById.get("math.optimization")).toContain("central_difference");
     expect(bodyById.get("math.optimization")).toContain("L2 regularization");
+    expect(bodyById.get("math.numerical-stability")).toContain(
+      "conditioning",
+    );
+    expect(bodyById.get("math.numerical-stability")).toContain(
+      "residual 不等于 reliability",
+    );
   });
 
   it("Phase 9B-R1 的定点教学支架与数学边界保持一致", async () => {
@@ -212,8 +225,50 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
       "`stage.vision-math-geometry-optimization` 为 `available`",
     );
     expect(roadmap).toContain(
-      "`math.numerical-stability` 与 `math.lie-groups` 仍未发布",
+      "其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布",
     );
+  });
+
+  it("Phase 9C 数值可靠性正文保持 understand 深度与正确边界", async () => {
+    const workspaceRoot = process.cwd();
+    const concepts = await loadMdxDirectory({
+      directoryPath: resolve(workspaceRoot, "content/concepts/math"),
+      workspaceRoot,
+      schema: conceptMetaSchema,
+    });
+    const concept = concepts.find(
+      ({ meta }) => meta.id === "math.numerical-stability",
+    );
+
+    expect(concept?.meta).toMatchObject({
+      targetDepth: "understand",
+      publicationStatus: "published",
+      dependencies: [
+        { conceptId: "math.least-squares", kind: "hard" },
+        { conceptId: "math.eigen-svd", kind: "hard" },
+        { conceptId: "math.probability-statistics", kind: "recommended" },
+      ],
+      resourceIds: ["resource.numpy-linear-algebra"],
+    });
+    expect(concept?.body).toContain(
+      "条件性（conditioning）**描述问题本身对输入扰动有多敏感",
+    );
+    expect(concept?.body).toContain(
+      "数值稳定性（numerical stability）**描述计算过程是否",
+    );
+    expect(concept?.body).toContain(
+      "\\kappa_2(A)=\\frac{\\sigma_{\\max}}{\\sigma_{\\min}}",
+    );
+    expect(concept?.body).toContain("若矩阵 rank-deficient");
+    expect(concept?.body).toContain("residual 不等于 reliability");
+    expect(concept?.body).toContain("parameter change norm");
+    expect(concept?.body).toContain("这不是 `numpy.linalg.lstsq` 的程序错误");
+    expect(concept?.body).toContain("正确映射回原单位");
+    expect(concept?.body).toContain("不能修复结构性列相关或退化几何");
+    expect(concept?.body).toContain("可以直接使用本页代码骨架");
+    expect(concept?.body).toContain("不要求独立设计完整数值分析流程");
+    expect(concept?.body).not.toContain("求逆永远错误");
+    expect(concept?.body).not.toContain("backward error 完整理论");
   });
 
   it("资源少而精、URL 已验证且阅读范围包含必看、选看与跳过", () => {
@@ -255,6 +310,8 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
     expect(mitScope).toContain("谱定理");
     expect(numpyScope).toContain("只记录 rank 是否等于参数数目");
     expect(numpyScope).toContain("singular values 留给 eigen/SVD Concept");
+    expect(numpyScope).toContain("numpy.linalg.cond");
+    expect(numpyScope).toContain("矩阵范数证明");
   });
 
   it("math-vision-lab 保持 draft，只扩充正式 requirement 与 evidence 映射", () => {
@@ -278,7 +335,7 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
       "math.probability-statistics",
       ...stageOneBConceptIds,
     ]);
-    expect(project?.conceptRequirements.slice(-4)).toEqual(
+    expect(project?.conceptRequirements.slice(-5)).toEqual(
       stageOneBConceptIds.map((conceptId) => ({
         conceptId,
         kind: "hard",
@@ -286,7 +343,7 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
         reason: expect.any(String),
       })),
     );
-    expect(project?.evidenceConceptIds.slice(-4)).toEqual(stageOneBConceptIds);
+    expect(project?.evidenceConceptIds.slice(-5)).toEqual(stageOneBConceptIds);
     expect(project?.capabilitySummary).toHaveLength(1);
     expect(project?.realWorldApplications).toHaveLength(1);
   });

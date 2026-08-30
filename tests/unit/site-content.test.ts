@@ -39,7 +39,7 @@ describe("网站只读内容接口", () => {
       throw new Error("测试需要已发布的 Pixel Lab");
     }
 
-    expect(getPublishedConceptSlugs()).toHaveLength(16);
+    expect(getPublishedConceptSlugs()).toHaveLength(17);
     expect(getConceptsForProject(slice.project)).toHaveLength(8);
   });
 });

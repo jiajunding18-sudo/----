@@ -44,6 +44,10 @@ conceptRequirements:
     kind: hard
     minimumStatus: understood
     reason: 优化章节必须实现可检查的梯度下降，对照步长与最小 L2 正则化，并用有限差分验证梯度。
+  - conceptId: math.numerical-stability
+    kind: hard
+    minimumStatus: understood
+    reason: 数值可靠性章节必须用扰动、残差、奇异值与条件数识别敏感问题，并说明 scaling 不能补回缺失的独立信息。
 estimatedHours:
   min: 20
   max: 30
@@ -62,12 +66,13 @@ evidenceConceptIds:
   - math.least-squares
   - math.eigen-svd
   - math.optimization
+  - math.numerical-stability
 resumeOutcome: 完成后将用数值检查说明变换、最小二乘、噪声、SVD 与梯度的视觉意义。
 tags:
   - 数学
   - 数值验证
 publicationStatus: draft
-contentVersion: 2026.08.30.2
+contentVersion: 2026.08.30.3
 ---
 
 # 视觉数学实验册

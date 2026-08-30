@@ -185,6 +185,53 @@ test("Stage 1B 正文渲染公式、代码、表格、TOC、深链接与正式�
   expect(browserErrors).toEqual([]);
 });
 
+test("Phase 9C 数值稳定性正文渲染诊断实验、TOC 与 draft Project 映射", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/numerical-stability-and-conditioning/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /数值稳定性、条件数与误差传播/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator(".katex-display").first()).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toBeVisible();
+  await expect(document.getByRole("table").first()).toBeVisible();
+  await expect(document).toContainText("小 residual，明显参数变化");
+  await expect(document).toContainText("这不是 numpy.linalg.lstsq 的程序错误");
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  const workedExampleHref = await workedExampleLink.getAttribute("href");
+  expect(workedExampleHref).toMatch(/^#section-8-worked-example-/u);
+  await workedExampleLink.click();
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe(decodeURIComponent(workedExampleHref ?? ""));
+  await page.reload();
+  await expect(page.locator(workedExampleHref ?? "#missing-worked-example")).toBeVisible();
+
+  await expect(
+    page.getByRole("link", { name: "Linear algebra — NumPy Manual" }),
+  ).toHaveAttribute("href", "/resources/numpy-linear-algebra/");
+  const projectUsage = page.locator(
+    '[data-concept-project-id="project.math-vision-lab"]',
+  );
+  await expect(projectUsage).toContainText("hard · 需要已理解");
+  await expect(projectUsage).toContainText("planned · 项目正文尚未发布");
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

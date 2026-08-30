@@ -27,6 +27,7 @@ const stageOneBConceptIds = [
   "math.least-squares",
   "math.eigen-svd",
   "math.optimization",
+  "math.numerical-stability",
 ] as const;
 
 describe("Knowledge manifest 派生视图", () => {
@@ -37,7 +38,7 @@ describe("Knowledge manifest 派生视图", () => {
       [...stageZeroConceptIds, ...stageOneAConceptIds, ...stageOneBConceptIds],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
     );
     expect(
       knowledge.concepts.every(
@@ -77,7 +78,7 @@ describe("Knowledge manifest 派生视图", () => {
     });
     expect(stageOneB).toMatchObject({
       contentStatus: "available",
-      publishedConceptCount: 4,
+      publishedConceptCount: 5,
     });
     expect(stageTwo).toMatchObject({
       contentStatus: "planned",
@@ -86,7 +87,7 @@ describe("Knowledge manifest 派生视图", () => {
     expect(knowledge.availableStageCount).toBe(3);
     expect(knowledge.plannedStageCount).toBe(14);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      16, 0, 0,
+      17, 0, 0,
     ]);
   });
 

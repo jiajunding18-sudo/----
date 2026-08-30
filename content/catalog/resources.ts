@@ -249,8 +249,9 @@ export const resources: readonly Resource[] = [
     recommendedParts: [
       "必看（最小二乘）：numpy.linalg.lstsq 的参数、返回值与直线拟合 example；核对 solution、residuals 和输入 shape，只记录 rank 是否等于参数数目，singular values 留给 eigen/SVD Concept",
       "必看（eigen/SVD）：先完成 Concept 正文，再用 numpy.linalg.svd 核对 reduced U/s/Vh shape、s 与 Sigma 的关系和 reconstruction example",
-      "选看：numpy.linalg.eigh 的二维对称矩阵 example，只用于核对 PCA 协方差矩阵的主方向",
-      "跳过：其余分解 API、广播批处理、底层 LAPACK、算法复杂度与数值实现细节",
+      "必看（数值稳定性）：以 Concept 正文为主，只核对 numpy.linalg.cond 的输入/返回值，以及 lstsq / svd 中实验实际读取的 rank、s 和 shape；达到能复现扰动实验并解释输出即可",
+      "选看：numpy.linalg.eigh 的二维对称矩阵 example，只用于核对 PCA 协方差矩阵的主方向；cond 的其他 norm 参数只需知道存在不同定义",
+      "跳过：矩阵范数证明、其余分解 API、广播批处理、底层 LAPACK、QR/SVD 实现、算法复杂度与完整数值线性代数",
     ],
     aliases: ["NumPy 线性代数", "numpy.linalg"],
     verification: "verified",

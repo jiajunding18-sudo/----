@@ -120,7 +120,7 @@ flowchart LR
 
 Stage 1B 有意不设置阶段级 `entryGate`：Stage 1 采用即时、交错学习，坐标系可以在概率统计与梯度全部掌握前按任务进入。Stage 1B 内每个 Concept 仍必须满足第 3.1 节声明的自身 `hard` 前置；移除整段 checkpoint 门槛不表示可以绕过这些知识依赖。Stage 1A checkpoint 继续独立记录该子阶段的完整能力证据。
 
-checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate` 与 `stage.vision-math-geometry-optimization` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前发布前四个正式 Concept，`math.numerical-stability` 与 `math.lie-groups` 仍未发布；`available` 不表示规划节点已全部发布。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
+checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate` 与 `stage.vision-math-geometry-optimization` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 1B 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 
 ---
 

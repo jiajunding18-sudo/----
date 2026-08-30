@@ -199,10 +199,15 @@ test("Phase 9C 数值稳定性正文渲染诊断实验、TOC 与 draft Project �
     }),
   ).toBeVisible();
   await expect(document.locator(".katex-display").first()).toBeVisible();
-  await expect(document.locator('[data-code-language="python"]')).toBeVisible();
+  const pythonBlocks = document.locator('[data-code-language="python"]');
+  await expect(pythonBlocks).toHaveCount(2);
+  await expect(pythonBlocks.first()).toBeVisible();
+  await expect(pythonBlocks.nth(1)).toBeVisible();
   await expect(document.getByRole("table").first()).toBeVisible();
   await expect(document).toContainText("小 residual，明显参数变化");
   await expect(document).toContainText("这不是 numpy.linalg.lstsq 的程序错误");
+  await expect(document).toContainText("condition indicator 约为 6708.20");
+  await expect(document).toContainText("两种表示描述的是同一个物理问题");
 
   const toc = page.locator('[data-concept-toc="desktop"]');
   const workedExampleLink = toc.getByRole("link", {

@@ -265,6 +265,19 @@ describe("Phase 9 Stage 1B 正式学习内容", () => {
     expect(concept?.body).toContain("这不是 `numpy.linalg.lstsq` 的程序错误");
     expect(concept?.body).toContain("正确映射回原单位");
     expect(concept?.body).toContain("不能修复结构性列相关或退化几何");
+    expect(concept?.body).toContain("$\\hat x$ 是估计值或计算值");
+    expect(concept?.body).toContain(
+      "condition indicator 就是 `numpy.linalg.cond(A)` 默认返回的二范数条件数",
+    );
+    expect(concept?.body).toContain("各分量平方、相加、再开根号");
+    expect(concept?.body).toContain("也就是 `0.002%`");
+    expect(concept?.body).toContain("position_um / 1000.0");
+    expect(concept?.body).toContain("约 `6708.20`");
+    expect(concept?.body).toContain("约 `7.47`");
+    expect(concept?.body).toContain("x_from_scaled = np.array([z[0] / 1000.0, z[1]])");
+    expect(concept?.body).toContain("两种表示描述的是同一个物理问题");
+    expect(concept?.body).toContain("数据并没有因此获得新的独立信息");
+    expect(concept?.body).toContain("不能根治结构性病态");
     expect(concept?.body).toContain("可以直接使用本页代码骨架");
     expect(concept?.body).toContain("不要求独立设计完整数值分析流程");
     expect(concept?.body).not.toContain("求逆永远错误");

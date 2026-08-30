@@ -49,7 +49,7 @@ masteryCriteria:
 resourceIds:
   - resource.mit-ocw-linear-algebra
 publicationStatus: published
-contentVersion: 2026.08.30
+contentVersion: 2026.08.30.1
 ---
 
 # 坐标系、坐标表示与变换方向（Coordinate Frames, Coordinate Representations, and Transform Direction）
@@ -102,7 +102,17 @@ Stage 1A 已经说明矩阵怎样变换点和方向。现在要进一步区分�
   [P]_B=R_{A\leftarrow B}^{T}([P]_A-t_{A\leftarrow B}).
   $$
 
-- **复合顺序**：若已知 $A\leftarrow B$ 和 $B\leftarrow C$，则从 $C$ 到 $A$ 时先做右侧的 $B\leftarrow C$，再做左侧的 $A\leftarrow B$。矩阵部分为 $R_{A\leftarrow B}R_{B\leftarrow C}$。
+- **复合顺序**：若已知 $A\leftarrow B$ 和 $B\leftarrow C$，则从 $C$ 到 $A$ 时先做右侧的 $B\leftarrow C$，再做左侧的 $A\leftarrow B$。完整复合为
+
+  $$
+  R_{A\leftarrow C}=R_{A\leftarrow B}R_{B\leftarrow C},
+  $$
+
+  $$
+  t_{A\leftarrow C}=R_{A\leftarrow B}t_{B\leftarrow C}+t_{A\leftarrow B}.
+  $$
+
+  $t_{B\leftarrow C}$ 的两个数原本沿 $B$ 的轴表达，不能直接与沿 $A$ 的轴表达的 $t_{A\leftarrow B}$ 相加。必须先用 $R_{A\leftarrow B}$ 把这段平移改写到 $A$，两项处于同一坐标系后才能相加。
 - **数值闭环**：正确的正逆变换应让 $[P]_B\rightarrow[P]_A\rightarrow[P]_B'$ 满足 $[P]_B'\approx[P]_B$。浮点计算比较误差，不直接要求逐位相等。
 
 ## 5. 初学者直觉解释
@@ -112,15 +122,19 @@ Stage 1A 已经说明矩阵怎样变换点和方向。现在要进一步区分�
 先画下面这个最小草图，再写公式：
 
 ```text
-         A-y
-          ^       B-x
-          |      ^
-          |     /
-     B-o  •----/----> A-x
-        t_A<-B
+                         B-y
+                          ^
+                          |
+                    B-o---+----> B-x
+                    /
+                   /  t_A<-B：A-o 指向 B-o
+          A-y     /
+           ^     /
+           |    /
+       A-o +--------------------> A-x
 ```
 
-手绘步骤：标出 $A$ 的原点与轴；在 $A$ 中标出 $B$ 的原点；画出 $B$ 的两根轴；最后标出点 $P$。任何坐标数值旁都写所属坐标系，任何矩阵旁都写变换箭头。
+手绘步骤：标出 $A$ 的原点与两根轴；从 $A$ 原点画出指向 $B$ 原点的 $t_{A\leftarrow B}$；再在 $B$ 原点画出 $B$ 的两根轴；最后标出点 $P$。任何坐标数值旁都写所属坐标系，任何矩阵旁都写变换箭头。
 
 ## 6. 必须掌握到什么程度
 
@@ -215,14 +229,51 @@ assert error < 1e-12
 
 这里检查的是坐标表示与方向，不是让点先旋转再物理移动。若把 $R$ 换成 $R^T$ 或把平移加在逆变换末尾，闭环会暴露错误。
 
+### 再加入坐标系 C：最小三坐标系复合
+
+沿用上面的 $A\leftarrow B$，再令 $B\leftarrow C$ 没有旋转，且 $C$ 原点在 $B$ 中为
+
+$$
+R_{B\leftarrow C}=I,\qquad
+t_{B\leftarrow C}=\begin{bmatrix}1\\-1\end{bmatrix}.
+$$
+
+因此
+
+$$
+R_{A\leftarrow C}=R_{A\leftarrow B}I
+=\begin{bmatrix}0&-1\\1&0\end{bmatrix},
+$$
+
+而复合平移是
+
+$$
+t_{A\leftarrow C}
+=R_{A\leftarrow B}\begin{bmatrix}1\\-1\end{bmatrix}
++\begin{bmatrix}2\\1\end{bmatrix}
+=\begin{bmatrix}1\\1\end{bmatrix}
++\begin{bmatrix}2\\1\end{bmatrix}
+=\begin{bmatrix}3\\2\end{bmatrix}.
+$$
+
+这里的 $[1,-1]^T$ 是用 $B$ 的轴描述的平移；旋转后得到 $[1,1]^T$，才是同一段平移在 $A$ 中的坐标。若点 $[P]_C=[2,1]^T$，逐段计算得到 $[P]_B=[3,0]^T$、$[P]_A=[2,4]^T$；直接使用复合关系也得到
+
+$$
+[P]_A=R_{A\leftarrow C}[P]_C+t_{A\leftarrow C}
+=\begin{bmatrix}2\\4\end{bmatrix}.
+$$
+
+逐段结果与复合结果相同，说明旋转、平移和乘法顺序彼此一致。
+
 ## 9. Active Recall 主动回忆
 
 1. 几何点 $P$ 与 $[P]_A$ 有什么区别？
 2. 为什么同一点在两个坐标系中可以有不同数值？
 3. 为什么方向向量变换时不加坐标系原点偏移？
 4. $A\leftarrow B$ 和 $B\leftarrow C$ 组合时，哪个变换先作用？
-5. 点的逆变换为什么要先减平移再旋转？
-6. 往返误差接近零能检查什么，又不能证明什么？
+5. 为什么 $t_{B\leftarrow C}$ 必须先旋转到 $A$ 后，才能与 $t_{A\leftarrow B}$ 相加？
+6. 点的逆变换为什么要先减平移再旋转？
+7. 往返误差接近零能检查什么，又不能证明什么？
 
 ## 10. Practice 练习
 

@@ -55,7 +55,7 @@ resourceIds:
   - resource.mit-ocw-linear-algebra
   - resource.numpy-linear-algebra
 publicationStatus: published
-contentVersion: 2026.08.30
+contentVersion: 2026.08.30.1
 ---
 
 # 特征方向、奇异值分解与低秩信息（Eigen Directions, Singular Value Decomposition, and Low-Rank Information）
@@ -79,6 +79,8 @@ A=U\Sigma V^T.
 $$
 
 可以按从右到左理解：$V^T$ 把输入改写到一组重要方向，$\Sigma$ 沿这些方向分别缩放，$U$ 把缩放后的方向放到输出空间。非负的**奇异值（singular values）**按大小描述各方向被保留或放大的程度。
+
+两者不是同一种分解：eigen decomposition 主要询问方阵作用在自身空间时，哪些方向不会拐弯；SVD 则把一般 $m\times n$ 矩阵拆成输入方向、缩放和输出方向，即使输入与输出维数不同也可以使用。
 
 ## 2. 为什么机器视觉需要它
 
@@ -104,11 +106,26 @@ Stage 1A 已经学习线性变换和秩，least squares 又让 `rank` 与 `singu
 
 - **特征方向**：$Av=\lambda v$ 只针对方阵。$v$ 的长度任意，通常归一化；$v$ 与 $-v$ 表示同一条方向轴。
 - **特征值的尺度含义**：$|\lambda|$ 表示沿该方向的缩放强弱，负号还表示方向翻转。不是所有矩阵都能用一组实特征向量完整表达。
-- **SVD 的三个动作**：$V^T$ 选择输入方向，$\Sigma$ 缩放，$U$ 给出输出方向。NumPy 返回 `U, s, Vh`，其中 `Vh` 就是 $V^T$。
+- **SVD 的三个动作**：$V^T$ 选择输入方向，$\Sigma$ 缩放，$U$ 给出单位化的输出侧方向。对数据矩阵，带尺度的样本 scores / 坐标是 $U\Sigma$，不是单独的 $U$。
+- **NumPy 返回的是向量 `s`**：`numpy.linalg.svd` 返回 `U, s, Vh`，其中 `Vh` 就是 $V^T$，`s` 是按从大到小排列的一维奇异值向量，不是矩阵 $\Sigma$。需要矩阵形式时再构造 $\Sigma=\operatorname{diag}(s)$。
 - **奇异值与 rank**：非零奇异值的数量等于矩阵的 rank。实际浮点数据很少恰好为零，因此“有效 rank”需要结合尺度和任务容差判断；完整数值稳定性留到 `math.numerical-stability`。
 - **主要方向**：较大奇异值对应数据变化更强或矩阵保留更多能量的方向；小奇异值对应较弱方向。大不自动等于有用，仍要结合单位和任务。
 - **低秩近似**：只保留前 $k$ 个奇异值得到 $A_k=U_k\Sigma_kV_k^T$。它保留主要结构并丢弃较弱方向，重建误差说明代价。
 - **二维 PCA 联系**：将点集每列减去均值得到中心化矩阵 $X$。对 $X$ 做 SVD 时，$V^T$ 的第一行给出最大变化方向；$s_i^2/(n-1)$ 对应沿该方向的样本方差。当前只需会解释，不证明该关系。
+
+### Reduced SVD 的 shape
+
+令输入 $A$ 的 shape 为 $m\times n$，并令 $k=\min(m,n)$。当 NumPy 使用 `full_matrices=False` 时：
+
+| 对象 | shape | 当前应怎样读 |
+|---|---:|---|
+| 输入 $A$ | $m\times n$ | $m$ 个输出侧分量与 $n$ 个输入侧分量之间的线性关系 |
+| reduced $U$ | $m\times k$ | $k$ 条单位化输出侧方向 |
+| `s` | 长度 $k$ | 一维奇异值向量，不是矩阵 |
+| $\Sigma=\operatorname{diag}(s)$ | $k\times k$ | 把每条方向按对应奇异值缩放 |
+| `Vh` $=V^T$ | $k\times n$ | $k$ 条输入侧方向按行排列 |
+
+数学上 $A=U\Sigma V^T$；在浮点代码中重建结果允许有微小误差，所以检查时写作 $A\approx U\Sigma V^T$。
 
 ## 5. 初学者直觉解释
 
@@ -118,7 +135,8 @@ Stage 1A 已经学习线性变换和秩，least squares 又让 `rank` 与 `singu
 |---|---|---|
 | $V^T$ | 输入中的重要方向朝哪里？ | 主轴方向 |
 | $\Sigma$ | 每条方向有多强？ | 沿主轴的变化量 |
-| $U$ | 每个样本怎样参与这些模式？ | 点在各模式上的系数 |
+| $U$ | 输出侧的单位方向怎样排列？ | 样本侧的单位化模式，尚未带奇异值尺度 |
+| $U\Sigma$ | 每个样本在各模式上的带尺度坐标是多少？ | PCA 中常说的样本 scores |
 | 截断 | 丢掉弱方向后还剩什么？ | 细长点云可近似成一条线 |
 
 ## 6. 必须掌握到什么程度
@@ -154,6 +172,12 @@ $$
 
 这里只有一条独立方向，所以 rank 为 1。SVD 的第一条输入方向约为 $[0.707,0.707]$ 或它的相反数，奇异值约为 $[4.472,0]$。第二个奇异值为零，说明垂直于 $y=x$ 的方向没有变化信息。
 
+这里 $X$ 是 $4\times2$，所以 $m=4,n=2,k=2$。使用 reduced SVD 后，`U` 是 $4\times2$、`s` 长度为 2、`Vh` 是 $2\times2$，由 `s` 构造的 $\Sigma$ 是 $2\times2$：
+
+```text
+X: 4×2 → U: 4×2 → s: 2 → Σ: 2×2 → Vh: 2×2
+```
+
 ```python
 import numpy as np
 
@@ -168,26 +192,32 @@ points = np.array(
 
 mean = points.mean(axis=0)
 centered = points - mean
-u, singular_values, vh = np.linalg.svd(centered, full_matrices=False)
+u, s, vh = np.linalg.svd(centered, full_matrices=False)
+sigma = np.diag(s)
+reconstructed = u @ sigma @ vh
 
-rank_one = (u[:, :1] * singular_values[:1]) @ vh[:1, :]
+rank_one = (u[:, :1] * s[:1]) @ vh[:1, :]
 rank_zero = np.zeros_like(centered)
+full_error = np.linalg.norm(centered - reconstructed)
 error_rank_one = np.linalg.norm(centered - rank_one)
 error_rank_zero = np.linalg.norm(centered - rank_zero)
 
 print("mean:", mean)
-print("shapes:", u.shape, singular_values.shape, vh.shape)
-print("singular values:", singular_values)
+print("shapes:", u.shape, s.shape, sigma.shape, vh.shape)
+print("singular values:", s)
 print("first principal direction:", vh[0])
+print("full reconstruction error:", full_error)
 print("rank-1 error:", error_rank_one)
 print("rank-0 error:", error_rank_zero)
 
 assert centered.shape == (4, 2)
+assert u.shape == (4, 2) and s.shape == (2,) and sigma.shape == (2, 2) and vh.shape == (2, 2)
+assert full_error < 1e-12
 assert error_rank_one < 1e-12
 assert error_rank_zero > 4.0
 ```
 
-保留第一奇异值即可完整重建这些理想点；全部丢弃则只剩中心点。若给点加入轻微垂直噪声，第二奇异值会变成小的非零数，rank-1 重建也会出现小误差。是否应丢弃它取决于任务容差，而不是看到“小”就自动删除。
+`s` 只有两个数；`sigma = np.diag(s)` 才把它们放到 $2\times2$ 的 $\Sigma$ 对角线上。`u @ sigma` 是带尺度的样本 scores，再乘 `vh` 回到原来的二维特征坐标。保留第一奇异值即可完整重建这些理想点；全部丢弃则只剩中心点。若给点加入轻微垂直噪声，第二奇异值会变成小的非零数，rank-1 重建也会出现小误差。是否应丢弃它取决于任务容差，而不是看到“小”就自动删除。
 
 作为最小 eigen 直觉，矩阵 $D=\operatorname{diag}(3,1)$ 对 $e_1$ 放大 3 倍、对 $e_2$ 保持不变，所以两根坐标轴就是特征方向，特征值分别为 3 和 1。当前无需解特征多项式。
 
@@ -195,10 +225,12 @@ assert error_rank_zero > 4.0
 
 1. $Av=\lambda v$ 中“不改变方向”具体是什么意思？
 2. eigen decomposition 为什么只讨论方阵，而 SVD 可以处理一般矩阵？
-3. 从右向左读 $U\Sigma V^T$ 时，三个部分各做什么？
-4. 为什么 $v$ 与 $-v$ 可以是同一条主方向？
-5. 奇异值与 rank 有什么关系？浮点数据中为何需要容差？
-6. rank-1 近似保留了什么，又丢失了什么？
+3. 从右向左读 $U\Sigma V^T$ 时，三个部分各做什么？eigen decomposition 与 SVD 为什么不是同一种分解？
+4. 输入为 $m\times n$、$k=\min(m,n)$ 时，reduced `U, s, Vh` 的 shape 分别是什么？
+5. 为什么 NumPy 的 `s` 不是 $\Sigma$？为什么样本 scores 是 $U\Sigma$ 而不是单独的 $U$？
+6. 为什么 $v$ 与 $-v$ 可以是同一条主方向？
+7. 奇异值与 rank 有什么关系？浮点数据中为何需要容差？
+8. rank-1 近似保留了什么，又丢失了什么？
 
 ## 10. Practice 练习
 
@@ -208,7 +240,7 @@ assert error_rank_zero > 4.0
 
 ### 简单应用
 
-用 `numpy.linalg.svd` 分解矩阵 `[[3, 0], [0, 1]]`，用 `U @ diag(s) @ Vh` 重建。完成标准：写出三个返回对象的 shape，重建最大绝对误差小于 `1e-12`，并把两个奇异值同两个轴的缩放联系起来。
+用 `numpy.linalg.svd(..., full_matrices=False)` 分解矩阵 `[[3, 0], [0, 1]]`，先由 `s` 构造 `Sigma = diag(s)`，再用 `U @ Sigma @ Vh` 重建。完成标准：写出 `U, s, Sigma, Vh` 的 shape，重建最大绝对误差小于 `1e-12`，并把两个奇异值同两个轴的缩放联系起来。
 
 ### 视觉小练习
 
@@ -224,7 +256,7 @@ ROADMAP 中 `geometry.epipolar` 将本节点作为 hard 前置，角点、特征
 
 ## 12. Mastery Evidence 掌握证据
 
-提交一份二维 PCA 或低秩实验：说明数据为何需要中心化；记录输入、`U/s/Vh` shape 与奇异值；用自己的语言解释主要方向和 rank；分别用至少两个 rank 重建并报告误差；说明方向符号为什么可翻转；再构造一个弱第二方向，判断保留或丢弃它会损失什么。只贴 `np.linalg.svd` 输出或一张压缩图不合格。
+提交一份二维 PCA 或低秩实验：说明数据为何需要中心化；记录输入、`U/s/Sigma/Vh` shape，说明 `s` 与 $\Sigma$ 的关系，并用 $U\Sigma$ 解释带尺度的样本 scores；用自己的语言解释主要方向和 rank；分别用至少两个 rank 重建并报告误差；说明方向符号为什么可翻转；再构造一个弱第二方向，判断保留或丢弃它会损失什么。只贴 `np.linalg.svd` 输出或一张压缩图不合格。
 
 ## 13. 后续复用与复习
 
@@ -232,5 +264,5 @@ ROADMAP 中 `geometry.epipolar` 将本节点作为 hard 前置，角点、特征
 
 ## 14. 精选学习资源
 
-- **MIT OpenCourseWare 18.06SC Linear Algebra**：必看 Lecture 21“Eigenvalues and Eigenvectors”中 $Av=\lambda v$ 的方向解释，以及 Lecture 29“Singular Value Decomposition”的 Session Overview、lecture summary 和一个二维/低秩例题。Lecture 31 的 Image Compression 只选看截断奇异值的直觉。看到能解释方向、奇异值和 rank 即可；跳过特征多项式技巧、谱定理证明、Jordan form、正定矩阵全章和考试。
+- **MIT OpenCourseWare 18.06SC Linear Algebra**：外部课程只用于补充核对，本页二维点集、shape 表和重建代码是主教材。必看 Lecture 21“Eigenvalues and Eigenvectors”中 $Av=\lambda v$ 的方向解释，以及 Lecture 29“Singular Value Decomposition”的 Session Overview 和一个二维/低秩例题；Lecture 31 的 Image Compression 只选看截断奇异值的直觉。看到能解释方向、奇异值和 rank 即可；一旦进入抽象子空间、正定矩阵、谱定理、Jordan form、证明或考试题，当前阶段直接跳过。
 - **NumPy Linear Algebra Manual**：必看 `numpy.linalg.svd` 的 reduced SVD shape、`U, s, Vh` 返回顺序和 reconstruction example；选看 `numpy.linalg.eigh` 的二维对称矩阵例子，用于核对协方差主方向。跳过批量 SVD、Hermitian 优化细节、LAPACK 和数值算法实现。

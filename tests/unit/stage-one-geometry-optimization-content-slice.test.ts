@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -158,6 +159,63 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
     expect(bodyById.get("math.optimization")).toContain("L2 regularization");
   });
 
+  it("Phase 9B-R1 的定点教学支架与数学边界保持一致", async () => {
+    const workspaceRoot = process.cwd();
+    const concepts = await loadMdxDirectory({
+      directoryPath: resolve(workspaceRoot, "content/concepts/math"),
+      workspaceRoot,
+      schema: conceptMetaSchema,
+    });
+    const bodyById = new Map(
+      concepts
+        .filter(({ meta }) => stageOneBConceptIdSet.has(meta.id))
+        .map(({ body, meta }) => [meta.id, body]),
+    );
+
+    const coordinateFrames = bodyById.get("math.coordinate-frames");
+    expect(coordinateFrames).toContain(
+      "R_{A\\leftarrow C}=R_{A\\leftarrow B}R_{B\\leftarrow C}",
+    );
+    expect(coordinateFrames).toContain(
+      "t_{A\\leftarrow C}=R_{A\\leftarrow B}t_{B\\leftarrow C}+t_{A\\leftarrow B}",
+    );
+    expect(coordinateFrames).toContain("必须先用 $R_{A\\leftarrow B}$");
+    expect(coordinateFrames).toContain("最小三坐标系复合");
+
+    const leastSquares = bodyById.get("math.least-squares");
+    expect(leastSquares).toContain("不是最小目标值本身");
+    expect(leastSquares).toContain("残差向量每一项平方后相加");
+    expect(leastSquares).toContain("pixel²");
+    expect(leastSquares).toContain("满列秩的最低限度直觉");
+    expect(leastSquares).toContain("rank == design.shape[1]");
+    expect(leastSquares).toContain("本页不要求解释 singular values");
+    expect(leastSquares).not.toContain("指出哪个点影响最大");
+
+    const eigenSvd = bodyById.get("math.eigen-svd");
+    expect(eigenSvd).toContain("两者不是同一种分解");
+    expect(eigenSvd).toContain("k=\\min(m,n)");
+    expect(eigenSvd).toContain("一维奇异值向量");
+    expect(eigenSvd).toContain("带尺度的样本 scores / 坐标是 $U\\Sigma$");
+    expect(eigenSvd).toContain("sigma = np.diag(s)");
+    expect(eigenSvd).toContain("`U` 是 $4\\times2$");
+    expect(eigenSvd).not.toContain("点在各模式上的系数");
+
+    const optimization = bodyById.get("math.optimization");
+    expect(optimization).toContain("不是最小目标值本身");
+    expect(optimization).toContain("$\\lambda\\ge 0$");
+    expect(optimization).toContain("越大，把参数向 0 收缩的作用越强");
+    expect(optimization).toContain("图像空间梯度 $\\nabla I(x,y)$");
+    expect(optimization).toContain("参数梯度 $\\nabla_\\theta L$");
+
+    const roadmap = await readFile(resolve(workspaceRoot, "ROADMAP.md"), "utf8");
+    expect(roadmap).toContain(
+      "`stage.vision-math-geometry-optimization` 为 `available`",
+    );
+    expect(roadmap).toContain(
+      "`math.numerical-stability` 与 `math.lie-groups` 仍未发布",
+    );
+  });
+
   it("资源少而精、URL 已验证且阅读范围包含必看、选看与跳过", () => {
     const resourceIds = [
       "resource.mit-ocw-linear-algebra",
@@ -184,6 +242,19 @@ describe("Phase 9B Stage 1B 第一批正式学习内容", () => {
         true,
       );
     });
+
+    const mitScope = contentManifest.resources
+      .find(({ id }) => id === "resource.mit-ocw-linear-algebra")
+      ?.recommendedParts.join(" ");
+    const numpyScope = contentManifest.resources
+      .find(({ id }) => id === "resource.numpy-linear-algebra")
+      ?.recommendedParts.join(" ");
+
+    expect(mitScope).toContain("projection matrix");
+    expect(mitScope).toContain("A^T A");
+    expect(mitScope).toContain("谱定理");
+    expect(numpyScope).toContain("只记录 rank 是否等于参数数目");
+    expect(numpyScope).toContain("singular values 留给 eigen/SVD Concept");
   });
 
   it("math-vision-lab 保持 draft，只扩充正式 requirement 与 evidence 映射", () => {

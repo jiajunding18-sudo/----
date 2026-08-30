@@ -180,9 +180,10 @@ export const resources: readonly Resource[] = [
       "MIT 面向自学组织的线性代数公开课，同时提供讲解、问题视频与带解答练习；本路线按 Stage 1A/1B 定点抽取矩阵运算、变换、坐标、最小二乘、特征方向与 SVD，不要求通读整门课。",
     recommendedParts: [
       "必看（Stage 1A）：Matrix Multiplication and Inverse Matrices、Linear Transformations and their Matrices；只学习乘法、逆、基向量去向和一个带解答检查题",
-      "必看（Stage 1B）：Lecture 16 Projection Matrices and Least Squares、Lecture 21 Eigenvalues and Eigenvectors、Lecture 29 Singular Value Decomposition；每项只完成正文指定的一个数值检查",
+      "必看（Stage 1B 最小二乘）：以 Concept 正文为主，只看 Lecture 16 的直线拟合问题和一个数值检查；跳过 projection matrix、A^T A / 正规方程推导与子空间证明",
+      "必看（Stage 1B eigen/SVD）：先完成 Concept 的二维点集、reduced shape 与重建例子，再用 Lecture 21 和 Lecture 29 核对方向、奇异值与 rank 直觉",
       "选看（坐标系）：Lecture 31 Change of Basis; Image Compression 中 change of basis 的坐标直觉；图像压缩示例留给 SVD 页面",
-      "跳过：消元法全套技巧、行列式证明、Gram-Schmidt、正定矩阵、Jordan form、伪逆证明、完整 problem set 与考试",
+      "跳过：消元法全套技巧、行列式证明、Gram-Schmidt、抽象子空间证明、正定矩阵、谱定理、Jordan form、伪逆证明、完整 problem set 与考试",
     ],
     aliases: ["MIT 18.06SC 线性代数", "Gilbert Strang Linear Algebra"],
     verification: "verified",
@@ -246,8 +247,8 @@ export const resources: readonly Resource[] = [
     reason:
       "NumPy 官方线性代数索引给出 lstsq、svd 与 eigh 的输入 shape、返回值和边界说明，适合在纸面理解之后核对最小数值实验。",
     recommendedParts: [
-      "必看：numpy.linalg.lstsq 的参数、返回值与直线拟合 example；能解释 solution、residuals、rank 和 singular values 即可",
-      "必看：numpy.linalg.svd 的 reduced SVD shape、U/s/Vh 返回顺序与 reconstruction example",
+      "必看（最小二乘）：numpy.linalg.lstsq 的参数、返回值与直线拟合 example；核对 solution、residuals 和输入 shape，只记录 rank 是否等于参数数目，singular values 留给 eigen/SVD Concept",
+      "必看（eigen/SVD）：先完成 Concept 正文，再用 numpy.linalg.svd 核对 reduced U/s/Vh shape、s 与 Sigma 的关系和 reconstruction example",
       "选看：numpy.linalg.eigh 的二维对称矩阵 example，只用于核对 PCA 协方差矩阵的主方向",
       "跳过：其余分解 API、广播批处理、底层 LAPACK、算法复杂度与数值实现细节",
     ],

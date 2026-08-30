@@ -57,7 +57,7 @@ masteryCriteria:
 resourceIds:
   - resource.stanford-cs231n-optimization
 publicationStatus: published
-contentVersion: 2026.08.30
+contentVersion: 2026.08.30.1
 ---
 
 # 优化、梯度下降与最小正则化（Optimization, Gradient Descent, and Minimal Regularization）
@@ -71,6 +71,8 @@ contentVersion: 2026.08.30
 $$
 \theta^*=\arg\min_\theta L(\theta).
 $$
+
+这里的 **`arg min` 返回使目标函数最小的参数 $\theta^*$，不是最小目标值本身**。最小目标值是把 $\theta^*$ 代回后得到的 $L(\theta^*)$，两者回答的问题不同。
 
 若能计算参数梯度 $\nabla_\theta L$，最简单的**梯度下降（gradient descent）**更新是
 
@@ -110,7 +112,7 @@ $$
 - **迭代记录**：至少保存 step、parameter、loss、gradient。只看最终值会掩盖中途发散或偶然停止。
 - **停止条件**：可在梯度足够小、参数变化足够小或达到最大步数时停止；阈值必须报告。
 - **局部最优直觉**：简单二次函数只有一个最低点；真实配准损失可能有多个低谷，梯度下降从不同初值可能落到不同局部最优。本页只建立直觉，不解决全局搜索。
-- **最小 L2 正则化**：在数据损失后加 $\lambda\theta^2$，惩罚过大的参数。它会改变最优解，是拟合与参数幅度的取舍，不是免费的稳定开关。
+- **最小 L2 正则化**：在数据损失后加 $\lambda\theta^2$，其中 $\lambda\ge 0$ 控制正则化强度。$\lambda$ 越大，把参数向 0 收缩的作用越强；它会改变最优解，是拟合与参数幅度的取舍，不是免费的稳定开关。
 
 ## 5. 初学者直觉解释
 
@@ -168,7 +170,7 @@ L(\theta)=(\theta-3)^2+\lambda\theta^2,
 \frac{dL}{d\theta}=2(\theta-3)+2\lambda\theta.
 $$
 
-当 $\lambda=0.5$ 时，最优参数从 3 移到 2：参数幅度更小，但不再完全贴合 3 像素目标。
+当 $\lambda=0.5$ 时，最优参数从 3 移到 2：参数幅度更小，但不再完全贴合 3 像素目标。若继续增大非负的 $\lambda$，向 0 收缩会更强，数据拟合偏差通常也会更大。
 
 ```python
 def loss(parameter, regularization=0.0):

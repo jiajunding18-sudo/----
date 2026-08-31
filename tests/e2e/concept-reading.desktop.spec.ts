@@ -278,6 +278,34 @@ test("Stage 2 图像计算正文渲染代码、表格、TOC、深链接与正式
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 2 R1 正文呈现安全表示往返与标量/RGB 显示分流", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+
+  await page.goto("/knowledge/digital-image-representation/");
+  const representationDocument = page.locator(".learning-document");
+  await expect(representationDocument).toContainText("uint8 round-trip max error");
+  await expect(representationDocument).toContainText("float quantization max error");
+  await expect(representationDocument).toContainText("rgb[:, :, 0] = red");
+  await expect(representationDocument).toContainText(
+    "gray_restored.astype(np.int16) - gray.astype(np.int16)",
+  );
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/knowledge/image-plots/");
+  const plotsDocument = page.locator(".learning-document");
+  await expect(plotsDocument).toContainText("H×W×3");
+  await expect(plotsDocument).toContainText("不能把单一 scalar colormap");
+  await expect(plotsDocument).toContainText("rgb_axis.imshow(rgb)");
+  await expect(plotsDocument).toContainText("不保留像素的空间位置");
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

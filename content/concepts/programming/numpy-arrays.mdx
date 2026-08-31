@@ -143,6 +143,8 @@ marked = image.copy()
 marked[bright] = [255, 0, 0]      # 对选中的每个位置写三个通道
 ```
 
+这里 `axis=2` 指最后一个 channel axis；`mean(axis=2)` 对每个像素的通道值求平均，并把这个 axis 汇总掉，因此 `H×W×C` 会得到 `H×W`，正好可作为空间 mask。
+
 ### vectorized operations
 
 向量化（vectorization）是让一个数组表达式作用于整块数据，而不是写两层 Python 像素循环。例如 `image / 255.0` 会一次生成归一化结果。向量化不意味着可以忽略 shape；恰恰相反，先理解 shape 才能安全使用它。
@@ -173,6 +175,8 @@ roundtrip = channels_first.transpose(1, 2, 0)
 ```
 
 每次 reshape/transpose 都要记录原 shape、操作目的和目标 shape。不要在错误消失前反复尝试轴顺序。
+
+`transpose` 只是重排 axis。交换 row 与 column 可能产生类似矩阵转置的视觉效果，但它不是通用的图像旋转，更不能替代后续带角度、中心、插值和边界规则的正式 geometric transform。
 
 ## 5. 初学者直觉解释
 

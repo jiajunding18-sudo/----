@@ -181,6 +181,52 @@ describe("Phase 9D-1 Stage 2 第一批图像计算基础", () => {
     expect(bodyById.get("visualization.image-plots")).toContain("plt.hist");
   });
 
+  it("R1 补齐 RGB 构造、表示往返与可信显示的教学支架", async () => {
+    const concepts = await loadStageTwoConcepts();
+    const bodyById = new Map(concepts.map(({ body, meta }) => [meta.id, body]));
+    const arraysBody = bodyById.get("python.numpy-arrays") ?? "";
+    const dtypesBody = bodyById.get("python.numpy-dtypes") ?? "";
+    const representationBody =
+      bodyById.get("image.digital-representation") ?? "";
+    const plotsBody = bodyById.get("visualization.image-plots") ?? "";
+
+    expect(arraysBody).toContain("mean(axis=2)");
+    expect(arraysBody).toContain("H×W×C");
+    expect(arraysBody).toContain("不是通用的图像旋转");
+
+    expect(dtypesBody).toContain(
+      "不会替你执行合理的 clipping 或 rounding",
+    );
+    expect(dtypesBody).toContain("模 256 类回绕，得到 14");
+    expect(dtypesBody).toContain("对应 251");
+
+    expect(representationBody).not.toContain("np.stack(");
+    expect(representationBody).not.toContain("np.zeros_like(");
+    expect(representationBody).toContain("rgb[:, :, 0] = red");
+    expect(representationBody).toContain("rgb[:, :, 1] = green");
+    expect(representationBody).toContain("rgb[:, :, 2] = blue");
+    expect(representationBody).toContain(
+      "red.shape == green.shape == blue.shape == (height, width)",
+    );
+    expect(representationBody).toContain(
+      "np.rint(np.clip(gray_float, 0.0, 1.0) * 255.0)",
+    );
+    expect(representationBody).toContain(
+      "gray_restored.astype(np.int16) - gray.astype(np.int16)",
+    );
+    expect(representationBody).toContain("float quantization max error");
+    expect(representationBody).toContain("0.5 / 255.0");
+
+    expect(plotsBody).toContain("二维标量图");
+    expect(plotsBody).toContain("H×W×3");
+    expect(plotsBody).toContain("不能把单一 scalar colormap");
+    expect(plotsBody).toContain("真实文件与 OpenCV 的 BGR/RGB");
+    expect(plotsBody).toContain("rgb_axis.imshow(rgb)");
+    expect(plotsBody).toContain("axes_grid.ravel()");
+    expect(plotsBody).toContain("不保留像素的空间位置");
+    expect(plotsBody).toContain("gray.reshape(-1)");
+  });
+
   it("资源只新增两个官方入口，并明确必看、选看与跳过范围", () => {
     const resourceIds = [
       "resource.numpy-absolute-beginners",

@@ -38,13 +38,13 @@ tags:
   - 数据检查
   - 可视化
 learningOutcomes:
-  - 能使用 imshow 显示二维数组，明确设置 cmap、vmin/vmax，并用 colorbar 说明颜色对应的数值。
+  - 能区分 H×W 标量图与 H×W×3 RGB 数组的显示语义，并为标量图明确设置 cmap、vmin/vmax 与 colorbar。
   - 能联合 dtype、真实 min/max、显示范围和基础 histogram 判断显示是否可信。
   - 能构造同一数组的显示对照，解释外观差异是数据变化还是显示映射变化。
 masteryCriteria:
   - id: criterion.visualization-image-plots.trustworthy-display
-    description: 为一个二维图像数组制作可复现显示，明确 cmap、vmin/vmax、colorbar、dtype、min/max 与单位/范围约定。
-    evidenceHint: 提交代码、图像、数值摘要和显示参数；另一位学习者应能仅凭这些信息复现相同映射。
+    description: 为一个 H×W 标量图和一个 H×W×3 RGB 数组制作可复现显示；标量图明确 cmap、vmin/vmax 与 colorbar，RGB 图明确 channel axis、顺序、dtype 与范围且不附加误导性的单一标量 colorbar。
+    evidenceHint: 提交代码、两类图像、数值摘要和显示参数；另一位学习者应能仅凭这些信息复现相同解释，并知道 BGR/RGB 文件语义尚未包含。
     required: true
   - id: criterion.visualization-image-plots.diagnose-display
     description: 对同一数组构造至少两种显示范围或 colormap，对照基础 histogram，判断外观变化是否来自数组数据，并找出一个故意误导的显示设置。
@@ -62,7 +62,12 @@ contentVersion: 2026.08.31
 
 ## 1. 这是什么
 
-`matplotlib.pyplot.imshow` 把二维或三维数组映射成图像。对二维数组，**colormap（色图，`cmap`）**决定数值如何映射为颜色；`vmin` 和 `vmax` 决定显示映射的数值下限与上限；**colorbar（颜色条）**把颜色重新标回数值。
+`matplotlib.pyplot.imshow` 把二维或三维数组映射成图像，但两者的显示语义不同。
+
+- **`H×W` 二维标量图**：每个位置只有一个数值。`imshow` 需要通过 **colormap（色图，`cmap`）**把标量映射成可见颜色；`vmin` 和 `vmax` 决定映射下限与上限，**colorbar（颜色条）**把颜色重新标回标量数值。灰度显示可以显式使用 `cmap="gray"`。
+- **`H×W×3` 三通道颜色数组**：`imshow` 通常把最后一个 axis 的三个分量共同解释为 RGB 颜色。此时不能把单一 scalar colormap 或 scalar colorbar 的语义机械套用到整幅 RGB 图。
+
+三通道并不自动证明实际顺序一定是 RGB。本页只使用明确构造的 RGB 最小表示；真实文件与 OpenCV 的 BGR/RGB 语义留给 `opencv.io-color`，这里不提前进行 BGR 转换。
 
 ```python
 import matplotlib.pyplot as plt
@@ -110,10 +115,10 @@ plt.show()
 ### histogram 是数值分布的最小补充
 
 ```python
-plt.hist(gray.ravel(), bins=16, range=(0, 256))
+plt.hist(gray.reshape(-1), bins=16, range=(0, 256))
 ```
 
-histogram 统计各数值区间内有多少元素。当前只用它回答“数值集中在哪里、是否触及边界、两组数据分布是否明显不同”，不做统计推断。
+histogram 统计各数值区间内有多少元素。它不保留像素的空间位置，因此两张空间结构完全不同的图可以拥有相同或近似 histogram。当前只用它回答“数值集中在哪里、是否触及边界、两组数据分布是否明显不同”，不做统计推断。
 
 ### 最小可信显示记录
 
@@ -132,6 +137,7 @@ histogram 统计各数值区间内有多少元素。当前只用它回答“数�
 ## 6. 必须掌握到什么程度
 
 - 能独立显示二维数组并设置灰度 cmap、明确范围和 colorbar。
+- 能识别 `H×W×3` RGB 数组由三个通道共同形成颜色，不为它套用误导性的单一标量 colorbar。
 - 能报告 dtype、真实 min/max，并用基础 histogram 补充检查。
 - 能为前后对照固定同一显示映射。
 - 能判断外观变化来自数组还是来自显示参数。
@@ -143,6 +149,7 @@ histogram 统计各数值区间内有多少元素。当前只用它回答“数�
 - 只看图，不打印 dtype 和真实 min/max。
 - 比较两幅图时让它们各自自动缩放。
 - 显示灰度数组却不声明 cmap，误把伪彩色当原始颜色。
+- 看到三个通道就默认顺序一定是 RGB，或为 RGB 图机械添加单一 intensity colorbar。
 - 看到端点颜色就以为所有像素数值完全相同。
 - 用“看起来正常”替代数组断言和数值检查。
 
@@ -162,7 +169,10 @@ print("shape:", gray.shape)
 print("dtype:", gray.dtype)
 print("min/max:", int(gray.min()), int(gray.max()))
 
-fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+# subplots 创建一个 figure 和多个并列绘图区域。
+fig, axes_grid = plt.subplots(1, 2, figsize=(8, 3))
+# axes_grid 保存各个 axes；ravel 只把这些绘图区域排成一维顺序，方便索引。
+axes = axes_grid.ravel()
 
 full = axes[0].imshow(gray, cmap="gray", vmin=0, vmax=255)
 axes[0].set_title("fixed 0–255")
@@ -179,15 +189,31 @@ for axis in axes:
 plt.tight_layout()
 plt.show()
 
+# 明确构造 H×W×3 RGB 数组；最后一个 axis 共同决定每个像素的颜色。
+rgb = np.array([
+    [[255, 0, 0], [0, 255, 0]],
+    [[0, 0, 255], [255, 255, 255]],
+], dtype=np.uint8)
+
+rgb_figure, rgb_axis = plt.subplots(figsize=(3, 3))
+rgb_axis.imshow(rgb)
+rgb_axis.set_title("explicit RGB")
+rgb_axis.set_xlabel("column")
+rgb_axis.set_ylabel("row")
+plt.tight_layout()
+plt.show()
+
 plt.figure(figsize=(4, 3))
-plt.hist(gray.ravel(), bins=8, range=(0, 256))
+plt.hist(gray.reshape(-1), bins=8, range=(0, 256))
 plt.xlabel("intensity")
 plt.ylabel("pixel count")
 plt.title("value distribution")
 plt.show()
 ```
 
-两幅图使用完全相同的 `gray`；只有显示范围不同。窄范围会放大 90–125 之间的视觉对比，固定 0–255 则把它放在完整 `uint8` 范围中。histogram 和打印值证明数组未变。这说明窄范围不是“错误”，但若不注明就可能误导比较。
+前两幅图使用完全相同的 `gray`；只有显示范围不同。窄范围会放大 90–125 之间的视觉对比，固定 0–255 则把它放在完整 `uint8` 范围中。histogram 和打印值证明数组未变。这说明窄范围不是“错误”，但若不注明就可能误导比较。
+
+`rgb` 的 shape 是 `2×2×3`，三个通道共同形成红、绿、蓝、白四个像素；它没有单一的 scalar intensity 映射，因此示例不添加灰度 cmap 或单一 intensity colorbar。`axes_grid.ravel()` 操作的是绘图区域集合，不是图像像素；histogram 使用 `gray.reshape(-1)` 只是把标量值排成一列进行计数，空间位置不会保留。
 
 ## 9. Active Recall 主动回忆
 
@@ -197,6 +223,7 @@ plt.show()
 4. 同一数组为什么可能看起来差异很大？
 5. histogram 能补充什么，又不能替代什么？
 6. “看起来正常”为什么不是数值正确性的证据？
+7. 为什么 `H×W×3` RGB 图不能机械套用二维标量图的 cmap 与 colorbar 解释？
 
 ## 10. Practice 练习
 
@@ -210,7 +237,7 @@ plt.show()
 
 ### 视觉小练习
 
-制作一张可信灰度显示和一张 histogram。完成标准：包含 cmap、vmin/vmax、colorbar、轴/标题、dtype、shape、min/max；代码可复现；说明数值是否触及显示边界。
+制作一张可信灰度显示、一张 histogram 和一个明确构造的 `H×W×3` RGB 最小图。完成标准：灰度图包含 cmap、vmin/vmax、colorbar、轴/标题、dtype、shape、min/max；RGB 图记录 channel axis、顺序和范围，不添加误导性的单一标量 colorbar；代码可复现。
 
 ### 错误诊断
 
@@ -227,7 +254,7 @@ plt.show()
 
 ## 12. Mastery Evidence 掌握证据
 
-1. 为一个二维数组提交可信显示包：代码、图、cmap、vmin/vmax、colorbar、dtype、shape、min/max 与 histogram；他人应能复现相同颜色—数值映射。
+1. 提交一个 `H×W` 标量图与一个明确构造的 `H×W×3` RGB 图：标量图包含 cmap、vmin/vmax、colorbar、dtype、shape、min/max 与 histogram；RGB 图记录 channel axis、RGB 顺序、dtype 和范围，并解释为何不套用单一标量 colorbar。
 2. 提交同一数组的两种显示对照和一个故意误导设置：使用数组一致性断言证明数据未变，并明确判断差异来自数据还是显示映射。
 
 达到 `master` 是能独立完成本阶段的可信图像检查，不是掌握 Matplotlib 全部绘图系统。

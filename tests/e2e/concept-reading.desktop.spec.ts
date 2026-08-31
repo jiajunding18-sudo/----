@@ -319,12 +319,25 @@ test("OpenCV I/O 正文呈现失败检查、通道契约、无损往返与正式
       name: /图像读写与色彩空间/u,
     }),
   ).toBeVisible();
-  await expect(document.locator('[data-code-language="python"]')).toHaveCount(5);
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(8);
   await expect(document.getByRole("table")).toBeVisible();
   await expect(document).toContainText("if image is None:");
   await expect(document).toContainText("cv2.COLOR_BGR2RGB");
   await expect(document).toContainText("assert bgr[0, 0].tolist() == [0, 0, 255]");
   await expect(document).toContainText("np.array_equal(reloaded, bgr)");
+  await expect(document).toContainText("actual_min = image.min().item()");
+  await expect(document).toContainText("不透明度、透明程度或覆盖程度");
+  await expect(document).toContainText('inspect_image("reloaded BGR", reloaded)');
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 1/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 2/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 3/u }),
+  ).toBeVisible();
+  await expect(document).toContainText("普通照片不要求提供预先已知的像素真值");
 
   const toc = page.locator('[data-concept-toc="desktop"]');
   const workedExampleLink = toc.getByRole("link", {

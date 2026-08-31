@@ -92,10 +92,20 @@ test("360px 下 OpenCV I/O 的长代码、表格、TOC 与键盘链接保持可�
   await page.goto("/knowledge/opencv-io-color/");
 
   const document = page.locator(".learning-document");
-  await expect(document.locator('[data-code-language="python"]')).toHaveCount(5);
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(8);
   await expect(document.getByRole("table")).toBeVisible();
   await expect(page.locator('[data-concept-toc="mobile"]')).toBeVisible();
   await expect(document).toContainText("cv2.COLOR_BGR2RGB");
+  await expect(document).toContainText("actual range");
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 1/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 2/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 3/u }),
+  ).toBeVisible();
 
   const resourceLink = page.getByRole("link", {
     name: "OpenCV-Python Tutorials",

@@ -1,7 +1,7 @@
+import os
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
-import os
 
 import cv2
 import numpy as np
@@ -34,6 +34,18 @@ class OpenCvIoColorFixtureTest(unittest.TestCase):
         self.assertEqual(image_rgb[0, 0].tolist(), [255, 0, 0])
         self.assertEqual(image_rgb[0, 2].tolist(), [0, 0, 255])
 
+    def test_float_actual_range_preserves_fractional_values(self) -> None:
+        float_image = np.array([[0.1, 0.4], [0.7, 0.9]], dtype=np.float32)
+
+        actual_min = float_image.min().item()
+        actual_max = float_image.max().item()
+
+        self.assertIsInstance(actual_min, float)
+        self.assertIsInstance(actual_max, float)
+        self.assertAlmostEqual(actual_min, 0.1, places=6)
+        self.assertAlmostEqual(actual_max, 0.9, places=6)
+        self.assertNotEqual((actual_min, actual_max), (0, 0))
+
     def test_grayscale_is_two_dimensional(self) -> None:
         grayscale = cv2.imread(str(FIXTURE_PATH), cv2.IMREAD_GRAYSCALE)
 
@@ -60,6 +72,7 @@ class OpenCvIoColorFixtureTest(unittest.TestCase):
             assert reloaded is not None
             self.assertEqual(reloaded.shape, image_bgr.shape)
             self.assertEqual(reloaded.dtype, image_bgr.dtype)
+            self.assertEqual(reloaded[0, 0].tolist(), [0, 0, 255])
             self.assertTrue(np.array_equal(reloaded, image_bgr))
 
             bgra = np.array(

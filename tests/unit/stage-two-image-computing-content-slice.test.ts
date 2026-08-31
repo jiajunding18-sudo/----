@@ -190,6 +190,29 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV I/O", () => {
     expect(concept?.body).toContain("np.array_equal(reloaded, bgr)");
     expect(concept?.body).toContain("JPEG 等有损格式");
     expect(concept?.body).toContain("PPM 不是本篇要掌握的文件格式");
+    expect(concept?.body).toContain("actual_min = image.min().item()");
+    expect(concept?.body).toContain("actual_max = image.max().item()");
+    expect(concept?.body).not.toContain("int(image.min())");
+    expect(concept?.body).not.toContain("int(image.max())");
+    expect(concept?.body).toContain(
+      "float_image = np.array([[0.1, 0.4], [0.7, 0.9]], dtype=np.float32)",
+    );
+    expect(concept?.body).toContain("dtype=uint8");
+    expect(concept?.body).toContain("actual min/max");
+    expect(concept?.body).toContain("不透明度、透明程度或覆盖程度");
+    expect(concept?.body).toContain("不能武断断言任意四通道数组一定是 BGRA");
+    expect(concept?.body).toContain("它不是 H×W×3 且三个颜色通道机械相等");
+    expect(concept?.body).toContain("### Checkpoint 1");
+    expect(concept?.body).toContain("### Checkpoint 2");
+    expect(concept?.body).toContain("### Checkpoint 3");
+    expect(concept?.body).toContain('inspect_image("reloaded BGR", reloaded)');
+    expect(concept?.body).toContain("自选图片诊断卡");
+    expect(concept?.body).toContain("普通照片不要求提供预先已知的像素真值");
+    expect(concept?.meta.masteryCriteria[0]).toMatchObject({
+      required: true,
+      description: expect.stringContaining("仓库 fixture"),
+      evidenceHint: expect.stringContaining("自选图片"),
+    });
   });
 
   it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {

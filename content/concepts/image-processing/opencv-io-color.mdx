@@ -50,8 +50,8 @@ learningOutcomes:
   - 能检查 imwrite 返回值，以无损格式重新读取并验证 round-trip 契约，同时说明有损格式为何不能要求逐元素相等。
 masteryCriteria:
   - id: criterion.opencv-io-color.read-inspect-interpret
-    description: 独立完成一张真实图像的 I/O 诊断卡片，记录路径解析、文件存在性、读取结果、shape、ndim、dtype、数值范围、通道数和通道解释，并正确显示彩色与灰度结果。
-    evidenceHint: 提交诊断输出、已知像素的 BGR/RGB 数值核对、正确显示截图，以及一个故意错误路径的可理解失败报告。
+    description: 先用仓库 fixture 完成已知像素的 BGR/RGB 与可重复 contract 检查，再对一张自选真实图片完成路径、读取、shape、ndim、dtype、实际范围、通道解释、正确显示和失败诊断卡片。
+    evidenceHint: 提交 fixture 数值断言；另提交自选图片的诊断输出、正确显示截图和一个故意错误路径的可理解失败报告，不要求普通照片提供预先已知的像素真值。
     required: true
   - id: criterion.opencv-io-color.write-roundtrip-diagnose
     description: 将图像写为无损文件，检查写入返回值和文件存在性，重新读取并验证关键 metadata、通道语义与像素结果；另识别一个四通道数组的数据契约边界。
@@ -66,6 +66,8 @@ contentVersion: 2026.08.31
 # 图像读写与色彩空间（Image I/O and Color Spaces）
 
 本页第一次把合成的 NumPy 图像数组连接到真实图像文件。核心不是记住 API，而是养成一条可重复的工程流程：
+
+本页中的 **flag** 是控制 `imread` 如何解码图像的读取选项；**BGR** 是 Blue、Green、Red 三个颜色通道的排列顺序；**round-trip** 是把图像写出后重新读取，再检查当前依赖的数据契约是否仍符合预期。
 
 ```text
 resolve path
@@ -162,13 +164,30 @@ def inspect_image(label, image):
     else:
         raise ValueError(f"暂不支持的 ndim: {image.ndim}")
 
+    actual_min = image.min().item()
+    actual_max = image.max().item()
+
     print(f"[{label}] shape:", image.shape)
     print(f"[{label}] ndim:", image.ndim)
     print(f"[{label}] dtype:", image.dtype)
-    print(f"[{label}] range:", int(image.min()), "to", int(image.max()))
+    print(f"[{label}] actual range:", actual_min, "to", actual_max)
     print(f"[{label}] channels:", channel_count)
     print(f"[{label}] contract:", interpretation)
     return channel_count
+```
+
+`dtype` 描述数组元素的数值存储与表示规则；**actual min/max** 描述当前这张图实际使用到的数值范围。二者不能互相替代：`dtype=uint8` 只表示可表示 0–255，不表示当前图像一定覆盖 0–255；`float32` 也不表示数据一定在 0–1。实际 dtype/range 必须结合数据来源、读取 flag 和当前数组共同检查。
+
+`.item()` 把 NumPy scalar 转成 Python scalar，不会像无条件 `int(...)` 那样抹掉小数。下面的极小检查应报告约 `0.1 to 0.9`，而不是错误的 `0 to 0`：
+
+```python
+import numpy as np
+
+float_image = np.array([[0.1, 0.4], [0.7, 0.9]], dtype=np.float32)
+inspect_image("float probe", float_image)
+
+assert np.isclose(float_image.min().item(), 0.1)
+assert np.isclose(float_image.max().item(), 0.9)
 ```
 
 min/max 是合理的快速检查，不是完整质量评分；数据来源和读取 flag 才能决定各通道的真实含义。
@@ -187,9 +206,11 @@ rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 ### 4.4 灰度与四通道的最低限度边界
 
-`cv2.imread(path, cv2.IMREAD_GRAYSCALE)` 通常返回 H×W 二维数组。它没有第三个 channel axis，不能机械访问 `gray.shape[2]`。
+`cv2.imread(path, cv2.IMREAD_GRAYSCALE)` 中的 flag 要求按灰度方式解码，通常返回 H×W 二维数组；每个像素只有一个强度值。它不是 H×W×3 且三个颜色通道机械相等的三维数组，因此没有第三个 channel axis，不能机械访问 `gray.shape[2]`。后续代码应先根据 `ndim` 和 shape 判断数据结构。
 
-`cv2.imread(path, cv2.IMREAD_UNCHANGED)` 会尽量保留源文件通道；某些文件可能得到 H×W×4。第四通道可能是 alpha，但使用前必须确认来源与数据契约。对本页自己构造的最小 PNG，我们明确知道写入数组采用 BGRA 顺序；这不能替代对任意外部四通道文件的确认。
+`cv2.imread(path, cv2.IMREAD_UNCHANGED)` 会尽量保留源文件通道；某些文件可能得到 H×W×4。对本页自己构造的最小 PNG，我们明确声明它采用 **BGRA**：前三个通道依次是 Blue、Green、Red，第四个是 alpha。alpha 通常描述像素的不透明度、透明程度或覆盖程度，但具体数值范围和解释仍要结合 dtype、文件与库约定确认。本篇只要求识别、检查并保留 alpha，不进行 alpha compositing。
+
+H×W×4 本身只说明存在四个通道；脱离数据来源，不能武断断言任意四通道数组一定是 BGRA 或第四通道一定是 alpha。
 
 ### 4.5 写入与 round-trip
 
@@ -201,7 +222,7 @@ if not write_succeeded or not output_path.is_file():
     raise OSError(f"写入失败: {output_path}")
 ```
 
-对 PNG 等无损格式，在不改变 dtype、shape 和通道解释的实验里可以检查逐元素相等。JPEG 等有损格式会重新编码像素，round-trip 时不能要求逐元素完全相同；仍应检查 shape、dtype、通道契约和与任务相符的数值差异。
+对 PNG 等无损格式，在不改变 dtype、shape 和通道解释的受控实验里可以检查逐元素相等。round-trip 的目的不是证明“编码器永远不改变任何东西”，而是检查 I/O 是否在学习者不知情的情况下改变当前依赖的数据契约。JPEG 等有损格式会重新编码像素，round-trip 时不能要求逐元素完全相同；仍应检查重新读取是否成功、shape、dtype、通道契约和与任务相符的数值差异。
 
 ## 5. 初学者直觉解释
 
@@ -239,7 +260,9 @@ if not write_succeeded or not output_path.is_file():
 
 下面使用仓库内 `public/media/opencv-io-color-fixture.ppm`。它是一个 3×2、像素已知、便于断言的稳定教学/测试 fixture。**PPM 不是本篇要掌握的文件格式**，不需要学习其编码结构；PNG、JPEG 等实际图像同样需要这套 I/O 检查流程。
 
-从仓库根目录运行：
+从仓库根目录、同一个 Python 会话中依次运行下面三个 checkpoint。每段先核对预期，再继续下一段。
+
+### Checkpoint 1：read / validate / inspect / BGR→RGB
 
 ```python
 from pathlib import Path
@@ -278,21 +301,28 @@ def inspect_image(label, image):
     else:
         raise ValueError(f"暂不支持的 ndim: {image.ndim}")
 
+    actual_min = image.min().item()
+    actual_max = image.max().item()
+
     print(f"[{label}] shape:", image.shape)
     print(f"[{label}] ndim:", image.ndim)
     print(f"[{label}] dtype:", image.dtype)
-    print(f"[{label}] range:", int(image.min()), "to", int(image.max()))
+    print(f"[{label}] actual range:", actual_min, "to", actual_max)
     print(f"[{label}] channels:", channel_count)
     print(f"[{label}] contract:", channel_contract)
     return channel_count
 
 
-# 1. resolve → exists → imread → None check
+# 先证明 float32 的真实小数范围不会被错误压成整数。
+float_image = np.array([[0.1, 0.4], [0.7, 0.9]], dtype=np.float32)
+assert inspect_image("float probe", float_image) == 1
+assert np.isclose(float_image.min().item(), 0.1)
+assert np.isclose(float_image.max().item(), 0.9)
+
+# resolve → exists → imread → None check → inspect
 fixture_text = "public/media/opencv-io-color-fixture.ppm"
 fixture_path, bgr = read_checked(fixture_text)
 assert fixture_path.is_file()
-
-# 2. inspect → interpret
 assert inspect_image("color BGR", bgr) == 3
 assert bgr.shape == (2, 3, 3)
 assert bgr.dtype == np.uint8
@@ -300,7 +330,7 @@ assert bgr.dtype == np.uint8
 # fixture 左上角文件语义为 RGB 红色；OpenCV 常规彩色读取返回 BGR。
 assert bgr[0, 0].tolist() == [0, 0, 255]
 
-# 3. 正式 BGR → RGB 转换，再交给按 RGB 解释的 Matplotlib。
+# 正式 BGR → RGB 转换，再交给按 RGB 解释的 Matplotlib。
 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 assert rgb[0, 0].tolist() == [255, 0, 0]
 
@@ -308,14 +338,20 @@ plt.imshow(rgb)
 plt.title("Known RGB fixture")
 plt.axis("off")
 plt.show()
+```
 
-# 4. 灰度重新读取：二维 H×W，没有 shape[2]。
+预期：float probe 报告约 `0.1 to 0.9`；fixture 的 shape 为 `(2, 3, 3)`、dtype 为 `uint8`；左上角 BGR 像素是 `[0, 0, 255]`，转换后的 RGB 像素是 `[255, 0, 0]`。
+
+### Checkpoint 2：grayscale / write / reload / round-trip
+
+```python
+# 灰度重新读取：二维 H×W，每个像素一个强度值，没有 shape[2]。
 _, gray = read_checked(fixture_text, cv2.IMREAD_GRAYSCALE)
 assert inspect_image("grayscale", gray) == 1
 assert gray.shape == (2, 3)
 assert gray.ndim == 2
 
-# 5. 写成无损 PNG，检查 bool、文件存在性与重新读取。
+# 写成无损 PNG，检查 bool、文件存在性与重新读取。
 output_dir = Path("output/opencv-io-color")
 output_dir.mkdir(parents=True, exist_ok=True)
 output_path = output_dir / "fixture-roundtrip.png"
@@ -327,11 +363,19 @@ if not write_succeeded or not output_path.is_file():
     raise OSError(f"写入失败: {output_path}")
 
 _, reloaded = read_checked(output_path)
+assert inspect_image("reloaded BGR", reloaded) == 3
 assert reloaded.shape == bgr.shape
 assert reloaded.dtype == bgr.dtype
-assert np.array_equal(reloaded, bgr)  # PNG 无损且数据契约未改变
+assert reloaded[0, 0].tolist() == [0, 0, 255]
+assert np.array_equal(reloaded, bgr)  # 当前 PNG 无损受控实验中契约未改变
+```
 
-# 6. 自己构造并声明为 BGRA 的最小 PNG，只建立四通道识别意识。
+预期：grayscale 的 `ndim == 2`、shape 为 `(2, 3)`；`imwrite` 返回 `True`；重新读取成功，shape/dtype 保持不变，默认彩色读取仍按 BGR 解释，左上角仍为 `[0, 0, 255]`，当前受控 PNG 实验的 `np.array_equal` 为 true。
+
+### Checkpoint 3：BGRA / failed path
+
+```python
+# 自己构造并明确声明为 BGRA 的最小 PNG，只建立四通道识别意识。
 bgra = np.array(
     [
         [[0, 0, 255, 255], [255, 0, 0, 64]],
@@ -347,17 +391,20 @@ if not bgra_written or not bgra_path.is_file():
 bgra_reloaded = cv2.imread(str(bgra_path), cv2.IMREAD_UNCHANGED)
 if bgra_reloaded is None:
     raise ValueError(f"四通道示例重新读取失败: {bgra_path}")
+assert inspect_image("known BGRA", bgra_reloaded) == 4
 assert bgra_reloaded.shape == (2, 2, 4)
 assert bgra_reloaded[0, 1].tolist() == [255, 0, 0, 64]
 
-# 7. 故意失败：诊断信息被打印，异常也不会被静默吞掉。
+# 故意失败：诊断信息被打印，异常也不会被静默吞掉。
 try:
     read_checked("public/media/this-file-does-not-exist.png")
 except ValueError as error:
     print("diagnosis:", error)
 ```
 
-这段实验中，已知像素分别验证了 BGR 数据与 RGB 显示语义；灰度和 BGRA 检查验证了 shape 分流；PNG round-trip 验证了写入成功、重新读取与像素契约；错误路径则证明 `None` 在 `.shape` 前被安全处理。
+预期：已声明的 BGRA 数组重新读取为 `(2, 2, 4)`，最后一个值是本例保留的 alpha 数据；它只说明当前受控文件的契约。错误路径应打印 provided/resolved path、文件存在性、`imread` 是否成功和下一步诊断，不应出现 `None.shape`。
+
+三个 checkpoint 依次证明：已知像素区分了 BGR 数据与 RGB 显示语义；灰度和 BGRA 检查验证了 shape 分流；PNG round-trip 重新执行了 inspect、BGR 已知像素和逐元素检查；错误路径证明 `None` 在 `.shape` 前被安全处理。
 
 ## 9. Active Recall
 
@@ -370,6 +417,7 @@ except ValueError as error:
 7. `cv2.imwrite` 的返回值为什么必须检查？
 8. 为什么 JPEG round-trip 通常不能使用逐元素完全相等作为验收？
 9. H×W×4 的第四通道为什么只能先说“可能是 alpha”？
+10. 为什么 `dtype=uint8` 不表示当前图像的 actual min/max 一定是 0 和 255？
 
 完成标准：不用翻正文，能回答每题并给出一次对应检查或反例；若把“文件存在”等同于“读取成功”，或把三通道自动等同于 RGB，需要回到 4.1–4.4。
 
@@ -397,7 +445,7 @@ except ValueError as error:
 
 沿 Worked Example 独立完成一次完整 I/O 卡片：正确显示 fixture，写出 PNG、检查结果、重新读取并做严格无损断言；然后把路径改成不存在文件，保留可理解诊断输出。
 
-完成标准：卡片含 provided/resolved path、exists、read success、shape、ndim、dtype、range、channel count/interpretation、BGR/RGB 已知像素、显示截图、imwrite bool、文件存在性、reload 与 `np.array_equal`；失败案例不能出现 `None.shape` 异常。另用一句话说明若输出改为 JPEG，应改用任务相关容差而非逐元素相等。
+完成标准：卡片含 provided/resolved path、exists、read success、shape、ndim、dtype、actual range、channel count/interpretation、BGR/RGB 已知像素、显示截图、imwrite bool、文件存在性、reload inspect 与 `np.array_equal`；失败案例不能出现 `None.shape` 异常。另用一句话说明若输出改为 JPEG，应改用任务相关容差而非逐元素相等。
 
 ## 11. 实际使用：Project / Capability / Application 映射
 
@@ -408,11 +456,11 @@ except ValueError as error:
 
 ## 12. Mastery Evidence
 
-### Evidence 1：读取、解释与失败诊断卡
+### Evidence 1：fixture 契约核对 + 自选图片诊断卡
 
-独立选择一张真实图像（可直接使用仓库 fixture），提交：输入与解析路径、文件存在性、读取成功状态、shape、ndim、dtype、range、channel count、channel interpretation、BGR/RGB 已知像素验证、正确显示结果，以及至少一个故意失败路径的诊断。
+先用仓库 fixture 完成必须的已知像素 BGR/RGB 数值验证与可重复 contract 检查。再选择一张自己的真实图片，提交输入与解析路径、文件存在性、读取成功状态、shape、ndim、dtype、actual range、channel count、channel interpretation、正确显示结果，以及至少一个故意失败路径的诊断。普通照片不要求提供预先已知的像素真值。
 
-通过标准：`.shape` 只在 `None` 检查后访问；能区分三通道 shape 与颜色语义；失败输出给出明确下一步，而不是静默跳过。
+通过标准：fixture 的已知 BGR/RGB 像素断言通过；自选图片的 `.shape` 只在 `None` 检查后访问，并完整报告实际数据契约；能区分三通道 shape 与颜色语义；失败输出给出明确下一步，而不是静默跳过。
 
 ### Evidence 2：无损写入与通道契约 round-trip
 

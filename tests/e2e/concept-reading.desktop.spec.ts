@@ -361,6 +361,72 @@ test("OpenCV I/O 正文呈现失败检查、通道契约、无损往返与正式
   expect(browserErrors).toEqual([]);
 });
 
+test("ROI/Mask 正文呈现坐标、共享内存、两类输出契约与失败诊断", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-roi-masks/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /感兴趣区域与掩膜/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(16);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("image[y1:y2, x1:x2]");
+  await expect(document).toContainText("np.shares_memory(working, roi_view)");
+  await expect(document).toContainText("selected_color.shape == (true_count, 3)");
+  await expect(document).toContainText("selected_gray.shape == (true_count,)");
+  await expect(document).toContainText("silent clipping");
+  await expect(document).toContainText("mask shape mismatch");
+  await expect(document).toContainText("assert np.array_equal(source, original)");
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 1/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 2/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 3/u }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { level: 3, name: /Checkpoint 4/u }),
+  ).toBeVisible();
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const masteryLink = toc.getByRole("link", { name: /12\. Mastery Evidence/u });
+  const masteryHref = await masteryLink.getAttribute("href");
+  expect(masteryHref).toBe("#section-12-mastery-evidence");
+  await masteryLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe(decodeURIComponent(masteryHref ?? ""));
+
+  await expect(
+    page
+      .getByLabel("精选学习资源")
+      .getByRole("link", {
+        name: "NumPy: the absolute basics for beginners",
+        exact: true,
+      }),
+  ).toHaveAttribute("href", "/resources/numpy-absolute-beginners/");
+  await expect(
+    page
+      .getByLabel("精选学习资源")
+      .getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

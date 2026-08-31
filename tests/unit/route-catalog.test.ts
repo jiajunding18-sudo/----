@@ -55,6 +55,7 @@ const stageTwoConceptIds = [
   "image.digital-representation",
   "visualization.image-plots",
   "opencv.io-color",
+  "opencv.roi-masks",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

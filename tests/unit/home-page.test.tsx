@@ -69,7 +69,7 @@ describe("DashboardPage", () => {
     expect(
       screen.getByRole("link", { name: "浏览 Projects" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("0 / 22")).toHaveLength(3);
+    expect(screen.getAllByText("0 / 23")).toHaveLength(3);
     expect(screen.getAllByRole("heading", { name: "下一步学习" })).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "Stage 学习情况" }))
       .not.toBeInTheDocument();

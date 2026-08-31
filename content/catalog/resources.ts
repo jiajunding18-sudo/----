@@ -74,11 +74,11 @@ export const resources: readonly Resource[] = [
     priority: "recommended",
     language: "en",
     reason:
-      "OpenCV 官方 Python 教程用于核对图像读取、写入、读取 flags 与最低限度颜色转换接口；正文仍是零基础主教材，不要求顺序学习整套教程。",
+      "OpenCV 官方 Python 教程用于核对图像读取、写入、读取 flags、最低限度颜色转换，以及图像属性、像素访问与矩形 ROI 接口；正文仍是零基础主教材，不要求顺序学习整套教程。",
     recommendedParts: [
-      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray",
-      "选看：IMREAD_UNCHANGED 与文件扩展名影响编码行为的最低限度说明",
-      "跳过：GUI 深入、video、HSV/inRange、filtering、threshold、geometry、feature、camera 与 advanced color processing",
+      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI",
+      "选看：IMREAD_UNCHANGED、文件扩展名影响编码行为的最低限度说明，以及用于核对 H×W×C 输入的最小 channel inspection",
+      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、filtering、threshold、geometry、feature、camera 与 advanced color processing",
     ],
     aliases: ["OpenCV Python 官方教程"],
     verification: "verified",
@@ -293,9 +293,9 @@ export const resources: readonly Resource[] = [
     reason:
       "NumPy 官方初学者指南用短例子解释 ndarray、shape、ndim、索引、广播、dtype 与 copy/view，适合把 Stage 1 的形状意识迁移到图像数组。",
     recommendedParts: [
-      "必看（arrays）：Array fundamentals、Array attributes、Indexing and slicing、How do you know the shape and size of an array?、Broadcasting；每节只复现正文使用的二维/三维小例子",
-      "必看（dtypes 与 copy/view）：dtype 属性、How to create an array from existing data 中 view/copy 段落；达到能解释 uint8 范围、切片共享与显式 copy 即可",
-      "选看：Reshaping and flattening multidimensional arrays 与 Transposing and reshaping a matrix 的最小例子，只核对 shape 变化",
+      "必看（arrays）：Array fundamentals、Array attributes、Indexing and slicing、How do you know the shape and size of an array?、Broadcasting，以及条件/boolean selection；每节只复现正文使用的二维/三维、矩形 ROI 与 H×W mask 小例子",
+      "必看（dtypes 与 copy/view）：dtype 属性、How to create an array from existing data 中 view/copy 段落；达到能解释 uint8 范围、basic slice 共享与显式 copy 即可",
+      "选看：Reshaping and flattening multidimensional arrays、Transposing and reshaping a matrix 的最小 shape 例子，以及用 np.shares_memory 核对当前 slice/copy 实验",
       "跳过：完整创建函数清单、stack/split 百科、随机数、高级索引组合、性能讨论与外部教程链接",
     ],
     aliases: ["NumPy 初学者指南", "NumPy absolute basics"],

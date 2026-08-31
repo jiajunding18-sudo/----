@@ -33,6 +33,7 @@ const stageTwoConceptIds = [
   "image.digital-representation",
   "visualization.image-plots",
   "opencv.io-color",
+  "opencv.roi-masks",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -253,7 +254,7 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await stageTwoConceptSection.locator("summary").click();
   await expect(stageTwoConceptSection.locator("details")).toHaveAttribute("open", "");
   const stageTwoConcepts = stageTwoConceptSection.locator("[data-concept-id]");
-  await expect(stageTwoConcepts).toHaveCount(5);
+  await expect(stageTwoConcepts).toHaveCount(6);
   expect(
     await stageTwoConcepts.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-concept-id")),
@@ -261,7 +262,7 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   ).toEqual(stageTwoConceptIds);
   await expect(
     stageTwoConceptSection.locator('[data-dependency-kind="hard"]'),
-  ).toHaveCount(8);
+  ).toHaveCount(10);
   await expect(
     stageTwoConceptSection.locator('[data-dependency-kind="recommended"]'),
   ).toHaveCount(3);

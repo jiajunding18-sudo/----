@@ -263,6 +263,21 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   await expect(ioColorLink).toHaveAttribute("href", "/knowledge/opencv-io-color/");
   await ioColorLink.click();
   await expect(page).toHaveURL(/\/knowledge\/opencv-io-color\/$/u);
+
+  await page.goto("/search/?q=%E6%84%9F%E5%85%B4%E8%B6%A3%E5%8C%BA%E5%9F%9F");
+  const roiMasks = page.locator('[data-search-result-id="opencv.roi-masks"]');
+  await expect(roiMasks).toBeVisible();
+  await expect(roiMasks).toContainText("available · 正式内容");
+  const roiMasksLink = roiMasks.getByRole("link", {
+    name: "感兴趣区域与掩膜",
+  });
+  await expect(roiMasksLink).toHaveAttribute(
+    "href",
+    "/knowledge/opencv-roi-masks/",
+  );
+  await roiMasksLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/knowledge\/opencv-roi-masks\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

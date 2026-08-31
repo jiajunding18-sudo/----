@@ -55,6 +55,12 @@ describe("正式 Resource 派生模型", () => {
     const pythonVenv = view.resources.find(
       ({ resource }) => resource.id === "resource.python-venv",
     );
+    const numpyBeginners = view.resources.find(
+      ({ resource }) => resource.id === "resource.numpy-absolute-beginners",
+    );
+    const opencvTutorials = view.resources.find(
+      ({ resource }) => resource.id === "resource.opencv-python-tutorials",
+    );
 
     expect(view.stages.map(({ id }) => id)).toEqual([
       "stage.tooling-foundations",
@@ -74,6 +80,12 @@ describe("正式 Resource 派生模型", () => {
     expect(pythonVenv?.projects.map(({ project }) => project.id)).toEqual([
       "project.pixel-lab",
     ]);
+    expect(numpyBeginners?.concepts.map(({ concept }) => concept.id)).toContain(
+      "opencv.roi-masks",
+    );
+    expect(opencvTutorials?.concepts.map(({ concept }) => concept.id)).toContain(
+      "opencv.roi-masks",
+    );
   });
 
   it("从不可变 Resource ID 唯一派生 15 个站内详情路由", () => {

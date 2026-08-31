@@ -27,6 +27,9 @@ describe("网站只读内容接口", () => {
     expect(getPublishedConceptBySlug("vectors-and-matrices")?.id).toBe(
       "math.vectors-matrices",
     );
+    expect(getPublishedConceptBySlug("opencv-roi-masks")?.id).toBe(
+      "opencv.roi-masks",
+    );
     expect(getPublishedProjectBySlug("pixel-lab")?.id).toBe(
       "project.pixel-lab",
     );
@@ -39,7 +42,7 @@ describe("网站只读内容接口", () => {
       throw new Error("测试需要已发布的 Pixel Lab");
     }
 
-    expect(getPublishedConceptSlugs()).toHaveLength(22);
+    expect(getPublishedConceptSlugs()).toHaveLength(23);
     expect(getConceptsForProject(slice.project)).toHaveLength(8);
   });
 });

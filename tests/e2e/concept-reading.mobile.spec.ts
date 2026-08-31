@@ -118,3 +118,41 @@ test("360px 下 OpenCV I/O 的长代码、表格、TOC 与键盘链接保持可�
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
 });
+
+test("360px 下 ROI/Mask 的代码、表格、TOC、深链接与键盘保持可访问", async ({
+  page,
+}) => {
+  await page.goto("/knowledge/opencv-roi-masks/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(16);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("image[y1:y2, x1:x2]");
+  await expect(document).toContainText("selected_gray.shape == (true_count,)");
+  await expect(document).toContainText("mask shape mismatch");
+
+  const mobileToc = page.locator('[data-concept-toc="mobile"]');
+  await expect(mobileToc).toBeVisible();
+  const summary = mobileToc.getByText("本页目录", { exact: true });
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  const workedExampleLink = mobileToc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await workedExampleLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example");
+
+  const resourceLink = page.getByRole("link", {
+    name: "OpenCV-Python Tutorials",
+    exact: true,
+  });
+  await resourceLink.focus();
+  await expect(resourceLink).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+});

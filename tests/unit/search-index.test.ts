@@ -22,10 +22,10 @@ beforeAll(async () => {
 
 describe("构建期 SearchDocument", () => {
   it("只生成正式可搜索实体，并按稳定 ID 确定排序", () => {
-    expect(searchIndex.documents).toHaveLength(38);
+    expect(searchIndex.documents).toHaveLength(39);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "concept"),
-    ).toHaveLength(22);
+    ).toHaveLength(23);
     expect(
       searchIndex.documents
         .filter(({ kind }) => kind === "concept")
@@ -61,6 +61,9 @@ describe("构建期 SearchDocument", () => {
     );
     const pythonTutorial = searchIndex.documents.find(
       ({ id }) => id === "resource.python-tutorial",
+    );
+    const roiMasks = searchIndex.documents.find(
+      ({ id }) => id === "opencv.roi-masks",
     );
 
     expect(debugging).toMatchObject({
@@ -103,6 +106,16 @@ describe("构建期 SearchDocument", () => {
       href: "/knowledge/calculus-and-gradients/",
     });
     expect(gradient?.body).toContain("为什么现在学");
+    expect(roiMasks).toMatchObject({
+      stageIds: ["stage.image-computing"],
+      trackIds: ["track.common"],
+      external: false,
+      href: "/knowledge/opencv-roi-masks/",
+    });
+    expect(roiMasks?.body).toContain("source protection");
+    expect(roiMasks?.headings).toContainEqual(
+      expect.objectContaining({ title: "8. Worked Example" }),
+    );
   });
 
   it("MDX 文本提取不执行代码，并保持确定性序列化", () => {

@@ -74,11 +74,11 @@ export const resources: readonly Resource[] = [
     priority: "recommended",
     language: "en",
     reason:
-      "OpenCV 官方 Python 教程用于核对图像读取、写入、读取 flags、最低限度颜色转换，以及图像属性、像素访问与矩形 ROI 接口；正文仍是零基础主教材，不要求顺序学习整套教程。",
+      "OpenCV 官方 Python 教程用于核对图像读写、最低限度颜色转换、图像属性与 ROI，以及 resize、rotation、translation 和 affine transform 的基础接口；正文仍是零基础主教材，不要求顺序学习整套教程。",
     recommendedParts: [
-      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI",
-      "选看：IMREAD_UNCHANGED、文件扩展名影响编码行为的最低限度说明，以及用于核对 H×W×C 输入的最小 channel inspection",
-      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、filtering、threshold、geometry、feature、camera 与 advanced color processing",
+      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI；Geometric Transformations of Images 中 Scaling、Translation、Rotation 与 Affine Transformation",
+      "选看：IMREAD_UNCHANGED、最低限度 codec/channel inspection，以及 Geometric Image Transformations API 中 interpolation、reverse sampling、mapping direction、border 与 output canvas 的最低限度说明",
+      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、Perspective Transformation、warpPerspective、homography、remap、polar transform、camera geometry、filtering、threshold、feature 与 advanced color processing",
     ],
     aliases: ["OpenCV Python 官方教程"],
     verification: "verified",

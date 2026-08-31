@@ -86,6 +86,9 @@ describe("正式 Resource 派生模型", () => {
     expect(opencvTutorials?.concepts.map(({ concept }) => concept.id)).toContain(
       "opencv.roi-masks",
     );
+    expect(opencvTutorials?.concepts.map(({ concept }) => concept.id)).toContain(
+      "opencv.geometric-transforms",
+    );
   });
 
   it("从不可变 Resource ID 唯一派生 15 个站内详情路由", () => {

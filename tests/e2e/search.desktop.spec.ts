@@ -278,6 +278,22 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   await roiMasksLink.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/knowledge\/opencv-roi-masks\/$/u);
+
+  await page.goto("/search/?q=warpAffine");
+  const geometricTransforms = page.locator(
+    '[data-search-result-id="opencv.geometric-transforms"]',
+  );
+  await expect(geometricTransforms).toBeVisible();
+  await expect(geometricTransforms).toContainText("available · 正式内容");
+  const geometricTransformsLink = geometricTransforms.getByRole("link", {
+    name: "缩放、旋转与仿射变换",
+  });
+  await expect(geometricTransformsLink).toHaveAttribute(
+    "href",
+    "/knowledge/opencv-geometric-transforms/",
+  );
+  await geometricTransformsLink.click();
+  await expect(page).toHaveURL(/\/knowledge\/opencv-geometric-transforms\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

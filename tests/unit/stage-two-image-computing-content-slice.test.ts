@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 import { contentManifest } from "../../.generated/content-manifest";
 import { buildGlobalKnowledgeGraphCatalog } from "@/features/knowledge/knowledge-graph-model";
 import { buildKnowledgeView } from "@/features/knowledge/knowledge-model";
-import { getConceptStatus } from "@/features/progress/progress-domain";
+import {
+  getConceptReadiness,
+  getConceptStatus,
+} from "@/features/progress/progress-domain";
 import { getNextStep } from "@/features/recommendations/next-step";
 import { buildRoadmapView } from "@/features/roadmap/roadmap-model";
 import { loadMdxDirectory } from "@/lib/content";
@@ -20,12 +23,12 @@ const stageTwoConceptIds = [
   "visualization.image-plots",
   "opencv.io-color",
   "opencv.roi-masks",
+  "opencv.geometric-transforms",
 ] as const;
 
 const stageTwoConceptIdSet = new Set<string>(stageTwoConceptIds);
 
 const unpublishedStageTwoConceptIds = [
-  "opencv.geometric-transforms",
   "opencv.filtering-basics",
   "opencv.threshold-morphology",
   "opencv.edges-contours",
@@ -47,6 +50,9 @@ const expectedDependencies = [
   ["visualization.image-plots", "opencv.io-color", "recommended"],
   ["python.numpy-arrays", "opencv.roi-masks", "hard"],
   ["opencv.io-color", "opencv.roi-masks", "hard"],
+  ["math.linear-transforms", "opencv.geometric-transforms", "hard"],
+  ["opencv.io-color", "opencv.geometric-transforms", "hard"],
+  ["math.coordinate-frames", "opencv.geometric-transforms", "recommended"],
 ] as const;
 
 const requiredSectionHeadings = [
@@ -88,8 +94,8 @@ async function loadStageTwoConcepts() {
   return concepts.filter(({ meta }) => stageTwoConceptIdSet.has(meta.id));
 }
 
-describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => {
-  it("只发布约定的六个 required/master Concept，并将 checkpoint 保持 available", () => {
+describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
+  it("只发布约定的七个 required/master Concept，并将 checkpoint 保持 available", () => {
     const concepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.image-computing")
       .toSorted((left, right) => left.order - right.order);
@@ -98,7 +104,7 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
     );
 
     expect(concepts.map(({ id }) => id)).toEqual(stageTwoConceptIds);
-    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40, 50, 60]);
+    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40, 50, 60, 70]);
     expect(
       concepts.every(
         ({ publicationStatus, requiredness, targetDepth, trackIds }) =>
@@ -136,8 +142,8 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
       ]),
     ).toEqual(expect.arrayContaining([...expectedDependencies]));
     expect(dependencies).toHaveLength(expectedDependencies.length);
-    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(10);
-    expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(3);
+    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(12);
+    expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(4);
     const dependencyPairs = dependencies.map(
       ({ prerequisiteId, targetId }) => `${String(prerequisiteId)}->${String(targetId)}`,
     );
@@ -300,6 +306,85 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
     );
   });
 
+  it("opencv.geometric-transforms 保持正式依赖、master 边界与坐标验证闭环", async () => {
+    const concepts = await loadStageTwoConcepts();
+    const concept = concepts.find(
+      ({ meta }) => meta.id === "opencv.geometric-transforms",
+    );
+
+    expect(concept?.meta).toMatchObject({
+      publicationStatus: "published",
+      requiredness: "required",
+      targetDepth: "master",
+      estimatedHours: { min: 6, max: 8 },
+      resourceIds: ["resource.opencv-python-tutorials"],
+    });
+    expect(concept?.meta.dependencies).toEqual([
+      expect.objectContaining({
+        conceptId: "math.linear-transforms",
+        kind: "hard",
+      }),
+      expect.objectContaining({ conceptId: "opencv.io-color", kind: "hard" }),
+      expect.objectContaining({
+        conceptId: "math.coordinate-frames",
+        kind: "recommended",
+      }),
+    ]);
+    expect(concept?.meta.dependencies.map(({ conceptId }) => conceptId)).not.toContain(
+      "opencv.roi-masks",
+    );
+
+    requiredSectionHeadings.forEach((heading) => {
+      expect(
+        concept?.body,
+        `opencv.geometric-transforms 缺少 ${heading}`,
+      ).toContain(heading);
+    });
+    expect(concept?.meta.masteryCriteria).toHaveLength(2);
+    expect(concept?.meta.masteryCriteria.every(({ required }) => required)).toBe(
+      true,
+    );
+    expect(concept?.body).toContain("矩阵主要描述**位置和坐标之间的关系**");
+    expect(concept?.body).toContain("不是把像素颜色直接乘了一下");
+    expect(concept?.body).toContain("image.shape[:2]");
+    expect(concept?.body).toContain("(new_width, new_height)");
+    expect(concept?.body).toContain("assert resized.shape[:2]");
+    expect(concept?.body).toContain("INTER_NEAREST");
+    expect(concept?.body).toContain("INTER_LINEAR");
+    expect(concept?.body).toContain("INTER_AREA");
+    expect(concept?.body).toContain("cv2.getRotationMatrix2D");
+    expect(concept?.body).toContain("rotation_matrix.shape == (2, 3)");
+    expect(concept?.body).toContain("cv2.warpAffine");
+    expect(concept?.body).toContain("[1, 0, tx]");
+    expect(concept?.body).toContain("assert np.allclose(translated_point, [7.0, 3.0])");
+    expect(concept?.body).toContain("src_points.shape == dst_points.shape == (3, 2)");
+    expect(concept?.body).toContain("src_points.dtype == dst_points.dtype == np.float32");
+    expect(concept?.body).toContain("cv2.getAffineTransform");
+    expect(concept?.body).toContain(
+      "forward point mapping 与 image reverse sampling",
+    );
+    expect(concept?.body).toContain("same_canvas");
+    expect(concept?.body).toContain("larger_canvas");
+    expect(concept?.body).toContain("np.array_equal(source, original)");
+    expect(concept?.body).toContain("cv2.COLOR_BGR2RGB");
+    expect(concept?.body).toContain("### Checkpoint 1");
+    expect(concept?.body).toContain("### Checkpoint 2");
+    expect(concept?.body).toContain("### Checkpoint 3");
+    expect(concept?.body).toContain("### Checkpoint 4");
+    ["input:", "expected:", "actual:", "reason:", "correction:"].forEach(
+      (field) => expect(concept?.body).toContain(field),
+    );
+    expect(concept?.body).toContain(
+      "**当前不学习**：Perspective Transformation、homography、`warpPerspective`",
+    );
+    expect(concept?.meta.masteryCriteria[0]?.description).not.toMatch(
+      /perspective|homography/iu,
+    );
+    expect(concept?.meta.masteryCriteria[1]?.description).not.toMatch(
+      /perspective|homography/iu,
+    );
+  });
+
   it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {
     const fixture = await readFile(
       resolve(process.cwd(), "public/media/opencv-io-color-fixture.ppm"),
@@ -323,7 +408,7 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
     ]);
   });
 
-  it("OpenCV 官方资源只保留当前 I/O 与通道转换范围", () => {
+  it("OpenCV 官方资源覆盖 I/O、ROI 与基础 affine，继续跳过 perspective", () => {
     const resource = contentManifest.resources.find(
       ({ id }) => id === "resource.opencv-python-tutorials",
     );
@@ -340,12 +425,18 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
       expect.stringContaining("跳过：GUI 深入"),
     ]);
     expect(resource?.recommendedParts?.[0]).toContain("Image ROI");
+    expect(resource?.recommendedParts?.[0]).toContain(
+      "Scaling、Translation、Rotation 与 Affine Transformation",
+    );
+    expect(resource?.recommendedParts?.[1]).toContain("reverse sampling");
+    expect(resource?.recommendedParts?.[2]).toContain("warpPerspective");
+    expect(resource?.recommendedParts?.[2]).toContain("homography");
     expect(resource?.recommendedParts?.[2]).toContain("threshold");
   });
 
-  it("六篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
+  it("七篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
     const concepts = await loadStageTwoConcepts();
-    expect(concepts).toHaveLength(6);
+    expect(concepts).toHaveLength(7);
 
     concepts.forEach(({ body, meta }) => {
       requiredSectionHeadings.forEach((heading) => {
@@ -492,6 +583,9 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
       "2026-08-31T00:00:00.000Z",
     );
     const nextStep = getNextStep({ catalog: contentManifest, state: initialState });
+    const geometricTransforms = contentManifest.concepts.find(
+      ({ id }) => id === "opencv.geometric-transforms",
+    );
 
     stageTwoConceptIds.forEach((conceptId) => {
       expect(knowledge.concepts.some(({ concept }) => concept.id === conceptId)).toBe(
@@ -512,16 +606,32 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
       targetId: "tooling.computer-files",
       reasonCode: "project-gap",
     });
+    expect(
+      geometricTransforms &&
+        getConceptReadiness(
+          geometricTransforms,
+          initialState.conceptProgress,
+        ),
+    ).toEqual({
+      ready: false,
+      missingHard: ["math.linear-transforms", "opencv.io-color"],
+      missingRecommended: ["math.coordinate-frames"],
+    });
   });
 
-  it("ROADMAP 同步发布边界，并明确剩余六个节点未发布", async () => {
+  it("ROADMAP 同步发布边界，并明确剩余五个节点未发布", async () => {
     const roadmap = await readFile(resolve(process.cwd(), "ROADMAP.md"), "utf8");
     expect(roadmap).toContain(
       "`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`",
     );
     expect(roadmap).toContain(
-      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`，以及 S2-U4 的 `opencv.roi-masks`，共六个正式 Concept；其余六个节点仍未发布",
+      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`，以及 S2-U5 的 `opencv.geometric-transforms`，共七个正式 Concept；其余五个节点仍未发布",
     );
+    expect(roadmap).toContain(
+      "| `opencv.geometric-transforms` | 缩放、旋转与仿射变换（Geometric Transforms） | M |",
+    );
+    expect(roadmap).not.toContain("缩放、旋转、仿射与透视变换");
+    expect(roadmap).not.toContain("透视校正小实验");
     expect(roadmap).toContain(
       "| `python.numpy-arrays` | NumPy 数组、轴、切片与广播（Arrays, Axes, Broadcasting） | M | `tooling.dev-environment`, `tooling.python-core`, `math.vectors-matrices` | `tooling.debugging` |",
     );

@@ -46,7 +46,7 @@ test("360px 下 Roadmap 无横向溢出且阶段内容可访问", async ({ page 
   await expect(stage.getByRole("heading", { name: "Stage 出口标准" })).toBeVisible();
   const stageTwo = page.locator('[data-stage-id="stage.image-computing"]');
   await stageTwo.locator("summary").click();
-  await expect(stageTwo.locator("[data-concept-id]")).toHaveCount(6);
+  await expect(stageTwo.locator("[data-concept-id]")).toHaveCount(7);
   await stageTwo.locator("summary").click();
   await expect(stageTwo.locator("details")).not.toHaveAttribute("open", "");
   await expect

@@ -160,3 +160,41 @@ test("360px 下 ROI/Mask 的代码、表格、TOC、深链接与键盘保持可�
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
 });
+
+test("360px 下几何变换的公式、代码、表格、TOC 与键盘保持可访问", async ({
+  page,
+}) => {
+  await page.goto("/knowledge/opencv-geometric-transforms/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(9);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("rotation_matrix.shape == (2, 3)");
+  await expect(document).toContainText("same_canvas");
+  await expect(document).toContainText("known-point");
+
+  const mobileToc = page.locator('[data-concept-toc="mobile"]');
+  await expect(mobileToc).toBeVisible();
+  const summary = mobileToc.getByText("本页目录", { exact: true });
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  const masteryLink = mobileToc.getByRole("link", {
+    name: /12\. Mastery Evidence/u,
+  });
+  await masteryLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-12-mastery-evidence");
+
+  const resourceLink = page.getByRole("link", {
+    name: "OpenCV-Python Tutorials",
+    exact: true,
+  });
+  await resourceLink.focus();
+  await expect(resourceLink).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+});

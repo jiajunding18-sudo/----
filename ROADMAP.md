@@ -120,7 +120,7 @@ flowchart LR
 
 Stage 1B 有意不设置阶段级 `entryGate`：Stage 1 采用即时、交错学习，坐标系可以在概率统计与梯度全部掌握前按任务进入。Stage 1B 内每个 Concept 仍必须满足第 3.1 节声明的自身 `hard` 前置；移除整段 checkpoint 门槛不表示可以绕过这些知识依赖。Stage 1A checkpoint 继续独立记录该子阶段的完整能力证据。
 
-checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`，以及 S2-U4 的 `opencv.roi-masks`，共六个正式 Concept；其余六个节点仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
+checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`，以及 S2-U5 的 `opencv.geometric-transforms`，共七个正式 Concept；其余五个节点仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 
 ---
 
@@ -253,7 +253,7 @@ checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `
 | `image.digital-representation` | 像素、分辨率、坐标、通道与灰度（Digital Image Representation） | M | `python.numpy-arrays` | `math.coordinate-frames` | 对任意输入打印并解释尺寸、类型、通道顺序、数值范围和坐标原点。 |
 | `opencv.io-color` | 图像读写与色彩空间（Image I/O & Color Spaces） | M | `image.digital-representation`, `tooling.python-modules` | `visualization.image-plots` | 正确处理 BGR/RGB、灰度和透明通道，读取失败时显式报错。 |
 | `opencv.roi-masks` | 感兴趣区域与掩膜（ROI & Masks） | M | `python.numpy-arrays`, `opencv.io-color` | — | 用几何 ROI 和二值掩膜提取目标区域，不改变原图。 |
-| `opencv.geometric-transforms` | 缩放、旋转、仿射与透视变换（Geometric Transforms） | M | `math.linear-transforms`, `opencv.io-color` | `math.coordinate-frames` | 对已知点完成图像变换并可视化插值与边界差异。 |
+| `opencv.geometric-transforms` | 缩放、旋转与仿射变换（Geometric Transforms） | M | `math.linear-transforms`, `opencv.io-color` | `math.coordinate-frames` | 对已知点完成图像变换并可视化插值与边界差异。 |
 | `opencv.filtering-basics` | 平滑、锐化与基础滤波（Filtering） | M | `python.numpy-arrays`, `opencv.io-color` | `dip.convolution-lsi` | 比较至少两种滤波器对噪声和边缘的影响。 |
 | `opencv.threshold-morphology` | 阈值与形态学（Thresholding & Morphology） | M | `opencv.io-color`, `opencv.roi-masks` | `dip.morphology` | 通过受控参数得到稳定二值目标，并解释核大小的影响。 |
 | `opencv.edges-contours` | 边缘、轮廓与区域测量（Edges & Contours） | M | `opencv.filtering-basics`, `opencv.threshold-morphology` | `dip.segmentation` | 提取目标轮廓，计算面积/外接框，并过滤明显伪目标。 |
@@ -268,7 +268,7 @@ checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `
 | S2-U2 正确看见结果 | `visualization.image-plots`, `image.digital-representation` | 5–7 h | 标注通道、范围和单位的对照图。 |
 | S2-U3 图像 I/O 与颜色 | `opencv.io-color` | 6–7 h | 批量读取与色彩转换脚本，包含坏文件处理。 |
 | S2-U4 ROI 与掩膜 | `opencv.roi-masks` | 4–5 h | 三种 ROI/Mask 选择方式的对照实验。 |
-| S2-U5 几何变换 | `opencv.geometric-transforms` | 6–8 h | 旋转、仿射和透视校正文档图片。 |
+| S2-U5 几何变换 | `opencv.geometric-transforms` | 6–8 h | 完成 resize、旋转、平移与仿射实验，用已知点、插值和输出边界核对结果。 |
 | S2-U6 滤波入门 | `opencv.filtering-basics` | 6–8 h | 平滑/锐化对噪声和边缘影响报告。 |
 | S2-U7 阈值与形态学 | `opencv.threshold-morphology` | 7–9 h | 至少三种照明条件下的二值化失败分析。 |
 | S2-U8 边缘、轮廓与测量 | `opencv.edges-contours` | 7–9 h | 面积、周长、外接框与目标筛选结果。 |
@@ -767,7 +767,7 @@ checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `
 | 7–9 | S1-U1；S2-U1：数组、轴、类型、广播 | Pixel Lab 增加 dtype/copy/view 实验 | 能排查通道、轴和 `uint8` 错误。 |
 | 10–11 | S2-U2、S2-U3：显示、I/O、颜色 | 建立输入检查和结果报告图 | 任意输入先报告数据契约。 |
 | 12–13 | S1-U2 前半；S2-U4：ROI、Mask | 制作目标区域提取模块 | 坐标、行列、宽高无混淆。 |
-| 14–15 | S1-U2 后半；S2-U5：几何变换 | 透视校正小实验 | 点与图像变换一致，插值/边界有对照。 |
+| 14–15 | S1-U2 后半；S2-U5：几何变换 | 仿射变换与坐标验证小实验 | 点与图像变换一致，插值/边界有对照。 |
 | 16–18 | S2-U6：滤波；S1-U4 噪声统计入门 | 经典检测 v0：去噪与增强 | 结果有统计/边缘指标，不只看图。 |
 | 19–21 | S2-U7：阈值、形态学 | 经典检测 v1：前景分割 | 三种成像条件下记录失败。 |
 | 22 | S2-U8、S2-U9：轮廓、批处理 | 冻结测试集并批量验收 | 通过 Stage 2 出口；保留失败清单。 |

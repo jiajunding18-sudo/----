@@ -434,6 +434,67 @@ test("ROI/Mask 正文呈现坐标、共享内存、两类输出契约与失败�
   expect(browserErrors).toEqual([]);
 });
 
+test("几何变换正文呈现 H/W、防错、已知点、插值与 clipping 闭环", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-geometric-transforms/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /缩放、旋转与仿射变换/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(9);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("不是把像素颜色直接乘了一下");
+  await expect(document).toContainText("(new_width, new_height)");
+  await expect(document).toContainText("INTER_NEAREST");
+  await expect(document).toContainText("INTER_LINEAR");
+  await expect(document).toContainText("INTER_AREA");
+  await expect(document).toContainText("rotation_matrix.shape == (2, 3)");
+  await expect(document).toContainText("translated_point, [7.0, 3.0]");
+  await expect(document).toContainText("src_points.shape == dst_points.shape == (3, 2)");
+  await expect(document).toContainText("same_canvas");
+  await expect(document).toContainText("larger_canvas");
+  await expect(document).toContainText(
+    "input → expected → actual → reason → correction",
+  );
+  await expect(document).toContainText("Perspective Transformation");
+  for (const checkpoint of [1, 2, 3, 4]) {
+    await expect(
+      document.getByRole("heading", {
+        level: 3,
+        name: new RegExp(`Checkpoint ${checkpoint}`, "u"),
+      }),
+    ).toBeVisible();
+  }
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await workedExampleLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example");
+
+  await expect(
+    page
+      .getByLabel("精选学习资源")
+      .getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

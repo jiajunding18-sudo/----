@@ -380,6 +380,13 @@ test("ROI/Mask 正文呈现坐标、共享内存、两类输出契约与失败�
   await expect(document).toContainText("np.shares_memory(working, roi_view)");
   await expect(document).toContainText("selected_color.shape == (true_count, 3)");
   await expect(document).toContainText("selected_gray.shape == (true_count,)");
+  await expect(document).toContainText("selected.shape == (N, C)");
+  await expect(document).toContainText(
+    "不会因为变量名叫 source 就自动变成只读",
+  );
+  await expect(document).toContainText(
+    "input → expected → actual → reason → correction",
+  );
   await expect(document).toContainText("silent clipping");
   await expect(document).toContainText("mask shape mismatch");
   await expect(document).toContainText("assert np.array_equal(source, original)");

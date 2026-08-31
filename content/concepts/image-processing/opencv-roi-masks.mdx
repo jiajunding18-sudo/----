@@ -47,11 +47,11 @@ learningOutcomes:
 masteryCriteria:
   - id: criterion.opencv-roi-masks.coordinates-source-protection
     description: 独立把一个 x/y/width/height 矩形转换为合法 ROI，检查 bounds 与 expected/actual shape，对照 slice view 和显式 copy 的修改传播，并证明 source 未被意外改变。
-    evidenceHint: 提交输入图像契约、坐标与 slice、边界断言、ROI shape、np.shares_memory、view/copy 修改对照、source 相等性断言，以及至少一个空 ROI 或越界截短失败诊断。
+    evidenceHint: 提交输入图像契约、坐标与 slice、边界断言、ROI shape、np.shares_memory、view/copy 修改对照、source 相等性断言，以及至少一个包含 input、expected、actual、reason、correction 的空 ROI 或越界截短失败诊断。
     required: true
   - id: criterion.opencv-roi-masks.boolean-mask-contract
     description: 为彩色图像建立 H×W boolean mask，解释紧凑 N×C 像素集合与保持 H×W×C 的结果之间的区别，并安全诊断一个 mask shape mismatch。
-    evidenceHint: 提交 mask shape/dtype/True count、彩色与灰度选择 shape、shape-preserving result、source/result 可信显示、source 未修改断言和错误 mask contract 的诊断输出。
+    evidenceHint: 提交 mask shape/dtype/True count、彩色与灰度选择 shape、shape-preserving result、source/result 可信显示、source 未修改断言，以及包含 input、expected、actual、reason、correction 的错误 mask contract 诊断输出。
     required: true
 resourceIds:
   - resource.numpy-absolute-beginners
@@ -188,6 +188,15 @@ result = source.copy()
 result[y1:y2, x1:x2] = 0
 ```
 
+这里的 **source protection（原图保护）是人为约定、基准快照和断言共同形成的工作流，不是 NumPy 自动提供的只读保护**。NumPy `ndarray` 不会因为变量名叫 `source` 就自动变成只读；如果代码直接给 `source[...]` 赋值，它仍会被修改。本页明确区分四个角色：
+
+- `source`：已验证的输入图像；工作流约定不直接修改它；
+- `original`：用 `original = source.copy()` 保存的基准快照，只用于最终相等性检查；
+- `working`：允许故意污染或做传播实验的工作副本；
+- `result`：正式输出副本，只对它执行预期修改。
+
+最终的 `assert np.array_equal(source, original)` 证明**这一次流程**没有意外修改 source；它不是 NumPy 提供的 write protection。本页不扩展只读数组或内存保护 API。
+
 工程决策是：
 
 | 当前意图 | 选择 |
@@ -215,10 +224,10 @@ assert mask.dtype == np.bool_
 
 ### 4.5 image[mask]：紧凑像素集合，不是保持 shape 的图像
 
-对于彩色数组：
+一般地，对于带 `C` 个通道的彩色数组：
 
 ```python
-image.shape == (H, W, 3)
+image.shape == (H, W, C)
 mask.shape == (H, W)
 
 selected = image[mask]
@@ -227,10 +236,10 @@ selected = image[mask]
 若 mask 有 `N` 个 `True`，则：
 
 ```python
-selected.shape == (N, 3)
+selected.shape == (N, C)
 ```
 
-它表示 N 个被选中的三通道像素，原来的 H×W 空间布局已经丢失。对于灰度数组：
+`N` 是 mask 中 `True` 的空间位置数量，`C` 是原图保留下来的通道数。当前 BGR 示例中 `C = 3`，所以具体得到 `N×3`。这个 compact selection 表示 N 个被选中的像素，原来的 H×W 空间布局已经丢失。对于灰度数组：
 
 ```python
 gray.shape == (H, W)
@@ -256,7 +265,7 @@ assert result.shape == image.shape
 
 ## 5. 初学者直觉解释
 
-把 source 想成一张不可涂改的底片：
+把 source 想成一张**约定不直接涂改**的底片：NumPy 不会自动保护它，真正的保护来自只修改 working/result、保存 original 快照并在最后执行相等性断言。
 
 - 矩形 ROI 是在底片上框出一个窗口；
 - slice view 像透过窗口直接在底片上作画，修改可能落回 parent；
@@ -349,6 +358,7 @@ def validate_roi(image, x, y, roi_width, roi_height):
 
 fixture = "public/media/opencv-io-color-fixture.ppm"
 source = read_validated_bgr(fixture)
+# original 是用于最终核对的独立基准快照。
 original = source.copy()
 
 # (x, y, width, height) = (1, 0, 2, 2)
@@ -363,7 +373,8 @@ assert roi.shape[:2] == (y2 - y1, x2 - x1)
 ### Checkpoint 2：故意让 view 修改 parent，再安全重做
 
 ```python
-# 只污染 working，保留 source/original 作为不可变对照。
+# source 是已验证输入；“不直接修改”是本流程的工程约定，不是自动只读。
+# original 是基准快照；working 是允许故意污染的实验副本。
 working = source.copy()
 working_before = working.copy()
 roi_view = working[y1:y2, x1:x2]
@@ -382,14 +393,14 @@ assert not np.shares_memory(clean_working, roi_copy)
 roi_copy[:] = [255, 255, 255]
 assert np.array_equal(clean_working, source)
 
-# 若需要完整修改图，复制完整 source 后再操作 result。
+# result 是正式输出副本，只对它执行预期修改。
 result = source.copy()
 result[y1:y2, x1:x2] = [0, 0, 0]
 assert not np.array_equal(result, source)
 assert np.array_equal(source, original)
 ```
 
-这个故意失败证明了“修改 view → parent 被修改”的因果关系。安全重做不是把 view 宣布为错误，而是先决定当前是否允许改变 parent：本例要求保留 source，所以修改发生在 `result`。
+这个故意失败证明了“修改 view → parent 被修改”的因果关系。安全重做不是把 view 宣布为错误，而是先决定当前是否允许改变 parent：本例要求保留 source，所以修改发生在 `result`。最后的相等性断言只证明本次流程守住了约定，并不表示 NumPy 自动禁止其他代码修改 source。
 
 ### Checkpoint 3：boolean mask 的 compact 与 shape-preserving 输出
 
@@ -404,6 +415,7 @@ assert mask.dtype == np.bool_
 true_count = int(np.count_nonzero(mask))
 selected_color = source[mask]
 assert true_count == 4
+# 一般规则是 H×W×C + H×W mask → N×C；本例 C=3。
 assert selected_color.shape == (true_count, 3)
 
 # 灰度输入在空间轴后没有 channel axis，所以紧凑结果为 (N,)。
@@ -443,47 +455,86 @@ plt.show()
 ### Checkpoint 4：让失败可解释
 
 ```python
-def diagnose_unchecked_roi(image, x1, y1, x2, y2):
-    expected_shape = (y2 - y1, x2 - x1)
-    unchecked = image[y1:y2, x1:x2]
-    actual_shape = unchecked.shape[:2]
-    print("ROI input:", (x1, y1, x2, y2))
-    print("expected spatial shape:", expected_shape)
-    print("actual spatial shape:", actual_shape)
-    print("empty:", unchecked.size == 0)
-    return expected_shape, actual_shape, unchecked
+def report_diagnosis(case, input_contract, expected, actual, reason, correction):
+    print("case:", case)
+    print("input:", input_contract)
+    print("expected:", expected)
+    print("actual:", actual)
+    print("reason:", reason)
+    print("correction:", correction)
 
 
-# 1. 越界 slice 没有抛异常，却静默缩短了 width。
-expected, actual, clipped = diagnose_unchecked_roi(source, 1, 0, 5, 2)
-assert expected == (2, 4)
-assert actual == (2, 2)
-assert clipped.size > 0
-
-# 2. x1 == x2 得到空 ROI。
-expected, actual, empty = diagnose_unchecked_roi(source, 1, 0, 1, 2)
-assert expected == (2, 0)
-assert actual == (2, 0)
-assert empty.size == 0
-
-# 3. 把 x 当 row、y 当 column，会得到错误 shape。
+# Case 1：把 x 当 row、y 当 column。
 x, y, roi_width, roi_height = 0, 1, 3, 1
 correct = source[y:y + roi_height, x:x + roi_width]
 swapped = source[x:x + roi_width, y:y + roi_height]
+correct_slice = "source[1:2, 0:3]"
+swapped_slice = "source[0:3, 1:2]"
+report_diagnosis(
+    "x/y 与 row/column 写反",
+    {
+        "x/y/width/height": (x, y, roi_width, roi_height),
+        "actual slice": swapped_slice,
+    },
+    {"slice": correct_slice, "ROI shape": (roi_height, roi_width)},
+    {"slice": swapped_slice, "ROI shape": swapped.shape[:2]},
+    "x 应对应 column，y 应对应 row；写反后两个空间轴选择了不同区域。",
+    "改为 source[y:y+height, x:x+width]，即 source[1:2, 0:3]。",
+)
 assert correct.shape == (1, 3, 3)
 assert swapped.shape == (2, 1, 3)
 
-# 4. mask contract 在索引前显式失败，而不是只保留模糊异常。
+# Case 2：越界 slice 没有抛异常，却发生 silent clipping。
+height, width = source.shape[:2]
+x1, y1, x2, y2 = 1, 0, 5, 2
+clipped = source[y1:y2, x1:x2]
+expected_shape = (y2 - y1, x2 - x1)
+report_diagnosis(
+    "silent clipping / 越界 ROI",
+    {"bounds": (x1, y1, x2, y2), "image width/height": (width, height)},
+    {"bounds valid": True, "ROI shape": expected_shape},
+    {"bounds valid": False, "ROI shape": clipped.shape[:2]},
+    "x2 超过 image width；NumPy slice 没有抛异常，而是静默截短。",
+    "切片前显式检查 0 <= x1 < x2 <= width 和 y 方向 bounds。",
+)
+assert expected_shape == (2, 4)
+assert clipped.shape[:2] == (2, 2)
+assert clipped.size > 0
+
+# Case 3：x1 == x2；shape 可能与零宽预期相同，但 ROI 仍然无效。
+x1, y1, x2, y2 = 1, 0, 1, 2
+empty = source[y1:y2, x1:x2]
+expected_shape = (y2 - y1, x2 - x1)
+report_diagnosis(
+    "empty ROI",
+    {"bounds": (x1, y1, x2, y2)},
+    "0 <= x1 < x2 <= width 且 roi.size > 0",
+    {"ROI shape": empty.shape[:2], "ROI size": empty.size},
+    "x1 == x2 违反正宽度 bounds；expected/actual shape 都含 0 也不能算成功。",
+    "先修正 bounds 使 x2 > x1，再切片并补查 roi.size == 0。",
+)
+assert expected_shape == (2, 0)
+assert empty.shape[:2] == expected_shape
+assert empty.size == 0
+
+# Case 4：mask contract 在索引前显式失败，而不是只保留模糊异常。
 wrong_mask = np.zeros((source.shape[0], source.shape[1] + 1), dtype=bool)
-print("mask expected shape:", source.shape[:2])
-print("mask actual shape:", wrong_mask.shape)
-if wrong_mask.shape != source.shape[:2] or wrong_mask.dtype != np.bool_:
-    print("diagnosis: mask 必须是与图像空间轴一致的 H×W boolean array")
-else:
-    source[wrong_mask]
+report_diagnosis(
+    "mask shape mismatch",
+    {
+        "image spatial shape": source.shape[:2],
+        "provided mask shape": wrong_mask.shape,
+        "provided mask dtype": wrong_mask.dtype,
+    },
+    {"mask shape": source.shape[:2], "mask dtype": np.dtype(bool)},
+    {"mask shape": wrong_mask.shape, "mask dtype": wrong_mask.dtype},
+    "mask 的空间 shape 与 image.shape[:2] 不一致。",
+    "按 source.shape[:2] 重建 H×W boolean mask，再执行索引。",
+)
+assert wrong_mask.shape != source.shape[:2]
 ```
 
-四个案例分别暴露 silent clipping、empty ROI、x/y 与 row/column 错位、mask shape mismatch。诊断输出同时记录输入 contract、预期 shape、实际 shape 与失败原因，而不是只说“数组错了”。
+四个案例都采用 `input → expected → actual → reason → correction`。其中 empty ROI 特别说明：预期和实际 shape 可能都包含 0，甚至二者相等；因此必须先检查正宽高和 bounds，再用 `roi.size == 0` 做切片后的补充防御，不能只依赖 shape mismatch。
 
 ## 9. Active Recall
 
@@ -492,9 +543,9 @@ else:
 3. 左闭右开怎样决定 ROI 的预期 shape？
 4. 修改 basic slice ROI 为什么可能改变 parent array？怎样验证？
 5. 什么时候应使用 ROI view、ROI copy 和完整 result copy？
-6. 为什么彩色 `image[mask]` 通常是 `(N,3)`，灰度 `gray[mask]` 通常是 `(N,)`？
+6. 为什么彩色 H×W×C 的 `image[mask]` 通常是 `(N,C)`，而当前 BGR 特例是 `(N,3)`、灰度 `gray[mask]` 通常是 `(N,)`？
 7. compact selection 与 shape-preserving result 分别保留什么信息？
-8. 怎样用断言证明 source 没有被意外修改？
+8. 为什么 source protection 是工作流约定而非 NumPy 自动保护？怎样用快照和断言证明 source 没有被意外修改？
 
 完成标准：不看正文说明每个契约，并能写出 bounds、mask shape/dtype、shared-memory 与 source preservation 的最小检查。若只会背 `slice=view`，却不能根据修改意图选择方案，尚未达到本页目标。
 
@@ -522,7 +573,7 @@ else:
 
 独立构造并诊断：empty ROI、silently clipped ROI、x/y 与 row/column 错位、mask shape mismatch。
 
-完成标准：每个案例记录输入、预期 shape、实际 shape 和修正；不能只捕获异常，也不能把越界后的较小 ROI 当作成功。
+完成标准：每个案例都记录 input、expected contract/shape、actual contract/shape、reason 和 correction；不能只捕获异常，也不能把越界后的较小 ROI 当作成功。empty ROI 必须同时检查 bounds 与 `roi.size == 0`，不能只比较 shape。
 
 ## 11. 实际使用：Project / Capability / Application 映射
 
@@ -535,13 +586,13 @@ else:
 
 ### Evidence 1：ROI 坐标与 source protection
 
-对仓库 fixture 或一张已完成 I/O 检查的真实图像，提交 input contract、`(x,y,width,height)`、NumPy slice、bounds、expected/actual ROI shape、`np.shares_memory`、view/copy 修改对照和 source 未修改断言；另诊断至少一个 empty ROI 或 silently clipped ROI。
+对仓库 fixture 或一张已完成 I/O 检查的真实图像，提交 input contract、`(x,y,width,height)`、NumPy slice、bounds、expected/actual ROI shape、`np.shares_memory`、view/copy 修改对照和 source 未修改断言；另诊断至少一个 empty ROI 或 silently clipped ROI。结构化失败报告必须包含 input、expected、actual、reason 和 correction。
 
-通过标准：坐标与 shape 全部可解释；故意修改 view 时能指出哪一个 parent 被改变；最终安全结果来自明确副本，`np.array_equal(source, original)` 为 true；失败报告含输入、预期、实际与修正。
+通过标准：坐标与 shape 全部可解释；故意修改 view 时能指出哪一个 parent 被改变；最终安全结果来自明确副本，`np.array_equal(source, original)` 为 true；失败报告含 input、expected、actual、reason 和 correction。
 
 ### Evidence 2：boolean mask 与输出 contract
 
-提交 H×W bool mask 的 shape、dtype、True count；解释彩色 `image[mask]` 的 N×C 与灰度 `gray[mask]` 的 N；再生成一个保持 H×W×C 的 result，并提供 source/result 可信显示、source 未修改断言与错误 mask shape 诊断。
+提交 H×W bool mask 的 shape、dtype、True count；解释彩色 `image[mask]` 的 N×C 与灰度 `gray[mask]` 的 N；再生成一个保持 H×W×C 的 result，并提供 source/result 可信显示、source 未修改断言与错误 mask shape 诊断。错误诊断同样必须包含 input、expected、actual、reason 和 correction。
 
 通过标准：compact selection 与 shape-preserving result 没有被混称；mask 不复制 channel axis；错误 contract 在操作前被清楚拒绝。无需实现 segmentation、threshold、morphology、contour 或 GUI ROI。
 

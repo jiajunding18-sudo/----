@@ -128,7 +128,11 @@ test("360px 下 ROI/Mask 的代码、表格、TOC、深链接与键盘保持可�
   await expect(document.locator('[data-code-language="python"]')).toHaveCount(16);
   await expect(document.getByRole("table")).toHaveCount(2);
   await expect(document).toContainText("image[y1:y2, x1:x2]");
+  await expect(document).toContainText("selected.shape == (N, C)");
   await expect(document).toContainText("selected_gray.shape == (true_count,)");
+  await expect(document).toContainText(
+    "input → expected → actual → reason → correction",
+  );
   await expect(document).toContainText("mask shape mismatch");
 
   const mobileToc = page.locator('[data-concept-toc="mobile"]');

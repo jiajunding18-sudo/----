@@ -260,8 +260,19 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
     expect(concept?.body).toContain("np.shares_memory(working, roi_view)");
     expect(concept?.body).toContain("not np.shares_memory(working, roi_copy)");
     expect(concept?.body).toContain("assert np.array_equal(source, original)");
+    expect(concept?.body).toContain(
+      "NumPy `ndarray` 不会因为变量名叫 `source` 就自动变成只读",
+    );
+    expect(concept?.body).toContain(
+      "它不是 NumPy 提供的 write protection",
+    );
+    ["`source`", "`original`", "`working`", "`result`"].forEach((role) => {
+      expect(concept?.body).toContain(role);
+    });
     expect(concept?.body).toContain("assert mask.shape == source.shape[:2]");
     expect(concept?.body).toContain("assert mask.dtype == np.bool_");
+    expect(concept?.body).toContain("image.shape == (H, W, C)");
+    expect(concept?.body).toContain("selected.shape == (N, C)");
     expect(concept?.body).toContain("selected_color.shape == (true_count, 3)");
     expect(concept?.body).toContain("selected_gray.shape == (true_count,)");
     expect(concept?.body).toContain("masked_result[~mask] = 0");
@@ -271,7 +282,22 @@ describe("Phase 9D Stage 2 图像计算基础、OpenCV I/O 与 ROI/Mask", () => 
     expect(concept?.body).toContain("### Checkpoint 4");
     expect(concept?.body).toContain("silent clipping");
     expect(concept?.body).toContain("mask shape mismatch");
+    expect(concept?.body?.match(/report_diagnosis\(/gu)).toHaveLength(5);
+    ["input:", "expected:", "actual:", "reason:", "correction:"].forEach(
+      (field) => {
+        expect(concept?.body).toContain(field);
+      },
+    );
+    expect(concept?.body).toContain(
+      "expected/actual shape 都含 0 也不能算成功",
+    );
     expect(concept?.body).toContain("cv2.COLOR_BGR2RGB");
+    expect(concept?.meta.masteryCriteria[0]?.evidenceHint).toContain(
+      "input、expected、actual、reason、correction",
+    );
+    expect(concept?.meta.masteryCriteria[1]?.evidenceHint).toContain(
+      "input、expected、actual、reason、correction",
+    );
   });
 
   it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {

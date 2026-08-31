@@ -22,10 +22,10 @@ beforeAll(async () => {
 
 describe("构建期 SearchDocument", () => {
   it("只生成正式可搜索实体，并按稳定 ID 确定排序", () => {
-    expect(searchIndex.documents).toHaveLength(37);
+    expect(searchIndex.documents).toHaveLength(38);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "concept"),
-    ).toHaveLength(21);
+    ).toHaveLength(22);
     expect(
       searchIndex.documents
         .filter(({ kind }) => kind === "concept")

@@ -306,6 +306,48 @@ test("Stage 2 R1 正文呈现安全表示往返与标量/RGB 显示分流", asyn
   expect(browserErrors).toEqual([]);
 });
 
+test("OpenCV I/O 正文呈现失败检查、通道契约、无损往返与正式资源", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-io-color/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /图像读写与色彩空间/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(5);
+  await expect(document.getByRole("table")).toBeVisible();
+  await expect(document).toContainText("if image is None:");
+  await expect(document).toContainText("cv2.COLOR_BGR2RGB");
+  await expect(document).toContainText("assert bgr[0, 0].tolist() == [0, 0, 255]");
+  await expect(document).toContainText("np.array_equal(reloaded, bgr)");
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  const workedExampleHref = await workedExampleLink.getAttribute("href");
+  expect(workedExampleHref).toBe("#section-8-worked-example");
+  await workedExampleLink.click();
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe(decodeURIComponent(workedExampleHref ?? ""));
+
+  await expect(
+    page.getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

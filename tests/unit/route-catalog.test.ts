@@ -54,6 +54,7 @@ const stageTwoConceptIds = [
   "python.numpy-dtypes",
   "image.digital-representation",
   "visualization.image-plots",
+  "opencv.io-color",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

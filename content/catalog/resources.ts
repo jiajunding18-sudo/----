@@ -74,16 +74,17 @@ export const resources: readonly Resource[] = [
     priority: "recommended",
     language: "en",
     reason:
-      "OpenCV 官方 Python 教程提供安装和图像入门接口的权威入口；本切片只使用读写图像相关部分，不提前学习图像算法。",
+      "OpenCV 官方 Python 教程用于核对图像读取、写入、读取 flags 与最低限度颜色转换接口；正文仍是零基础主教材，不要求顺序学习整套教程。",
     recommendedParts: [
-      "Introduction to OpenCV",
-      "Gui Features in OpenCV 中的 Getting Started with Images",
+      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray",
+      "选看：IMREAD_UNCHANGED 与文件扩展名影响编码行为的最低限度说明",
+      "跳过：GUI 深入、video、HSV/inRange、filtering、threshold、geometry、feature、camera 与 advanced color processing",
     ],
     aliases: ["OpenCV Python 官方教程"],
     verification: "verified",
     url: "https://docs.opencv.org/4.x/d6/d00/tutorial_py_root.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-29",
+    lastCheckedAt: "2026-08-31",
   },
   {
     id: "resource.pro-git",

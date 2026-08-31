@@ -229,7 +229,7 @@ test("Phase 9C 数值稳定性中英文术语进入搜索并落到正式学习�
   expect(browserErrors).toEqual([]);
 });
 
-test("Stage 2 数组与图像表示自动进入搜索并落到正式学习页", async ({
+test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正式学习页", async ({
   page,
 }) => {
   const browserErrors = trackBrowserErrors(page);
@@ -253,6 +253,16 @@ test("Stage 2 数组与图像表示自动进入搜索并落到正式学习页", 
   );
   await link.click();
   await expect(page).toHaveURL(/\/knowledge\/digital-image-representation\/$/u);
+
+  await page.goto("/search/?q=BGR%20RGB");
+  const ioColor = page.locator('[data-search-result-id="opencv.io-color"]');
+  await expect(ioColor).toBeVisible();
+  const ioColorLink = ioColor.getByRole("link", {
+    name: "图像读写与色彩空间",
+  });
+  await expect(ioColorLink).toHaveAttribute("href", "/knowledge/opencv-io-color/");
+  await ioColorLink.click();
+  await expect(page).toHaveURL(/\/knowledge\/opencv-io-color\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

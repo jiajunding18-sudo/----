@@ -1,0 +1,437 @@
+---
+schemaVersion: 1
+id: opencv.io-color
+slug: opencv-io-color
+title: 图像读写与色彩空间
+englishTitle: Image I/O and Color Spaces
+aliases:
+  - OpenCV 图像读写
+  - BGR RGB
+  - cv2.imread imwrite
+searchKeywords:
+  - OpenCV image I/O
+  - cv2.imread
+  - cv2.imwrite
+  - BGR RGB
+  - IMREAD_GRAYSCALE
+  - IMREAD_UNCHANGED
+  - alpha channel
+  - image round-trip
+summary: 用 OpenCV 可靠读取、检查、解释和写回真实图像文件，掌握 BGR/RGB、灰度与四通道数组的最低限度数据契约和失败诊断。
+why: 真实图像文件可能读不到，也可能以与你预期不同的通道顺序、shape 或 dtype 解码；先验证数据契约，才能避免把路径、颜色或编码问题误判成算法问题。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 50
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 6
+  max: 7
+dependencies:
+  - conceptId: image.digital-representation
+    kind: hard
+    reason: 需要先能解释 H×W、H×W×C、pixel、channel 与 RGB 语义，才能判断解码后的图像数组是什么数据。
+  - conceptId: tooling.python-modules
+    kind: hard
+    reason: 需要先会在项目环境中安装、导入和排查 Python 模块，才能可靠使用 cv2、NumPy 与 Matplotlib。
+  - conceptId: visualization.image-plots
+    kind: recommended
+    reason: 可信显示的 scalar/RGB 映射习惯有助于发现颜色通道解释错误，但不阻塞本页的 I/O 学习。
+tags:
+  - OpenCV
+  - 图像读写
+  - BGR RGB
+  - 失败诊断
+learningOutcomes:
+  - 能按 resolve、validate、inspect、interpret 的固定顺序读取真实图像，并在访问 shape 前安全处理 imread 失败。
+  - 能根据 shape、ndim、dtype、范围与来源解释彩色、灰度和四通道数组的最低限度数据契约，并正确完成 BGR 到 RGB。
+  - 能检查 imwrite 返回值，以无损格式重新读取并验证 round-trip 契约，同时说明有损格式为何不能要求逐元素相等。
+masteryCriteria:
+  - id: criterion.opencv-io-color.read-inspect-interpret
+    description: 独立完成一张真实图像的 I/O 诊断卡片，记录路径解析、文件存在性、读取结果、shape、ndim、dtype、数值范围、通道数和通道解释，并正确显示彩色与灰度结果。
+    evidenceHint: 提交诊断输出、已知像素的 BGR/RGB 数值核对、正确显示截图，以及一个故意错误路径的可理解失败报告。
+    required: true
+  - id: criterion.opencv-io-color.write-roundtrip-diagnose
+    description: 将图像写为无损文件，检查写入返回值和文件存在性，重新读取并验证关键 metadata、通道语义与像素结果；另识别一个四通道数组的数据契约边界。
+    evidenceHint: 提交可复现代码、write/reload 检查、无损 round-trip 断言、BGRA shape 与通道说明，并解释 JPEG 等有损格式为何不适合严格像素相等断言。
+    required: true
+resourceIds:
+  - resource.opencv-python-tutorials
+publicationStatus: published
+contentVersion: 2026.08.31
+---
+
+# 图像读写与色彩空间（Image I/O and Color Spaces）
+
+本页第一次把合成的 NumPy 图像数组连接到真实图像文件。核心不是记住 API，而是养成一条可重复的工程流程：
+
+```text
+resolve path
+→ 检查文件/路径
+→ imread
+→ image is None 检查
+→ shape / ndim / dtype / range / channel 检查
+→ 解释数据契约
+→ 必要颜色转换
+→ 正确显示
+→ imwrite 返回值检查
+→ 无损重新读取
+→ round-trip 契约验证
+→ 失败诊断
+```
+
+## 1. 这是什么
+
+**图像 I/O（image input/output）**是把图像文件解码成数组，以及把数组编码回文件。`cv2.imread(...)` 返回的不是“图片对象”，而是一个 NumPy 数组；成功时必须继续确认这个数组的 shape、dtype、范围与通道语义，失败时则可能返回 `None`。
+
+**颜色通道契约（color channel contract）**说明最后一个 axis 中各通道代表什么。OpenCV 常规彩色读取默认得到 BGR 顺序，常见 Matplotlib 三通道显示则按 RGB 解释。两者的 shape 都可以是 `H×W×3`，但相同 shape 不代表相同颜色语义。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+前面的 `image.digital-representation` 已经教会你解释 H×W、H×W×C、pixel、channel 与 RGB；现在需要把这些概念用于磁盘上的真实文件。后续 ROI、滤波、阈值和批处理都从“先成功、正确地拿到图像数组”开始。
+
+### 在机器视觉中会在哪里使用
+
+- 在 ROI 与 mask 前确认 height、width、channel axis 和坐标访问对象；
+- 在滤波、阈值和轮廓处理前确认灰度/彩色契约与 dtype/range；
+- 在批量图像流水线中把路径失败、解码失败和算法失败分开诊断；
+- 为后续 `project.pixel-lab` 的真实文件输入，以及 `project.classical-inspection` 的可复现输入输出留下基础能力。
+
+这里建立的是 I/O 与通道解释能力，不表示已经会完成工业检测、颜色科学或图像编码系统。
+
+## 3. 前置知识
+
+- **hard：`image.digital-representation`**：复用 H×W、H×W×C、pixel、channel 与 RGB 语义；
+- **hard：`tooling.python-modules`**：复用项目环境、模块导入和缺包诊断；
+- **recommended：`visualization.image-plots`**：复用 scalar image 与 RGB image 的可信显示方法。
+
+本页会使用 dtype 与 min/max 做数据检查，但不会增加 `python.numpy-dtypes` hard dependency：当前检查只需已有数组基础与本页给出的操作支架。
+
+## 4. 核心概念
+
+### 4.1 路径解析与读取失败
+
+**相对路径（relative path）**相对于程序当前工作目录解释。`Path.resolve()` 可把它展开成便于诊断的绝对路径；`Path.is_file()` 用于检查这个位置是否存在普通文件。
+
+`cv2.imread(...)` 读取失败时可能返回 `None`，不保证立刻抛出异常。因此任何 `.shape`、`.dtype` 或像素访问都必须位于 `image is None` 检查之后：
+
+```python
+from pathlib import Path
+
+import cv2
+
+
+def read_checked(path_text, flag=cv2.IMREAD_COLOR):
+    provided_path = Path(path_text)
+    resolved_path = provided_path.resolve()
+    file_exists = resolved_path.is_file()
+    image = cv2.imread(str(provided_path), flag)
+    read_succeeded = image is not None
+
+    print("provided path:", provided_path)
+    print("resolved path:", resolved_path)
+    print("file exists:", file_exists)
+    print("imread succeeded:", read_succeeded)
+
+    if image is None:
+        raise ValueError(
+            "读取失败：检查工作目录、路径拼写、访问权限与文件是否为可解码图像。"
+        )
+
+    return resolved_path, image
+```
+
+这里没有用 `try/except` 静默吞掉失败：路径、存在性和读取结果都被明确打印，异常消息指出了下一步诊断方向。`resolved_path` 用于看清相对路径最终指向哪里；从仓库根目录运行本页示例时，`imread` 使用传入的 ASCII 相对路径。这样既保留可诊断性，也避开部分 Windows OpenCV 构建对非 ASCII 绝对路径支持不一致的问题。遇到任意路径仍读取失败时，不要绕过检查，应保留原路径、解析路径和环境信息继续诊断。
+
+### 4.2 读取后先检查数据契约
+
+读取成功不等于解释正确。先检查：
+
+```python
+def inspect_image(label, image):
+    if image.ndim == 2:
+        channel_count = 1
+        interpretation = "二维标量/灰度数组，no channel axis"
+    elif image.ndim == 3:
+        channel_count = image.shape[2]
+        interpretation = f"三维数组，最后一个 axis 有 {channel_count} 个通道"
+    else:
+        raise ValueError(f"暂不支持的 ndim: {image.ndim}")
+
+    print(f"[{label}] shape:", image.shape)
+    print(f"[{label}] ndim:", image.ndim)
+    print(f"[{label}] dtype:", image.dtype)
+    print(f"[{label}] range:", int(image.min()), "to", int(image.max()))
+    print(f"[{label}] channels:", channel_count)
+    print(f"[{label}] contract:", interpretation)
+    return channel_count
+```
+
+min/max 是合理的快速检查，不是完整质量评分；数据来源和读取 flag 才能决定各通道的真实含义。
+
+### 4.3 BGR 与 RGB：shape 相同，解释不同
+
+OpenCV 使用 `IMREAD_COLOR` 常规读取彩色文件时，最后一轴按 **BGR** 排列；Matplotlib 的 `imshow` 通常把 H×W×3 数组按 **RGB** 解释。正式转换路径是：
+
+```python
+rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+```
+
+本页 fixture 左上角在文件语义中是纯红色 RGB `[255, 0, 0]`。OpenCV 读取后，同一个像素应是 BGR `[0, 0, 255]`；转换后才回到 RGB `[255, 0, 0]`。这个数值断言比“看起来好像变红了”更可靠。
+
+选看：对于已确认的三通道 BGR 数组，`bgr[:, :, ::-1]` 也会反转最后一轴；它只是当前 BGR/RGB 顺序反转的数组技巧，不是 HSV、Lab、灰度或任意颜色空间的通用转换方案。
+
+### 4.4 灰度与四通道的最低限度边界
+
+`cv2.imread(path, cv2.IMREAD_GRAYSCALE)` 通常返回 H×W 二维数组。它没有第三个 channel axis，不能机械访问 `gray.shape[2]`。
+
+`cv2.imread(path, cv2.IMREAD_UNCHANGED)` 会尽量保留源文件通道；某些文件可能得到 H×W×4。第四通道可能是 alpha，但使用前必须确认来源与数据契约。对本页自己构造的最小 PNG，我们明确知道写入数组采用 BGRA 顺序；这不能替代对任意外部四通道文件的确认。
+
+### 4.5 写入与 round-trip
+
+`cv2.imwrite(...)` 返回布尔值。应先保证输出目录存在，再检查返回值与输出文件，最后重新读取：
+
+```python
+write_succeeded = cv2.imwrite(str(output_path), image)
+if not write_succeeded or not output_path.is_file():
+    raise OSError(f"写入失败: {output_path}")
+```
+
+对 PNG 等无损格式，在不改变 dtype、shape 和通道解释的实验里可以检查逐元素相等。JPEG 等有损格式会重新编码像素，round-trip 时不能要求逐元素完全相同；仍应检查 shape、dtype、通道契约和与任务相符的数值差异。
+
+## 5. 初学者直觉解释
+
+把图像文件想成一个“带包装的数组”。文件名存在，只说明包裹可能在那里；`imread` 成功，才说明 OpenCV 能打开包装。打开后还要读标签：尺寸、dtype、数值范围和通道顺序。BGR 与 RGB 像三只外观相同但标签次序不同的抽屉，只看柜子 shape 无法知道红色在哪一格。
+
+因此固定习惯是 **read → validate → inspect → interpret → process**。当结果异常时，这条链能回答问题发生在路径、解码、数据解释、显示还是后续算法。
+
+## 6. 必须掌握到什么程度
+
+当前 `targetDepth: master` 只表示能独立完成机器视觉基础图像 I/O、通道解释和诊断：
+
+- 能解析路径并在访问属性前处理 `None`；
+- 能报告 shape、ndim、dtype、range、channel count 与通道语义；
+- 能用 `cvtColor` 正确完成 BGR→RGB，并正确显示；
+- 能识别 H×W 灰度与 H×W×4 四通道边界；
+- 能检查 `imwrite`，完成无损 round-trip，并解释有损格式边界；
+- 能用清楚的输出定位至少一个故意失败案例。
+
+**当前不学习**：完整 OpenCV I/O API、视频/摄像头 I/O、图像 codec 结构、颜色科学、HSV/Lab、alpha 合成、premultiplied alpha、滤波、阈值和几何变换。
+
+## 7. 常见误区
+
+| 误区 | 为什么错 | 当前修正 |
+| --- | --- | --- |
+| 文件存在，所以 `imread` 一定成功 | 权限、内容或解码仍可能失败 | 同时记录 `is_file()` 与 `image is not None` |
+| 没有立刻抛异常就是读取成功 | `imread` 失败可能只返回 `None` | 在 `.shape` 前做 `None` 检查 |
+| H×W×3 就一定是 RGB | shape 只说明三通道，不说明顺序 | 从来源/flag 确认 BGR 或 RGB |
+| OpenCV 数组直接交给 Matplotlib | BGR 被按 RGB 显示会交换红蓝 | 先 `COLOR_BGR2RGB` |
+| 灰度图也有 `shape[2]` | H×W 没有第三轴 | 根据 `ndim` 分流 |
+| `imwrite` 调用结束就是成功 | 接口会用 bool 报告成功与否 | 检查返回值、文件和重新读取 |
+| 所有 round-trip 都应逐像素相同 | 有损格式会改变像素 | 严格相等实验使用无损格式 |
+| 四通道一定可直接当 BGRA 使用 | 第四通道和顺序依赖来源 | 先确认文件与解码契约 |
+
+## 8. Worked Example
+
+下面使用仓库内 `public/media/opencv-io-color-fixture.ppm`。它是一个 3×2、像素已知、便于断言的稳定教学/测试 fixture。**PPM 不是本篇要掌握的文件格式**，不需要学习其编码结构；PNG、JPEG 等实际图像同样需要这套 I/O 检查流程。
+
+从仓库根目录运行：
+
+```python
+from pathlib import Path
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+def read_checked(path_text, flag=cv2.IMREAD_COLOR):
+    provided_path = Path(path_text)
+    resolved_path = provided_path.resolve()
+    file_exists = resolved_path.is_file()
+    image = cv2.imread(str(provided_path), flag)
+    read_succeeded = image is not None
+
+    print("provided path:", provided_path)
+    print("resolved path:", resolved_path)
+    print("file exists:", file_exists)
+    print("imread succeeded:", read_succeeded)
+
+    if image is None:
+        raise ValueError(
+            "读取失败：检查工作目录、路径拼写、访问权限与文件是否为可解码图像。"
+        )
+    return resolved_path, image
+
+
+def inspect_image(label, image):
+    if image.ndim == 2:
+        channel_count = 1
+        channel_contract = "grayscale scalar array"
+    elif image.ndim == 3:
+        channel_count = image.shape[2]
+        channel_contract = f"last axis has {channel_count} channels"
+    else:
+        raise ValueError(f"暂不支持的 ndim: {image.ndim}")
+
+    print(f"[{label}] shape:", image.shape)
+    print(f"[{label}] ndim:", image.ndim)
+    print(f"[{label}] dtype:", image.dtype)
+    print(f"[{label}] range:", int(image.min()), "to", int(image.max()))
+    print(f"[{label}] channels:", channel_count)
+    print(f"[{label}] contract:", channel_contract)
+    return channel_count
+
+
+# 1. resolve → exists → imread → None check
+fixture_text = "public/media/opencv-io-color-fixture.ppm"
+fixture_path, bgr = read_checked(fixture_text)
+assert fixture_path.is_file()
+
+# 2. inspect → interpret
+assert inspect_image("color BGR", bgr) == 3
+assert bgr.shape == (2, 3, 3)
+assert bgr.dtype == np.uint8
+
+# fixture 左上角文件语义为 RGB 红色；OpenCV 常规彩色读取返回 BGR。
+assert bgr[0, 0].tolist() == [0, 0, 255]
+
+# 3. 正式 BGR → RGB 转换，再交给按 RGB 解释的 Matplotlib。
+rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+assert rgb[0, 0].tolist() == [255, 0, 0]
+
+plt.imshow(rgb)
+plt.title("Known RGB fixture")
+plt.axis("off")
+plt.show()
+
+# 4. 灰度重新读取：二维 H×W，没有 shape[2]。
+_, gray = read_checked(fixture_text, cv2.IMREAD_GRAYSCALE)
+assert inspect_image("grayscale", gray) == 1
+assert gray.shape == (2, 3)
+assert gray.ndim == 2
+
+# 5. 写成无损 PNG，检查 bool、文件存在性与重新读取。
+output_dir = Path("output/opencv-io-color")
+output_dir.mkdir(parents=True, exist_ok=True)
+output_path = output_dir / "fixture-roundtrip.png"
+
+write_succeeded = cv2.imwrite(str(output_path), bgr)
+print("imwrite succeeded:", write_succeeded)
+print("output exists:", output_path.is_file())
+if not write_succeeded or not output_path.is_file():
+    raise OSError(f"写入失败: {output_path}")
+
+_, reloaded = read_checked(output_path)
+assert reloaded.shape == bgr.shape
+assert reloaded.dtype == bgr.dtype
+assert np.array_equal(reloaded, bgr)  # PNG 无损且数据契约未改变
+
+# 6. 自己构造并声明为 BGRA 的最小 PNG，只建立四通道识别意识。
+bgra = np.array(
+    [
+        [[0, 0, 255, 255], [255, 0, 0, 64]],
+        [[0, 255, 0, 128], [255, 255, 255, 0]],
+    ],
+    dtype=np.uint8,
+)
+bgra_path = output_dir / "known-bgra.png"
+bgra_written = cv2.imwrite(str(bgra_path), bgra)
+if not bgra_written or not bgra_path.is_file():
+    raise OSError(f"四通道示例写入失败: {bgra_path}")
+
+bgra_reloaded = cv2.imread(str(bgra_path), cv2.IMREAD_UNCHANGED)
+if bgra_reloaded is None:
+    raise ValueError(f"四通道示例重新读取失败: {bgra_path}")
+assert bgra_reloaded.shape == (2, 2, 4)
+assert bgra_reloaded[0, 1].tolist() == [255, 0, 0, 64]
+
+# 7. 故意失败：诊断信息被打印，异常也不会被静默吞掉。
+try:
+    read_checked("public/media/this-file-does-not-exist.png")
+except ValueError as error:
+    print("diagnosis:", error)
+```
+
+这段实验中，已知像素分别验证了 BGR 数据与 RGB 显示语义；灰度和 BGRA 检查验证了 shape 分流；PNG round-trip 验证了写入成功、重新读取与像素契约；错误路径则证明 `None` 在 `.shape` 前被安全处理。
+
+## 9. Active Recall
+
+1. `cv2.imread` 失败时可能返回什么？为什么不能立刻访问 `.shape`？
+2. `Path.is_file()` 为 true，为什么仍不能证明图像已经解码成功？
+3. H×W 与 H×W×3 分别表示什么最低限度契约？
+4. 为什么 OpenCV 读取的三通道图在 Matplotlib 中可能红蓝颠倒？
+5. BGR 与 RGB 的差异为什么不是 shape 差异？
+6. 为什么 H×W 灰度数组不能机械访问 `shape[2]`？
+7. `cv2.imwrite` 的返回值为什么必须检查？
+8. 为什么 JPEG round-trip 通常不能使用逐元素完全相等作为验收？
+9. H×W×4 的第四通道为什么只能先说“可能是 alpha”？
+
+完成标准：不用翻正文，能回答每题并给出一次对应检查或反例；若把“文件存在”等同于“读取成功”，或把三通道自动等同于 RGB，需要回到 4.1–4.4。
+
+## 10. Practice
+
+### 理解检查
+
+判断下一步动作：
+
+- `image is None`；
+- `shape == (480, 640)`；
+- `shape == (480, 640, 3)`，来源是 OpenCV 默认彩色读取；
+- `shape == (480, 640, 4)`，来源未知；
+- `imwrite` 返回 `False`。
+
+完成标准：分别写出“停止属性访问并诊断”“按二维标量/灰度契约检查”“按 BGR 来源解释并在 RGB 显示前转换”“确认第四通道与顺序”“检查目录/扩展名/写权限并视为失败”，不能只写 shape 名称。
+
+### 数值练习
+
+使用 fixture，记录 `bgr[0, 0]`、`rgb[0, 0]`、两者 shape，并解释为什么数值顺序不同但指向同一红色像素语义。再读取灰度版本，记录 shape 与 ndim。
+
+完成标准：BGR 为 `[0, 0, 255]`，RGB 为 `[255, 0, 0]`，二者均为 `(2, 3, 3)`；灰度为 `(2, 3)` 且 `ndim == 2`。
+
+### 视觉小练习
+
+沿 Worked Example 独立完成一次完整 I/O 卡片：正确显示 fixture，写出 PNG、检查结果、重新读取并做严格无损断言；然后把路径改成不存在文件，保留可理解诊断输出。
+
+完成标准：卡片含 provided/resolved path、exists、read success、shape、ndim、dtype、range、channel count/interpretation、BGR/RGB 已知像素、显示截图、imwrite bool、文件存在性、reload 与 `np.array_equal`；失败案例不能出现 `None.shape` 异常。另用一句话说明若输出改为 JPEG，应改用任务相关容差而非逐元素相等。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Concept**：`opencv.io-color` 提供可靠文件输入输出、通道解释和失败诊断；
+- **Capability**：支撑路线中的图像数据契约检查、可复现图像 I/O 与颜色通道防错；
+- **Project**：未来 `project.pixel-lab` 的 Stage 2 增量可将本能力映射为“读取并诊断真实图像”的 task、I/O 诊断卡 deliverable、无损 round-trip acceptance criterion 和对应 evidence；本轮不修改该 Project 的 metadata；
+- **Application**：为后续 `opencv.roi-masks`、滤波、阈值、轮廓与批处理提供可信输入，也为 draft `project.classical-inspection` 保留正式基础，但不把 draft 项目伪装成已可执行教程。
+
+## 12. Mastery Evidence
+
+### Evidence 1：读取、解释与失败诊断卡
+
+独立选择一张真实图像（可直接使用仓库 fixture），提交：输入与解析路径、文件存在性、读取成功状态、shape、ndim、dtype、range、channel count、channel interpretation、BGR/RGB 已知像素验证、正确显示结果，以及至少一个故意失败路径的诊断。
+
+通过标准：`.shape` 只在 `None` 检查后访问；能区分三通道 shape 与颜色语义；失败输出给出明确下一步，而不是静默跳过。
+
+### Evidence 2：无损写入与通道契约 round-trip
+
+沿正文框架写出 PNG，检查 `imwrite`、文件存在和重新读取，比较 shape、dtype、通道语义与像素；同时生成并识别正文的最小 BGRA 示例。
+
+通过标准：PNG 数据未改变时 `np.array_equal` 为 true；BGRA 重新读取为 H×W×4 且已说明第四通道边界；能解释 JPEG 为什么不能沿用严格像素相等断言。无需从零设计文件管理系统、颜色科学或编码算法。
+
+## 13. 后续复用与复习
+
+- 学 `opencv.roi-masks` 前，复查 H×W/H×W×3、BGR 契约与失败检查；
+- 学滤波、阈值和轮廓时，先打印输入 dtype、range 与通道数；
+- 学批处理时，把 `read_checked` 思路扩展到每个输入文件，并保留失败记录；
+- 7 天后换一张 PNG/JPEG 重做诊断卡，特别说明哪些 round-trip 断言需要因格式而改变。
+
+## 14. 精选学习资源
+
+### OpenCV-Python Tutorials（官方文档）
+
+- **必看**：Getting Started with Images 中 `imread`、读取 flags、`None`/失败检查与 `imwrite`；颜色转换文档中的 BGR↔RGB、BGR→Gray；
+- **选看**：`IMREAD_UNCHANGED` 和文件扩展名影响编码行为的最低限度说明；
+- **跳过**：GUI 深入、video、HSV/`inRange`、filtering、threshold、geometry、feature、camera 与 advanced color processing；
+- **看到什么程度即可**：能把官方函数签名与本页的完整检查流程对应起来。正文是主教材，官方文档只用于核对接口与 flag，不要求顺序学习整套教程。

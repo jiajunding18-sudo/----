@@ -85,3 +85,26 @@ test("360px 下 Stage 2 图像数据契约的代码、表格与 TOC 不撑宽页
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
 });
+
+test("360px 下 OpenCV I/O 的长代码、表格、TOC 与键盘链接保持可访问", async ({
+  page,
+}) => {
+  await page.goto("/knowledge/opencv-io-color/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(5);
+  await expect(document.getByRole("table")).toBeVisible();
+  await expect(page.locator('[data-concept-toc="mobile"]')).toBeVisible();
+  await expect(document).toContainText("cv2.COLOR_BGR2RGB");
+
+  const resourceLink = page.getByRole("link", {
+    name: "OpenCV-Python Tutorials",
+    exact: true,
+  });
+  await resourceLink.focus();
+  await expect(resourceLink).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+});

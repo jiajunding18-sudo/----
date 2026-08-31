@@ -1,0 +1,6 @@
+P3
+# Stable 3x2 RGB fixture for opencv.io-color teaching and tests.
+3 2
+255
+255 0 0   0 255 0   0 0 255
+255 255 0   0 255 255   255 0 255

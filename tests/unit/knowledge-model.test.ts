@@ -35,6 +35,7 @@ const stageTwoConceptIds = [
   "python.numpy-dtypes",
   "image.digital-representation",
   "visualization.image-plots",
+  "opencv.io-color",
 ] as const;
 
 describe("Knowledge manifest 派生视图", () => {
@@ -50,7 +51,7 @@ describe("Knowledge manifest 派生视图", () => {
       ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      Array.from({ length: 21 }, (_, index) => index + 1),
+      Array.from({ length: 22 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -94,12 +95,12 @@ describe("Knowledge manifest 派生视图", () => {
     });
     expect(stageTwo).toMatchObject({
       contentStatus: "available",
-      publishedConceptCount: 4,
+      publishedConceptCount: 5,
     });
     expect(knowledge.availableStageCount).toBe(4);
     expect(knowledge.plannedStageCount).toBe(13);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      21, 0, 0,
+      22, 0, 0,
     ]);
   });
 

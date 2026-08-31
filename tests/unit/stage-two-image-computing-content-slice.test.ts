@@ -18,12 +18,12 @@ const stageTwoConceptIds = [
   "python.numpy-dtypes",
   "image.digital-representation",
   "visualization.image-plots",
+  "opencv.io-color",
 ] as const;
 
 const stageTwoConceptIdSet = new Set<string>(stageTwoConceptIds);
 
 const unpublishedStageTwoConceptIds = [
-  "opencv.io-color",
   "opencv.roi-masks",
   "opencv.geometric-transforms",
   "opencv.filtering-basics",
@@ -42,6 +42,9 @@ const expectedDependencies = [
   ["python.numpy-arrays", "image.digital-representation", "hard"],
   ["math.coordinate-frames", "image.digital-representation", "recommended"],
   ["python.numpy-arrays", "visualization.image-plots", "hard"],
+  ["image.digital-representation", "opencv.io-color", "hard"],
+  ["tooling.python-modules", "opencv.io-color", "hard"],
+  ["visualization.image-plots", "opencv.io-color", "recommended"],
 ] as const;
 
 const requiredSectionHeadings = [
@@ -83,8 +86,8 @@ async function loadStageTwoConcepts() {
   return concepts.filter(({ meta }) => stageTwoConceptIdSet.has(meta.id));
 }
 
-describe("Phase 9D-1 Stage 2 第一批图像计算基础", () => {
-  it("只发布约定的四个 required/master Concept，并将 checkpoint 设为 available", () => {
+describe("Phase 9D Stage 2 图像计算基础与 OpenCV I/O", () => {
+  it("只发布约定的五个 required/master Concept，并将 checkpoint 保持 available", () => {
     const concepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.image-computing")
       .toSorted((left, right) => left.order - right.order);
@@ -93,7 +96,7 @@ describe("Phase 9D-1 Stage 2 第一批图像计算基础", () => {
     );
 
     expect(concepts.map(({ id }) => id)).toEqual(stageTwoConceptIds);
-    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40]);
+    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40, 50]);
     expect(
       concepts.every(
         ({ publicationStatus, requiredness, targetDepth, trackIds }) =>
@@ -131,8 +134,8 @@ describe("Phase 9D-1 Stage 2 第一批图像计算基础", () => {
       ]),
     ).toEqual(expect.arrayContaining([...expectedDependencies]));
     expect(dependencies).toHaveLength(expectedDependencies.length);
-    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(6);
-    expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(2);
+    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(8);
+    expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(3);
     const dependencyPairs = dependencies.map(
       ({ prerequisiteId, targetId }) => `${String(prerequisiteId)}->${String(targetId)}`,
     );
@@ -144,9 +147,95 @@ describe("Phase 9D-1 Stage 2 第一批图像计算基础", () => {
     );
   });
 
-  it("四篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
+  it("opencv.io-color 保持正式依赖、master 边界与完整教学闭环", async () => {
     const concepts = await loadStageTwoConcepts();
-    expect(concepts).toHaveLength(4);
+    const concept = concepts.find(({ meta }) => meta.id === "opencv.io-color");
+
+    expect(concept?.meta).toMatchObject({
+      publicationStatus: "published",
+      requiredness: "required",
+      targetDepth: "master",
+      resourceIds: ["resource.opencv-python-tutorials"],
+    });
+    expect(concept?.meta.dependencies).toEqual([
+      expect.objectContaining({
+        conceptId: "image.digital-representation",
+        kind: "hard",
+      }),
+      expect.objectContaining({
+        conceptId: "tooling.python-modules",
+        kind: "hard",
+      }),
+      expect.objectContaining({
+        conceptId: "visualization.image-plots",
+        kind: "recommended",
+      }),
+    ]);
+    expect(concept?.meta.dependencies.map(({ conceptId }) => conceptId)).not.toContain(
+      "python.numpy-dtypes",
+    );
+
+    requiredSectionHeadings.forEach((heading) => {
+      expect(concept?.body, `opencv.io-color 缺少 ${heading}`).toContain(heading);
+    });
+    expect(concept?.meta.masteryCriteria).toHaveLength(2);
+    expect(concept?.body).toContain("resolve path");
+    expect(concept?.body).toContain("if image is None:");
+    expect(concept?.body).toContain("cv2.COLOR_BGR2RGB");
+    expect(concept?.body).toContain("assert bgr[0, 0].tolist() == [0, 0, 255]");
+    expect(concept?.body).toContain("assert rgb[0, 0].tolist() == [255, 0, 0]");
+    expect(concept?.body).toContain("cv2.IMREAD_GRAYSCALE");
+    expect(concept?.body).toContain("cv2.IMREAD_UNCHANGED");
+    expect(concept?.body).toContain("write_succeeded = cv2.imwrite");
+    expect(concept?.body).toContain("np.array_equal(reloaded, bgr)");
+    expect(concept?.body).toContain("JPEG 等有损格式");
+    expect(concept?.body).toContain("PPM 不是本篇要掌握的文件格式");
+  });
+
+  it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {
+    const fixture = await readFile(
+      resolve(process.cwd(), "public/media/opencv-io-color-fixture.ppm"),
+      "utf8",
+    );
+    const tokens = fixture
+      .split(/\r?\n/u)
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join(" ")
+      .trim()
+      .split(/\s+/u);
+
+    expect(tokens.slice(0, 4)).toEqual(["P3", "3", "2", "255"]);
+    expect(tokens.slice(4).map(Number)).toEqual([
+      255, 0, 0,
+      0, 255, 0,
+      0, 0, 255,
+      255, 255, 0,
+      0, 255, 255,
+      255, 0, 255,
+    ]);
+  });
+
+  it("OpenCV 官方资源只保留当前 I/O 与通道转换范围", () => {
+    const resource = contentManifest.resources.find(
+      ({ id }) => id === "resource.opencv-python-tutorials",
+    );
+
+    expect(resource).toMatchObject({
+      type: "official-doc",
+      verification: "verified",
+      url: "https://docs.opencv.org/4.x/d6/d00/tutorial_py_root.html",
+      lastCheckedAt: "2026-08-31",
+    });
+    expect(resource?.recommendedParts).toEqual([
+      expect.stringContaining("必看：Getting Started with Images"),
+      expect.stringContaining("选看：IMREAD_UNCHANGED"),
+      expect.stringContaining("跳过：GUI 深入"),
+    ]);
+  });
+
+  it("五篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
+    const concepts = await loadStageTwoConcepts();
+    expect(concepts).toHaveLength(5);
 
     concepts.forEach(({ body, meta }) => {
       requiredSectionHeadings.forEach((heading) => {
@@ -315,13 +404,13 @@ describe("Phase 9D-1 Stage 2 第一批图像计算基础", () => {
     });
   });
 
-  it("ROADMAP 同步发布边界，并明确剩余八个节点未发布", async () => {
+  it("ROADMAP 同步发布边界，并明确剩余七个节点未发布", async () => {
     const roadmap = await readFile(resolve(process.cwd(), "ROADMAP.md"), "utf8");
     expect(roadmap).toContain(
       "`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`",
     );
     expect(roadmap).toContain(
-      "Stage 2 当前只发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点，其余八个节点仍未发布",
+      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点，以及 S2-U3 的 `opencv.io-color`，共五个正式 Concept；其余七个节点仍未发布",
     );
     expect(roadmap).toContain(
       "| `python.numpy-arrays` | NumPy 数组、轴、切片与广播（Arrays, Axes, Broadcasting） | M | `tooling.dev-environment`, `tooling.python-core`, `math.vectors-matrices` | `tooling.debugging` |",

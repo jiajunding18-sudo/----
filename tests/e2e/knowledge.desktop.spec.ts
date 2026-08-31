@@ -23,6 +23,7 @@ const conceptIds = [
   "python.numpy-dtypes",
   "image.digital-representation",
   "visualization.image-plots",
+  "opencv.io-color",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -55,7 +56,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   await page.goto("/knowledge/");
 
   const results = page.locator("[data-knowledge-concept-id]");
-  await expect(results).toHaveCount(21);
+  await expect(results).toHaveCount(22);
   expect(
     await results.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-knowledge-concept-id")),
@@ -68,8 +69,8 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   const trackFilter = page.getByLabel("按 Track 浏览");
   await expect(stageFilter.locator("option")).toHaveCount(18);
   await expect(trackFilter.locator("option")).toHaveText([
-    "全部 Track（21）",
-    "公共主干（21）",
+    "全部 Track（22）",
+    "公共主干（22）",
     "3D 工业视觉高级分支（0）",
     "计算成像高级分支（0）",
   ]);
@@ -87,9 +88,12 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     page.locator('[data-knowledge-concept-id="math.coordinate-frames"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.image-computing");
-  await expect(results).toHaveCount(4);
+  await expect(results).toHaveCount(5);
   await expect(
     page.locator('[data-knowledge-concept-id="python.numpy-arrays"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-knowledge-concept-id="opencv.io-color"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.digital-image-processing");
   await expect(results).toHaveCount(0);
@@ -104,7 +108,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     "目前没有已发布 Concept",
   );
   await page.getByRole("button", { name: "全部知识", exact: true }).click();
-  await expect(results).toHaveCount(21);
+  await expect(results).toHaveCount(22);
 
   const developmentEnvironment = page.locator(
     '[data-knowledge-concept-id="tooling.dev-environment"]',

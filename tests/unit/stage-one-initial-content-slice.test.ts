@@ -91,7 +91,7 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
     expect(stageOneB?.contentStatus).toBe("available");
   });
 
-  it("建立最小 hard / recommended DAG，不伪造尚未发布的 NumPy Concept", () => {
+  it("建立最小 hard / recommended DAG，不让后续 NumPy 节点成为 Stage 1A 前置", () => {
     const dependencies = contentManifest.dependencies.filter(({ targetId }) =>
       stageOneAConceptIdSet.has(targetId),
     );
@@ -126,11 +126,11 @@ describe("Phase 9A Stage 1A 第一批正式学习内容", () => {
         }),
       ]),
     );
-    expect(contentManifest.concepts.map(({ id }) => String(id))).not.toContain(
+    expect(contentManifest.concepts.map(({ id }) => String(id))).toContain(
       "python.numpy-arrays",
     );
     expect(
-      contentManifest.dependencies.flatMap(({ prerequisiteId, targetId }) => [
+      dependencies.flatMap(({ prerequisiteId, targetId }) => [
         String(prerequisiteId),
         String(targetId),
       ]),

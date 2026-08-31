@@ -49,6 +49,13 @@ const stageOneBConceptIds = [
   "math.numerical-stability",
 ] as const;
 
+const stageTwoConceptIds = [
+  "python.numpy-arrays",
+  "python.numpy-dtypes",
+  "image.digital-representation",
+  "visualization.image-plots",
+] as const;
+
 function getStage(stageId: string): ContentManifest["stages"][number] {
   const stage = contentManifest.stages.find(({ id }) => id === stageId);
   if (!stage) {
@@ -98,7 +105,7 @@ describe("Phase 2B-1 路线 catalog", () => {
     );
   });
 
-  it("保留 Stage 0、Stage 1A 与 Stage 1B 的正式 Concept，其余 checkpoint 不产生已发布 Concept", () => {
+  it("保留 Stage 0、Stage 1 与 Stage 2 首批正式 Concept，其余 checkpoint 不产生已发布 Concept", () => {
     const stageZeroConcepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.tooling-foundations")
       .sort((left, right) => left.order - right.order);
@@ -125,12 +132,21 @@ describe("Phase 2B-1 路线 catalog", () => {
     expect(stageOneBConcepts.map(({ id }) => id)).toEqual(stageOneBConceptIds);
     expect(stageOneBConcepts.every(({ publicationStatus }) => publicationStatus === "published"))
       .toBe(true);
+
+    const stageTwoConcepts = contentManifest.concepts
+      .filter(({ stageId }) => stageId === "stage.image-computing")
+      .sort((left, right) => left.order - right.order);
+
+    expect(stageTwoConcepts.map(({ id }) => id)).toEqual(stageTwoConceptIds);
+    expect(stageTwoConcepts.every(({ publicationStatus }) => publicationStatus === "published"))
+      .toBe(true);
     expect(
       contentManifest.concepts.filter(
         ({ stageId }) =>
           stageId !== "stage.tooling-foundations" &&
           stageId !== "stage.vision-math-immediate" &&
-          stageId !== "stage.vision-math-geometry-optimization",
+          stageId !== "stage.vision-math-geometry-optimization" &&
+          stageId !== "stage.image-computing",
       ),
     ).toEqual([]);
     expect(getStage("stage.tooling-foundations").contentStatus).toBe(
@@ -142,7 +158,8 @@ describe("Phase 2B-1 路线 catalog", () => {
           ({ id }) =>
             id !== "stage.tooling-foundations" &&
             id !== "stage.vision-math-immediate" &&
-            id !== "stage.vision-math-geometry-optimization",
+            id !== "stage.vision-math-geometry-optimization" &&
+            id !== "stage.image-computing",
         )
         .every(({ contentStatus }) => contentStatus === "planned"),
     ).toBe(true);
@@ -152,6 +169,7 @@ describe("Phase 2B-1 路线 catalog", () => {
     expect(
       getStage("stage.vision-math-geometry-optimization").contentStatus,
     ).toBe("available");
+    expect(getStage("stage.image-computing").contentStatus).toBe("available");
   });
 
   it("保留 ROADMAP 声明的非线性 entryGate 与高级方向 OR 门槛", () => {

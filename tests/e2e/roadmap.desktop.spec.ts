@@ -27,6 +27,13 @@ const stageOneBConceptIds = [
   "math.numerical-stability",
 ] as const;
 
+const stageTwoConceptIds = [
+  "python.numpy-arrays",
+  "python.numpy-dtypes",
+  "image.digital-representation",
+  "visualization.image-plots",
+] as const;
+
 function trackBrowserErrors(page: Page) {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -238,6 +245,25 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await expect(
     stageOneB.locator('[data-dependency-kind="recommended"]'),
   ).toHaveCount(4);
+
+  const stageTwoConceptSection = page.locator(
+    '[data-stage-id="stage.image-computing"]',
+  );
+  await stageTwoConceptSection.locator("summary").click();
+  await expect(stageTwoConceptSection.locator("details")).toHaveAttribute("open", "");
+  const stageTwoConcepts = stageTwoConceptSection.locator("[data-concept-id]");
+  await expect(stageTwoConcepts).toHaveCount(4);
+  expect(
+    await stageTwoConcepts.evaluateAll((items) =>
+      items.map((item) => item.getAttribute("data-concept-id")),
+    ),
+  ).toEqual(stageTwoConceptIds);
+  await expect(
+    stageTwoConceptSection.locator('[data-dependency-kind="hard"]'),
+  ).toHaveCount(6);
+  await expect(
+    stageTwoConceptSection.locator('[data-dependency-kind="recommended"]'),
+  ).toHaveCount(2);
   await expect(stage.locator('[data-dependency-kind="hard"]')).toHaveCount(7);
   await expect(stage.locator('[data-dependency-kind="recommended"]')).toHaveCount(5);
   await expect(stage.getByText("M · 必须掌握")).toHaveCount(7);

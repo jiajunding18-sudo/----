@@ -1,0 +1,257 @@
+---
+schemaVersion: 1
+id: python.numpy-dtypes
+slug: numpy-dtypes
+title: NumPy dtype、数值范围与 copy/view
+englishTitle: NumPy Dtypes, Numeric Ranges, and Copy/View
+aliases:
+  - NumPy dtype
+  - uint8 overflow
+  - NumPy copy view
+searchKeywords:
+  - dtype
+  - uint8
+  - overflow
+  - underflow
+  - astype
+  - copy
+  - view
+  - shared memory
+summary: 能根据图像数值含义选择和转换 dtype，识别 uint8 溢出，并判断切片是共享数据的 view 还是独立 copy。
+why: 图像数组不仅有 shape，还有 dtype 与数值范围；忽略它们会让“能运行”的亮度运算产生错误结果，也会让一次局部修改意外改动原图。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 20
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 4
+  max: 5
+dependencies:
+  - conceptId: python.numpy-arrays
+    kind: hard
+    reason: 需要先能解释数组 shape、axis 与切片，才能判断 dtype 转换和切片共享对图像操作的影响。
+tags:
+  - Python
+  - NumPy
+  - dtype
+  - 图像数值
+learningOutcomes:
+  - 能解释常见图像 dtype 的数值范围，并为计算过程选择安全的中间 dtype。
+  - 能通过显式转换、裁剪与转回目标 dtype，避免 uint8 overflow / underflow。
+  - 能用可复现实验判断切片是共享数据的 view 还是独立 copy，并在需要隔离修改时使用 copy。
+masteryCriteria:
+  - id: criterion.python-numpy-dtypes.safe-arithmetic
+    description: 对一个 uint8 图像数组完成增亮和减暗实验，复现 overflow / underflow，并用安全中间 dtype、clip 与显式转换得到符合预期的结果。
+    evidenceHint: 提交输入/中间/输出 dtype 与范围表、代码、断言，并解释为什么代码未报错不等于数值正确。
+    required: true
+  - id: criterion.python-numpy-dtypes.copy-view
+    description: 独立构造切片 view 与显式 copy 的对照实验，判断修改是否传播到原数组，并为一次需要隔离修改的图像操作选择正确方案。
+    evidenceHint: 提交修改前后数组、np.shares_memory 或等价检查、预测与实测结果，以及选择 view/copy 的理由。
+    required: true
+resourceIds:
+  - resource.numpy-absolute-beginners
+publicationStatus: published
+contentVersion: 2026.08.31
+---
+
+# NumPy dtype、数值范围与 copy/view（NumPy Dtypes, Numeric Ranges, and Copy/View）
+
+本页只处理机器视觉中最常见的两个数据契约：数值以什么类型保存，以及一个新变量是否仍与原数组共享数据。目标不是记住全部 NumPy dtype。
+
+## 1. 这是什么
+
+**数据类型（data type, `dtype`）**规定数组中每个元素如何存储和解释。常见图像会使用 `uint8`：无符号 8 位整数，只能表示 0 到 255。算法计算也常使用 `float32` 或更宽的有符号整数。
+
+```python
+import numpy as np
+
+image = np.array([0, 127, 255], dtype=np.uint8)
+print(image.dtype)  # uint8
+```
+
+另一个容易混淆的概念是 **view 与 copy**：view 与原数组共享底层数据；copy 拥有独立数据。两者可能有相同的 shape 和 dtype，却有不同的修改行为。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+你已经能切片和批量运算数组。现在必须知道这些运算是否越过 dtype 范围，以及切出的 ROI 是否会把修改传回原图，否则后续显示、阈值、滤波和保存结果都可能悄悄错误。
+
+### 在机器视觉中会在哪里使用
+
+- 增亮、相减、归一化和滤波前选择安全计算类型；
+- 解释 `uint8` 图像的 0–255 与浮点图像的数值约定；
+- 防止中间结果 overflow（溢出）或 underflow（下溢/回绕）；
+- 决定 ROI 修改应作用于原图，还是应在独立副本中进行；
+- 检查算法输入、计算中间量与输出保存之间的转换边界。
+
+## 3. 前置知识
+
+硬前置是 `python.numpy-arrays`：应能读取 `shape`、`ndim`、`dtype`，并用 slicing 得到 ROI。Stage 1 的 `math.numerical-stability` 提供“数值表示会影响可靠性”的背景，但它不是本页 hard dependency；本页聚焦可直接观察的 dtype 行为。
+
+## 4. 核心概念
+
+### dtype 与数值范围
+
+| dtype | 当前需要知道的范围/特点 | 常见用途 |
+| --- | --- | --- |
+| `uint8` | 整数 0–255，不能表示负数 | 常见 8-bit 图像存储 |
+| `int16` | 可表示负数，范围比 `uint8` 宽 | 小型加减运算的安全中间类型 |
+| `float32` | 可表示小数和负数 | 归一化、滤波和模型计算 |
+
+dtype 与“图像看起来是什么”不是同一件事。`float32` 数组可能约定在 0–1，也可能仍是 0–255；必须同时记录 dtype、实际 `min/max` 和数据约定。
+
+### overflow、underflow 与安全转换
+
+当结果超出固定整数 dtype 可表示的范围时，底层整数运算可能回绕。例如 `uint8` 的 250 加 20，若运算仍在 `uint8` 中进行，就不能得到 270。
+
+稳妥的基本流程是：
+
+1. 转到能容纳中间结果的 dtype；
+2. 完成运算；
+3. 按目标范围裁剪（clip）；
+4. 明确转回目标 dtype。
+
+```python
+safe = np.clip(image.astype(np.int16) + 20, 0, 255).astype(np.uint8)
+```
+
+`astype` 通常会产生转换后的新数组。不要把“最终要保存为 `uint8`”误解为“所有中间计算都必须使用 `uint8`”。
+
+### 隐式转换不能替代检查
+
+不同 dtype 混合运算时，NumPy 会按照类型规则决定结果 dtype。当前不要求背完整规则；工程上应在关键边界打印或断言结果 dtype，而不是猜测。
+
+```python
+normalized = image.astype(np.float32) / 255.0
+assert normalized.dtype == np.float32
+assert 0.0 <= normalized.min() <= normalized.max() <= 1.0
+```
+
+### view 与 copy
+
+基本 slicing 通常返回 view。修改 view，原数组相同位置也会改变：
+
+```python
+roi_view = image2d[0:2, 0:2]
+roi_copy = image2d[0:2, 0:2].copy()
+```
+
+- 想原地修改原图的一块区域，可以有意使用 view；
+- 想保留原图并独立实验，应显式 `.copy()`；
+- 不确定时，可用 `np.shares_memory(a, b)` 检查是否共享内存。
+
+当前只需理解可观察的共享修改行为，不学习 stride、底层内存布局或完整高级索引规则。
+
+## 5. 初学者直觉解释
+
+dtype 像一个有边界的量杯：`uint8` 只能装 0–255。把计算塞进过小的量杯，程序可能继续运行，但数字已经不是你想表达的物理或亮度含义。
+
+view 像同一张纸上的窗口，copy 像复印件。改窗口里看到的内容会改原纸；改复印件不会。
+
+## 6. 必须掌握到什么程度
+
+- 能在运算前后检查 dtype、数值范围和单位/约定。
+- 能独立处理 `uint8` 加减中的 overflow / underflow。
+- 能使用 `astype`、`clip` 和断言建立安全转换边界。
+- 能预测并验证切片修改是否传播，按意图选择 view 或 copy。
+
+当前不学习全部 dtype 转换规则、位级表示、stride、缓存优化、structured dtype 或性能调优。
+
+## 7. 常见误区
+
+- 代码未报错，就认为数值一定正确。
+- 只看 dtype，不看实际 min/max 和 0–1、0–255 等数值约定。
+- 直接在 `uint8` 中做可能产生负数或超过 255 的运算。
+- 以为所有切片都会复制数据，修改 ROI 后意外改变原图。
+- 为避免共享一律复制所有数组，既不说明意图也增加不必要的内存占用。
+
+## 8. Worked Example：安全亮度运算与共享修改
+
+```python
+import numpy as np
+
+bright = np.array([250], dtype=np.uint8)
+dark = np.array([5], dtype=np.uint8)
+
+# 明确让两侧都保持 uint8，复现回绕现象。
+wrong_bright = bright + np.array([20], dtype=np.uint8)
+wrong_dark = dark - np.array([10], dtype=np.uint8)
+print(wrong_bright[0], wrong_dark[0])  # 14, 251
+
+safe_bright = np.clip(bright.astype(np.int16) + 20, 0, 255).astype(np.uint8)
+safe_dark = np.clip(dark.astype(np.int16) - 10, 0, 255).astype(np.uint8)
+assert safe_bright[0] == 255
+assert safe_dark[0] == 0
+
+source = np.arange(9, dtype=np.uint8).reshape(3, 3)
+roi_view = source[0:2, 0:2]
+roi_copy = source[0:2, 0:2].copy()
+
+assert np.shares_memory(source, roi_view)
+assert not np.shares_memory(source, roi_copy)
+
+roi_view[0, 0] = 255
+assert source[0, 0] == 255
+
+roi_copy[0, 1] = 200
+assert source[0, 1] != 200
+```
+
+第一个对照说明：错误结果仍可能是合法 `uint8`，所以“没有异常”不是正确性证据。第二个对照中，view 与 copy 的 shape、dtype 相同；只有共享关系不同。完成图像操作时应把这种关系写成明确选择。
+
+## 9. Active Recall 主动回忆
+
+1. 为什么 `uint8(250) + uint8(20)` 不能表达期望的 270？
+2. 为什么安全流程通常先扩大 dtype，再运算、clip、转回？
+3. `float32` 是否自动意味着图像范围是 0–1？为什么？
+4. view 与 copy 的核心差别是什么？
+5. 什么时候修改 ROI 应传播到原图，什么时候不应传播？
+6. “代码未报错”为什么不能证明图像数值正确？
+
+## 10. Practice 练习
+
+### 理解检查
+
+判断下面说法并解释：`dtype=float32` 的图像一定在 0–1。完成标准：回答“错误”，并指出还需检查实际 min/max 和数据约定。
+
+### 数值练习
+
+对 `[0, 5, 250, 255]` 的 `uint8` 数组分别加 20、减 10；先复现回绕，再使用 `int16 → clip → uint8` 修复。完成标准：输出均在 0–255，边界期望分别可由断言验证，并记录每一步 dtype。
+
+### 视觉小练习
+
+创建一个 `4×5` 灰度数组，取中心 ROI。分别通过 view 和 copy 将 ROI 置零。完成标准：运行前先预测原图是否改变；使用 `np.shares_memory` 与数组对照验证预测；说明实际图像处理中为何选择其中一种。
+
+### 错误诊断
+
+给一段“直接对 `uint8` 图像做减法”的代码，找出一个不会抛异常但会产生错误亮度的输入。完成标准：保存错误值、安全值、两者 dtype，并解释错误来自表示范围而非 NumPy 随机故障。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **当前正式 Project 映射**：本轮不修改 Pixel Lab 的 requirements 或 evidence；当前 manifest 不会伪造新的 Project 反向映射。
+- **未来 Pixel Lab Stage 2 增量**：dtype/range 报告与 copy/view 对照可成为图像数组检查证据，但必须与正式 task、deliverable 和 acceptance criterion 同时发布。
+- **后续 Capability**：支持可信图像显示、OpenCV 像素运算、阈值/滤波中间结果和批处理数据契约。
+- **Application**：避免亮度计算回绕、错误归一化和 ROI 修改污染原始数据。
+
+学完本页不表示已经掌握颜色空间、图像 I/O、滤波或完整数值稳定性分析。
+
+## 12. Mastery Evidence 掌握证据
+
+1. 提交一个 `uint8` 明暗边界实验：复现 overflow / underflow，再通过安全中间 dtype、clip 与显式转回修复；包含 dtype/range 表、断言和“代码未报错为何仍错误”的解释。
+2. 提交一个 ROI view/copy 对照：运行前预测修改传播，运行后以 `np.shares_memory` 和数组结果验证，并说明一次需要保留原图的任务为何必须显式 copy。
+
+达到 `master` 是能够独立守住机器视觉数组的类型与共享边界，不是掌握 NumPy 的底层内存实现。
+
+## 13. 后续复用与复习
+
+`image.digital-representation` 会把 dtype 与强度范围放进 pixel/channel 语义；`visualization.image-plots` 会要求显示时同时报告 dtype 和真实范围。后续 OpenCV I/O、阈值、滤波和批处理都会反复使用安全转换与 copy/view 判断。
+
+24 小时后不看正文重写安全加减流程；7 天后换一个二维数组，先预测再验证 view/copy 的传播行为。
+
+## 14. 精选学习资源
+
+- **NumPy: the absolute basics for beginners**：必看 dtype 属性，以及 “How to create an array from existing data” 中与 view/copy 相关的短段落；只复现 `uint8` 范围、显式 `astype`、切片共享和 `.copy()`。选看 reshape/flatten 对 copy/view 的提示；跳过 dtype 百科、stride、性能优化、随机数和高级索引组合。

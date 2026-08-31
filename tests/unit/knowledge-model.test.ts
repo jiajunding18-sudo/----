@@ -30,15 +30,27 @@ const stageOneBConceptIds = [
   "math.numerical-stability",
 ] as const;
 
+const stageTwoConceptIds = [
+  "python.numpy-arrays",
+  "python.numpy-dtypes",
+  "image.digital-representation",
+  "visualization.image-plots",
+] as const;
+
 describe("Knowledge manifest 派生视图", () => {
   it("只纳入已发布 Concept，并按正式 Stage / Concept order 返回推荐序位", () => {
     const knowledge = buildKnowledgeView(contentManifest);
 
     expect(knowledge.concepts.map(({ concept }) => concept.id)).toEqual(
-      [...stageZeroConceptIds, ...stageOneAConceptIds, ...stageOneBConceptIds],
+      [
+        ...stageZeroConceptIds,
+        ...stageOneAConceptIds,
+        ...stageOneBConceptIds,
+        ...stageTwoConceptIds,
+      ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+      Array.from({ length: 21 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -81,13 +93,13 @@ describe("Knowledge manifest 派生视图", () => {
       publishedConceptCount: 5,
     });
     expect(stageTwo).toMatchObject({
-      contentStatus: "planned",
-      publishedConceptCount: 0,
+      contentStatus: "available",
+      publishedConceptCount: 4,
     });
-    expect(knowledge.availableStageCount).toBe(3);
-    expect(knowledge.plannedStageCount).toBe(14);
+    expect(knowledge.availableStageCount).toBe(4);
+    expect(knowledge.plannedStageCount).toBe(13);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      17, 0, 0,
+      21, 0, 0,
     ]);
   });
 
@@ -121,6 +133,7 @@ describe("Knowledge manifest 派生视图", () => {
       ["math.vectors-matrices", "hard"],
       ["math.calculus-gradients", "hard"],
       ["math.probability-statistics", "hard"],
+      ["python.numpy-arrays", "hard"],
       ["tooling.dev-environment", "recommended"],
     ]);
   });

@@ -69,3 +69,19 @@ test("360px 下宽表格独立滚动，图片和长标识符保持在正文宽�
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
 });
+
+test("360px 下 Stage 2 图像数据契约的代码、表格与 TOC 不撑宽页面", async ({
+  page,
+}) => {
+  await page.goto("/knowledge/digital-image-representation/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(3);
+  await expect(document.getByRole("table")).toBeVisible();
+  await expect(page.locator('[data-concept-toc="mobile"]')).toBeVisible();
+  await expect(document).toContainText("image[row, column]");
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+});

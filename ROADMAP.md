@@ -120,7 +120,7 @@ flowchart LR
 
 Stage 1B 有意不设置阶段级 `entryGate`：Stage 1 采用即时、交错学习，坐标系可以在概率统计与梯度全部掌握前按任务进入。Stage 1B 内每个 Concept 仍必须满足第 3.1 节声明的自身 `hard` 前置；移除整段 checkpoint 门槛不表示可以绕过这些知识依赖。Stage 1A checkpoint 继续独立记录该子阶段的完整能力证据。
 
-checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate` 与 `stage.vision-math-geometry-optimization` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 1B 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
+checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前只发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点，其余八个节点仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 
 ---
 
@@ -247,7 +247,7 @@ checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `
 
 | 稳定 ID | 知识簇 | 深度 | hard | recommended | 掌握证据 |
 |---|---|---:|---|---|---|
-| `python.numpy-arrays` | NumPy 数组、轴、切片与广播（Arrays, Axes, Broadcasting） | M | `tooling.python-core`, `math.vectors-matrices` | `tooling.debugging` | 不使用像素级 Python 循环完成裁剪、归一化、掩膜和通道运算，并解释每个轴。 |
+| `python.numpy-arrays` | NumPy 数组、轴、切片与广播（Arrays, Axes, Broadcasting） | M | `tooling.dev-environment`, `tooling.python-core`, `math.vectors-matrices` | `tooling.debugging` | 不使用像素级 Python 循环完成裁剪、归一化、掩膜和通道运算，并解释每个轴。 |
 | `python.numpy-dtypes` | 数据类型、溢出、复制与视图（Dtype, Overflow, Copy/View） | M | `python.numpy-arrays` | — | 构造 `uint8` 溢出和视图联动案例，给出安全转换方案。 |
 | `visualization.image-plots` | Matplotlib 图像、曲线与直方图（Visualization） | M | `python.numpy-arrays` | — | 在一张报告图中正确展示原图、处理结果、直方图和必要单位。 |
 | `image.digital-representation` | 像素、分辨率、坐标、通道与灰度（Digital Image Representation） | M | `python.numpy-arrays` | `math.coordinate-frames` | 对任意输入打印并解释尺寸、类型、通道顺序、数值范围和坐标原点。 |

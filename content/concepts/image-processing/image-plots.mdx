@@ -1,0 +1,243 @@
+---
+schemaVersion: 1
+id: visualization.image-plots
+slug: image-plots
+title: 可信的图像显示与数值分布检查
+englishTitle: Trustworthy Image Display and Value Inspection
+aliases:
+  - Matplotlib imshow
+  - 图像 colorbar
+  - 图像 histogram
+searchKeywords:
+  - imshow
+  - cmap
+  - vmin
+  - vmax
+  - colorbar
+  - histogram
+  - image display
+summary: 能用 imshow、明确显示范围、colorbar 与基础 histogram 显示图像数组，并判断外观差异来自数据还是显示参数。
+why: 图像“看起来正常”并不证明数组范围、通道或处理结果正确；可信显示必须把图像外观与 dtype、min/max 和显示设置一起检查。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 40
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 2
+  max: 3
+dependencies:
+  - conceptId: python.numpy-arrays
+    kind: hard
+    reason: 需要先能建立二维/三维数组并解释 shape、axis 与 indexing，才能判断传给 imshow 的数据结构是否合理。
+tags:
+  - Matplotlib
+  - 图像显示
+  - 数据检查
+  - 可视化
+learningOutcomes:
+  - 能使用 imshow 显示二维数组，明确设置 cmap、vmin/vmax，并用 colorbar 说明颜色对应的数值。
+  - 能联合 dtype、真实 min/max、显示范围和基础 histogram 判断显示是否可信。
+  - 能构造同一数组的显示对照，解释外观差异是数据变化还是显示映射变化。
+masteryCriteria:
+  - id: criterion.visualization-image-plots.trustworthy-display
+    description: 为一个二维图像数组制作可复现显示，明确 cmap、vmin/vmax、colorbar、dtype、min/max 与单位/范围约定。
+    evidenceHint: 提交代码、图像、数值摘要和显示参数；另一位学习者应能仅凭这些信息复现相同映射。
+    required: true
+  - id: criterion.visualization-image-plots.diagnose-display
+    description: 对同一数组构造至少两种显示范围或 colormap，对照基础 histogram，判断外观变化是否来自数组数据，并找出一个故意误导的显示设置。
+    evidenceHint: 提交对照图、histogram、数组一致性断言和结论；指出误导发生在显示映射而非算法输出。
+    required: true
+resourceIds:
+  - resource.matplotlib-image-tutorial
+publicationStatus: published
+contentVersion: 2026.08.31
+---
+
+# 可信的图像显示与数值分布检查（Trustworthy Image Display and Value Inspection）
+
+本页不把 Matplotlib 写成绘图库教程。目标只有一个：把数组显示成图时，能够说明颜色怎样映射到数值，并避免被自动显示范围误导。
+
+## 1. 这是什么
+
+`matplotlib.pyplot.imshow` 把二维或三维数组映射成图像。对二维数组，**colormap（色图，`cmap`）**决定数值如何映射为颜色；`vmin` 和 `vmax` 决定显示映射的数值下限与上限；**colorbar（颜色条）**把颜色重新标回数值。
+
+```python
+import matplotlib.pyplot as plt
+
+plt.imshow(gray, cmap="gray", vmin=0, vmax=255)
+plt.colorbar(label="intensity (0–255)")
+plt.show()
+```
+
+显示参数不会自动修改原数组，但会明显改变你看到的外观。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+数组操作之后，最直接的检查通常是“看一眼图”。如果没有固定显示范围和数值参照，同一数组可能看起来截然不同，两个不同结果也可能被自动缩放得很相似。
+
+### 在机器视觉中会在哪里使用
+
+- 检查合成图像、ROI、mask 和算法中间结果；
+- 对比处理前后的真实数值变化；
+- 发现异常动态范围、饱和、全黑/全白或意外负值；
+- 用 histogram（直方图）粗看数值分布，而不只依赖肉眼；
+- 为后续阈值、滤波、边缘与实验报告提供可复现图示。
+
+## 3. 前置知识
+
+硬前置是 `python.numpy-arrays`：应能创建二维数组并报告 shape、dtype 和 min/max。本页会说明显示二维数组所需的最小图像语义，因此 `image.digital-representation` 不是 hard dependency；按推荐节奏可先学它，再完成本页。
+
+## 4. 核心概念
+
+### imshow 显示的是映射结果
+
+对二维数组，`imshow` 先根据显示范围把数值映射到 colormap。若不指定 `vmin/vmax`，Matplotlib 通常会根据当前数据自动选择范围。自动范围适合快速探索，却不适合要求公平比较的前后对照。
+
+### cmap、vmin、vmax 与 colorbar
+
+- 灰度数据优先明确 `cmap="gray"`，避免默认伪彩色造成错误直觉；
+- 同一组对照图使用相同 `vmin/vmax`，才能让相同颜色代表相同数值；
+- colorbar 说明颜色与数值的对应关系；
+- 标题或说明中记录 dtype、实际 min/max 和单位/范围约定。
+
+超出 `vmin/vmax` 的值会显示为端点颜色。被截到同一颜色不表示它们的原始数值相等。
+
+### histogram 是数值分布的最小补充
+
+```python
+plt.hist(gray.ravel(), bins=16, range=(0, 256))
+```
+
+histogram 统计各数值区间内有多少元素。当前只用它回答“数值集中在哪里、是否触及边界、两组数据分布是否明显不同”，不做统计推断。
+
+### 最小可信显示记录
+
+每次关键显示至少保留：
+
+1. 数组 shape、dtype、min/max；
+2. `cmap`、`vmin/vmax`；
+3. colorbar 或明确的颜色—数值说明；
+4. 若作对照，确认两幅图使用相同映射；
+5. 必要时补一张基础 histogram。
+
+## 5. 初学者直觉解释
+
+数组是测量值，colormap 像把测量值涂成颜色的尺子。换一把尺子，图会变，但测量值未必变。可信判断必须同时看“纸上的数字”和“涂色规则”。
+
+## 6. 必须掌握到什么程度
+
+- 能独立显示二维数组并设置灰度 cmap、明确范围和 colorbar。
+- 能报告 dtype、真实 min/max，并用基础 histogram 补充检查。
+- 能为前后对照固定同一显示映射。
+- 能判断外观变化来自数组还是来自显示参数。
+
+当前不学习 Matplotlib 样式系统、复杂 subplot 布局、Artist、动画、GUI、交互后端、复杂 normalization 或 interpolation 理论。
+
+## 7. 常见误区
+
+- 只看图，不打印 dtype 和真实 min/max。
+- 比较两幅图时让它们各自自动缩放。
+- 显示灰度数组却不声明 cmap，误把伪彩色当原始颜色。
+- 看到端点颜色就以为所有像素数值完全相同。
+- 用“看起来正常”替代数组断言和数值检查。
+
+## 8. Worked Example：同一数组，两种外观
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+gray = np.array([
+    [90, 95, 100, 105],
+    [100, 105, 110, 115],
+    [110, 115, 120, 125],
+], dtype=np.uint8)
+
+print("shape:", gray.shape)
+print("dtype:", gray.dtype)
+print("min/max:", int(gray.min()), int(gray.max()))
+
+fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+
+full = axes[0].imshow(gray, cmap="gray", vmin=0, vmax=255)
+axes[0].set_title("fixed 0–255")
+fig.colorbar(full, ax=axes[0], label="intensity")
+
+narrow = axes[1].imshow(gray, cmap="gray", vmin=90, vmax=130)
+axes[1].set_title("narrow 90–130")
+fig.colorbar(narrow, ax=axes[1], label="intensity")
+
+for axis in axes:
+    axis.set_xlabel("column")
+    axis.set_ylabel("row")
+
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(4, 3))
+plt.hist(gray.ravel(), bins=8, range=(0, 256))
+plt.xlabel("intensity")
+plt.ylabel("pixel count")
+plt.title("value distribution")
+plt.show()
+```
+
+两幅图使用完全相同的 `gray`；只有显示范围不同。窄范围会放大 90–125 之间的视觉对比，固定 0–255 则把它放在完整 `uint8` 范围中。histogram 和打印值证明数组未变。这说明窄范围不是“错误”，但若不注明就可能误导比较。
+
+## 9. Active Recall 主动回忆
+
+1. `imshow` 的自动范围为什么可能妨碍前后对照？
+2. `cmap`、`vmin/vmax`、colorbar 分别回答什么问题？
+3. 两个不同数组为什么可能看起来很相似？
+4. 同一数组为什么可能看起来差异很大？
+5. histogram 能补充什么，又不能替代什么？
+6. “看起来正常”为什么不是数值正确性的证据？
+
+## 10. Practice 练习
+
+### 理解检查
+
+解释为什么两幅自动缩放的灰度图不能仅凭亮暗直接比较绝对强度。完成标准：指出每幅图的颜色可能对应不同数值范围，并提出共享 `vmin/vmax`。
+
+### 数值练习
+
+对一个值域 40–80 的二维数组，分别用 `0–255` 与 `40–80` 显示；运行前预测哪一幅对比更强。完成标准：数组一致性断言通过，报告两组显示参数和真实 min/max，预测与结果解释一致。
+
+### 视觉小练习
+
+制作一张可信灰度显示和一张 histogram。完成标准：包含 cmap、vmin/vmax、colorbar、轴/标题、dtype、shape、min/max；代码可复现；说明数值是否触及显示边界。
+
+### 错误诊断
+
+故意为同一数组选择一个过窄范围，使许多数值被端点颜色截断。完成标准：指出哪些值超出范围；用 histogram 或打印值证明数据仍有差别；修正显示并说明“显示截断”不等于“数组被修改”。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **当前正式 Project 映射**：Pixel Lab 的正式 metadata、requirements 与 evidence 在本轮保持不变，因此不生成虚假的反向 Project 映射。
+- **未来 Pixel Lab Stage 2 增量**：可信显示、范围报告与 histogram 可成为图像检查证据；必须和正式 task、deliverable、acceptance criterion 一起发布。
+- **后续 Capability**：支持 OpenCV I/O 核查、ROI/Mask 可视化、滤波/阈值/边缘中间结果和实验对照。
+- **Application**：让教学、科研和工业视觉中的图像结果可复现，减少自动色阶造成的误判。
+
+这不表示学完本页已经掌握图像算法、颜色管理或完整数据可视化设计。
+
+## 12. Mastery Evidence 掌握证据
+
+1. 为一个二维数组提交可信显示包：代码、图、cmap、vmin/vmax、colorbar、dtype、shape、min/max 与 histogram；他人应能复现相同颜色—数值映射。
+2. 提交同一数组的两种显示对照和一个故意误导设置：使用数组一致性断言证明数据未变，并明确判断差异来自数据还是显示映射。
+
+达到 `master` 是能独立完成本阶段的可信图像检查，不是掌握 Matplotlib 全部绘图系统。
+
+## 13. 后续复用与复习
+
+`opencv.io-color` 会将真实文件读取结果带入显示；ROI、滤波、阈值、形态学和边缘页面会要求固定范围对照中间结果。后续项目报告也应持续记录显示参数。
+
+24 小时后不看正文重建一张带 colorbar 的固定范围图；7 天后构造自动范围误导案例并用 histogram 解释。
+
+## 14. 精选学习资源
+
+- **Matplotlib Image tutorial**：必看 “Plotting numpy arrays as images”、“Applying pseudocolor schemes”、“Color scale reference” 与 “Examining a specific data range”；复现一张灰度 `imshow + colorbar` 和一张基础 histogram。选看最小双图 subplot；跳过图像 I/O、alpha blending、复杂 normalization/interpolation、动画、GUI、交互后端及完整 Artist/样式系统。

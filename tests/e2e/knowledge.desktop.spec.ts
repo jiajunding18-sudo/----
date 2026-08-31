@@ -19,6 +19,10 @@ const conceptIds = [
   "math.eigen-svd",
   "math.optimization",
   "math.numerical-stability",
+  "python.numpy-arrays",
+  "python.numpy-dtypes",
+  "image.digital-representation",
+  "visualization.image-plots",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -44,28 +48,28 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(true);
 }
 
-test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空结果", async ({
+test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范围的诚实空结果", async ({
   page,
 }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/knowledge/");
 
   const results = page.locator("[data-knowledge-concept-id]");
-  await expect(results).toHaveCount(17);
+  await expect(results).toHaveCount(21);
   expect(
     await results.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-knowledge-concept-id")),
     ),
   ).toEqual(conceptIds);
-  await expect(page.getByText("3 个 Stage 已有正式内容")).toBeVisible();
-  await expect(page.getByText("14 个 Stage 为 planned")).toBeVisible();
+  await expect(page.getByText("4 个 Stage 已有正式内容")).toBeVisible();
+  await expect(page.getByText("13 个 Stage 为 planned")).toBeVisible();
 
   const stageFilter = page.getByLabel("按 Stage 浏览");
   const trackFilter = page.getByLabel("按 Track 浏览");
   await expect(stageFilter.locator("option")).toHaveCount(18);
   await expect(trackFilter.locator("option")).toHaveText([
-    "全部 Track（17）",
-    "公共主干（17）",
+    "全部 Track（21）",
+    "公共主干（21）",
     "3D 工业视觉高级分支（0）",
     "计算成像高级分支（0）",
   ]);
@@ -83,6 +87,11 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空
     page.locator('[data-knowledge-concept-id="math.coordinate-frames"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.image-computing");
+  await expect(results).toHaveCount(4);
+  await expect(
+    page.locator('[data-knowledge-concept-id="python.numpy-arrays"]'),
+  ).toBeVisible();
+  await stageFilter.selectOption("stage.digital-image-processing");
   await expect(results).toHaveCount(0);
   await expect(page.locator("[data-knowledge-empty-state]")).toContainText(
     "路线已规划，但正式学习内容尚未展开",
@@ -95,7 +104,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，planned 范围保持空
     "目前没有已发布 Concept",
   );
   await page.getByRole("button", { name: "全部知识", exact: true }).click();
-  await expect(results).toHaveCount(17);
+  await expect(results).toHaveCount(21);
 
   const developmentEnvironment = page.locator(
     '[data-knowledge-concept-id="tooling.dev-environment"]',

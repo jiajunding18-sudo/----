@@ -229,6 +229,34 @@ test("Phase 9C 数值稳定性中英文术语进入搜索并落到正式学习�
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 2 数组与图像表示自动进入搜索并落到正式学习页", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/search/?q=boolean%20mask");
+
+  const arrays = page.locator('[data-search-result-id="python.numpy-arrays"]');
+  await expect(arrays).toBeVisible();
+  await expect(arrays).toContainText("available · 正式内容");
+
+  await submitSearch(page, "pixel channel");
+  const representation = page.locator(
+    '[data-search-result-id="image.digital-representation"]',
+  );
+  await expect(representation).toBeVisible();
+  const link = representation.getByRole("link", {
+    name: "数字图像、像素、通道与坐标",
+  });
+  await expect(link).toHaveAttribute(
+    "href",
+    "/knowledge/digital-image-representation/",
+  );
+  await link.click();
+  await expect(page).toHaveURL(/\/knowledge\/digital-image-representation\/$/u);
+  await expectNoHorizontalOverflow(page);
+  expect(browserErrors).toEqual([]);
+});
+
 test("正文标题命中直接进入 Concept 对应稳定章节", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/search/?q=9.%20Active%20Recall%20主动回忆");

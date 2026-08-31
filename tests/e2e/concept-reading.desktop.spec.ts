@@ -237,6 +237,47 @@ test("Phase 9C 数值稳定性正文渲染诊断实验、TOC 与 draft Project �
   expect(browserErrors).toEqual([]);
 });
 
+test("Stage 2 图像计算正文渲染代码、表格、TOC、深链接与正式资源", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/numpy-arrays/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /NumPy 数组、轴、切片与广播/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(6);
+  await expect(document.getByRole("table")).toBeVisible();
+  await expect(document).toContainText("shape 本身不能替你猜语义");
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  const workedExampleHref = await workedExampleLink.getAttribute("href");
+  expect(workedExampleHref).toMatch(/^#section-8-worked-example-/u);
+  await workedExampleLink.click();
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe(decodeURIComponent(workedExampleHref ?? ""));
+  await page.reload();
+  await expect(page.locator(workedExampleHref ?? "#missing-worked-example")).toBeVisible();
+
+  await expect(
+    page.getByRole("link", { name: "NumPy: the absolute basics for beginners" }),
+  ).toHaveAttribute("href", "/resources/numpy-absolute-beginners/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

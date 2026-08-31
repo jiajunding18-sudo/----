@@ -138,7 +138,7 @@ export const stages: readonly StageDefinition[] = [
     title: "Stage 2：Python 科学计算与 OpenCV 图像实验",
     summary:
       "把图像视为带有类型、形状、通道和坐标约定的数值数据，构建可重复、可检查的二维图像处理流水线。",
-    contentStatus: "planned",
+    contentStatus: "available",
     trackIds: ["track.common"],
     categoryExitForTrackIds: ["track.common"],
     outcomes: [

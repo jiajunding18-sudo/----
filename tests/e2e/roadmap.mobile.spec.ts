@@ -15,7 +15,10 @@ test("360px 下 Roadmap 无横向溢出且阶段内容可访问", async ({ page 
   ).toContainText("可学习");
   await expect(
     overview.locator('[data-overview-stage-id="stage.vision-math-immediate"]'),
-  ).toContainText("已规划 · 正式学习内容尚未展开");
+  ).toContainText("可学习");
+  await expect(
+    overview.locator('[data-overview-stage-id="stage.image-computing"]'),
+  ).toContainText("可学习");
 
   await overview
     .getByRole("button", { name: "3D 工业视觉高级分支" })
@@ -41,6 +44,11 @@ test("360px 下 Roadmap 无横向溢出且阶段内容可访问", async ({ page 
   await expect(stage.locator("[data-concept-id]")).toHaveCount(8);
   await expect(stage.getByRole("link", { name: /Pixel Lab/ })).toBeVisible();
   await expect(stage.getByRole("heading", { name: "Stage 出口标准" })).toBeVisible();
+  const stageTwo = page.locator('[data-stage-id="stage.image-computing"]');
+  await stageTwo.locator("summary").click();
+  await expect(stageTwo.locator("[data-concept-id]")).toHaveCount(4);
+  await stageTwo.locator("summary").click();
+  await expect(stageTwo.locator("details")).not.toHaveAttribute("open", "");
   await expect
     .poll(() =>
       page.evaluate(

@@ -81,16 +81,20 @@ describe("Dashboard 只读聚合 selector", () => {
 
   it("learning Concept 按正式 Stage 与 Concept 顺序展示且排除未发布实体", () => {
     const { catalog, state } = setup();
-    const published = catalog.concepts.filter(
-      ({ publicationStatus }) => publicationStatus === "published",
+    const earlierConcept = catalog.concepts.find(
+      ({ id }) => id === "tooling.computer-files",
     );
-    expect(published.length).toBeGreaterThanOrEqual(3);
+    const laterConcept = catalog.concepts.find(
+      ({ id }) => id === "math.coordinate-frames",
+    );
+    expect(earlierConcept).toBeDefined();
+    expect(laterConcept).toBeDefined();
     const baseProgressDefinition = catalog.progress.concepts.find(
-      ({ id }) => id === published[0].id,
+      ({ id }) => id === earlierConcept!.id,
     );
     expect(baseProgressDefinition).toBeDefined();
     const unpublished = {
-      ...published[0],
+      ...earlierConcept!,
       id: "concept.dashboard-planned-fixture",
       publicationStatus: "draft" as const,
     };
@@ -113,15 +117,15 @@ describe("Dashboard 只读聚合 selector", () => {
     const changed: LearningStateV1 = {
       ...state,
       conceptProgress: {
-        [published[2].id]: learningProgress("2026-08-29T10:00:00.000Z"),
-        [published[0].id]: learningProgress("2026-08-29T11:00:00.000Z"),
+        [laterConcept!.id]: learningProgress("2026-08-29T10:00:00.000Z"),
+        [earlierConcept!.id]: learningProgress("2026-08-29T11:00:00.000Z"),
         [unpublished.id]: learningProgress("2026-08-29T12:00:00.000Z"),
       },
     };
 
     expect(
       selectDashboardLearningConcepts(catalogWithDraft, changed).map(({ id }) => id),
-    ).toEqual([published[0].id, published[2].id]);
+    ).toEqual([earlierConcept!.id, laterConcept!.id]);
     expect(
       selectDashboardSnapshot(catalogWithDraft, changed, "2026-08-29").progress
         .started,

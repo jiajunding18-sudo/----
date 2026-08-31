@@ -1,0 +1,303 @@
+---
+schemaVersion: 1
+id: python.numpy-arrays
+slug: numpy-arrays
+title: NumPy 数组、轴、切片与广播
+englishTitle: NumPy Arrays, Axes, Slicing, and Broadcasting
+aliases:
+  - NumPy ndarray
+  - 数组 shape 与 axis
+  - NumPy broadcasting
+searchKeywords:
+  - array
+  - ndarray
+  - shape
+  - ndim
+  - axis
+  - indexing
+  - slicing
+  - boolean mask
+  - vectorization
+  - broadcasting
+  - reshape
+  - transpose
+summary: 把 Stage 1 的形状检查迁移到多维数组，能解释每个 axis，并用切片、mask、向量化和简单广播完成图像数据操作。
+why: 图像、掩膜、特征和模型输入都以多维数组组织；先建立带语义的 shape 与 axis 习惯，后续 OpenCV 和深度学习代码才不会只靠试错转置维度。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 10
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 6
+  max: 7
+dependencies:
+  - conceptId: tooling.dev-environment
+    kind: hard
+    reason: 数组实验需要在已确认解释器和依赖归属的隔离环境中安装并导入 NumPy。
+  - conceptId: tooling.python-core
+    kind: hard
+    reason: 需要能读写变量、函数、条件、切片语法与断言，并解释代码输入输出。
+  - conceptId: math.vectors-matrices
+    kind: hard
+    reason: 需要先能检查二维矩阵的行列 shape，再扩展到多维数组的 axis 语义。
+  - conceptId: tooling.debugging
+    kind: recommended
+    reason: 断言、最小复现和逐步打印 shape 有助于定位广播与轴顺序错误，但不阻塞开始。
+tags:
+  - Python
+  - NumPy
+  - 图像数组
+  - 形状检查
+learningOutcomes:
+  - 能面对陌生数组先检查 shape、ndim 与 dtype，并用数据语义解释每个 axis。
+  - 能用 indexing、slicing、boolean mask、向量化和简单 broadcasting 完成 ROI、选区修改与逐通道运算。
+  - 能使用必要的 reshape 与 transpose，并通过输入、操作和输出 shape 诊断常见 mismatch。
+masteryCriteria:
+  - id: criterion.python-numpy-arrays.inspect-and-transform
+    description: 对一个 H×W×C 图像数组写出每个 axis 的语义，不使用像素级 Python 循环完成 ROI、boolean mask 与逐通道广播操作。
+    evidenceHint: 提交输入/中间/输出 shape 表、代码、断言和结果摘要；逐项说明切片边界、mask shape 与广播向量如何对齐通道轴。
+    required: true
+  - id: criterion.python-numpy-arrays.reshape-and-diagnose
+    description: 在一个像素表与图像数组往返实验中正确使用 reshape 或 transpose，并诊断至少一个故意构造的 shape mismatch。
+    evidenceHint: 保存错误信息、错误假设、修正前后 shape、往返一致性检查，以及为什么不能靠反复 transpose 碰运气的解释。
+    required: true
+resourceIds:
+  - resource.numpy-absolute-beginners
+publicationStatus: published
+contentVersion: 2026.08.31
+---
+
+# NumPy 数组、轴、切片与广播（NumPy Arrays, Axes, Slicing, and Broadcasting）
+
+本页不是 NumPy API 大全。目标是让你接到一个图像数组时，先说明“它有几个轴、每个轴代表什么”，再用少量可靠操作完成检查和修改。
+
+## 1. 这是什么
+
+NumPy 的核心对象是 **多维数组（N-dimensional array, `ndarray`）**。它把同一种数据类型的许多数按规则排列，并允许一次对整块数据运算。
+
+```python
+import numpy as np
+
+image = np.array([
+    [[10, 20, 30], [40, 50, 60]],
+    [[70, 80, 90], [100, 110, 120]],
+])
+
+print(image.shape)  # (2, 2, 3)
+print(image.ndim)   # 3
+print(image.dtype)  # 当前平台上的整数 dtype
+```
+
+这里 `shape == (2, 2, 3)` 只说明三个轴的长度。若我们声明它是彩色图像，才得到“2 行 × 2 列 × 3 通道”的语义。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+Stage 0 已经让你能运行 Python，Stage 1 已经训练了矩阵 shape 检查。现在要开始操作真实图像，二维矩阵不再足够：灰度图常是 `H×W`，彩色图常是 `H×W×C`，一批图像还可能多出 batch axis。
+
+### 在机器视觉中会在哪里使用
+
+- 从图像中截取 ROI（region of interest）；
+- 用 mask 选择亮像素或目标区域；
+- 对全部像素或每个通道做同一种运算；
+- 为 OpenCV、卷积、PyTorch 张量和批处理准备正确 shape；
+- 在算法运行前发现轴顺序和 shape mismatch。
+
+## 3. 前置知识
+
+硬前置是 `tooling.dev-environment`、`tooling.python-core` 与 `math.vectors-matrices`。开始前应能确认 NumPy 安装在哪个解释器中，读懂切片与断言，并判断二维矩阵的行列含义。
+
+`tooling.debugging` 是 recommended：若已学过，可以直接使用最小复现、断言与逐步打印定位数组错误。
+
+## 4. 核心概念
+
+### 数组、shape、ndim 与 axis
+
+- `np.array(...)` 从规则的 Python 序列建立数组。
+- `shape` 是每个 axis 长度组成的 tuple。
+- `ndim` 是 axis 的数量，且 `len(array.shape) == array.ndim`。
+- **axis** 是数组组织数据的方向。它的意义来自数据约定，不由数字 `0`、`1`、`2` 自动决定。
+
+数学矩阵中的 shape 主要回答“有多少行、多少列，运算是否合法”。NumPy 数组可以有三个或更多 axis，因此还必须回答“每个 axis 在当前数据中代表高度、宽度、通道、样本还是别的量”。
+
+### indexing 与 slicing
+
+```python
+pixel = image[1, 0]       # 取一个位置的全部通道，shape 为 (3,)
+roi = image[0:2, 0:1, :] # 保留行、列、通道三个 axis
+```
+
+切片写法遵循“起点包含、终点不包含”。处理图像时先在纸面写预期输出 shape，再运行代码核对。
+
+### boolean mask
+
+比较运算可以生成布尔数组。mask 必须与它要选择的空间位置正确对齐：
+
+```python
+bright = image.mean(axis=2) > 70  # shape: (H, W)
+marked = image.copy()
+marked[bright] = [255, 0, 0]      # 对选中的每个位置写三个通道
+```
+
+### vectorized operations
+
+向量化（vectorization）是让一个数组表达式作用于整块数据，而不是写两层 Python 像素循环。例如 `image / 255.0` 会一次生成归一化结果。向量化不意味着可以忽略 shape；恰恰相反，先理解 shape 才能安全使用它。
+
+### broadcasting
+
+广播（broadcasting）让兼容 shape 的较小数组参与较大数组的逐元素运算。当前只需要两种自然情况：
+
+1. 标量作用于全部元素，例如 `image / 255.0`；
+2. 长度为 `C` 的向量作用于 `H×W×C` 数组的通道轴。
+
+```python
+channel_gain = np.array([1.0, 0.8, 0.5])
+adjusted = image * channel_gain  # (H, W, C) 与 (C,) 对齐最后一个轴
+```
+
+若尾部维度既不相等也不为 1，NumPy 会抛出 broadcasting `ValueError`。当前不要求背完整规则；必须能写出参与运算的 shape，并判断最后几个轴是否自然对应。
+
+### 必需的 reshape 与 transpose
+
+- `reshape` 改变 axis 长度的组织方式，但元素总数必须保持一致。
+- `transpose` 改变 axis 顺序。
+
+```python
+pixels = image.reshape(-1, 3)       # H×W×C → (H*W)×C
+channels_first = image.transpose(2, 0, 1)  # H×W×C → C×H×W
+roundtrip = channels_first.transpose(1, 2, 0)
+```
+
+每次 reshape/transpose 都要记录原 shape、操作目的和目标 shape。不要在错误消失前反复尝试轴顺序。
+
+## 5. 初学者直觉解释
+
+把数组想成带标签的收纳盒。`shape=(4,5,3)` 只是说盒子有三层组织、长度分别为 4、5、3；只有写上 `row / column / channel` 标签，程序中的索引和广播才有工程意义。
+
+同一个 `(3,4,5)` 数组既可能是 3 张灰度图，也可能是 3 通道、4 行、5 列的数据。shape 本身不能替你猜语义。
+
+## 6. 必须掌握到什么程度
+
+- 能建立和检查小型二维、三维数组。
+- 能解释 shape、ndim 和每个 axis 的数据语义。
+- 能独立完成 ROI、mask、向量化与简单逐通道广播。
+- 能为明确目的使用 reshape/transpose，并验证往返一致性。
+- 能从错误信息和 shape 表定位 mismatch。
+
+当前不学习高级 broadcasting 技巧、stride、structured array、复杂高级索引、缓存/性能优化或完整 NumPy API。
+
+## 7. 常见误区
+
+- 看到三个 axis 就默认最后一个一定是 RGB 通道。
+- 把 `shape` 当作没有语义的数字，出错后盲目 transpose。
+- 把逐元素乘法 `a * b` 当作矩阵乘法。
+- mask shape 与空间轴不一致，却通过随意 reshape 强行运行。
+- 为每个像素写 Python 双重循环，而本来可以直接使用数组表达式。
+- 忘记切片的终点不包含在结果中。
+
+## 8. Worked Example：检查、裁剪、mask 与逐通道广播
+
+下面构造一个 `4×5×3` 的小数组。它暂时只是具有图像 shape 的合成数据，不涉及 OpenCV 颜色约定。
+
+```python
+import numpy as np
+
+image = np.arange(4 * 5 * 3, dtype=np.float32).reshape(4, 5, 3)
+print("image:", image.shape, image.ndim, image.dtype)
+
+# 行 1–2、列 1–3，保留全部通道。
+roi = image[1:3, 1:4, :]
+assert roi.shape == (2, 3, 3)
+
+# 用第 0 个通道建立空间 mask；mask 与 H×W 对齐。
+mask = image[:, :, 0] > 30
+assert mask.shape == (4, 5)
+
+marked = image.copy()
+marked[mask] = [255.0, 0.0, 0.0]
+
+# 长度 3 的向量沿最后一个通道轴广播。
+channel_gain = np.array([1.0, 0.5, 0.25], dtype=np.float32)
+adjusted = image * channel_gain
+assert adjusted.shape == image.shape
+
+# 将所有像素整理为 N×C，再恢复原 shape。
+pixels = image.reshape(-1, 3)
+restored = pixels.reshape(image.shape)
+assert np.array_equal(restored, image)
+
+print("roi:", roi.shape)
+print("mask:", mask.shape, "selected:", int(mask.sum()))
+print("pixels:", pixels.shape)
+print("roundtrip equal:", np.array_equal(restored, image))
+```
+
+预期检查：
+
+| 对象 | shape | axis 语义 |
+| --- | --- | --- |
+| `image` | `(4, 5, 3)` | row、column、channel |
+| `roi` | `(2, 3, 3)` | 2 行、3 列、3 通道 |
+| `mask` | `(4, 5)` | 每个空间位置一个布尔值 |
+| `channel_gain` | `(3,)` | 每个通道一个增益 |
+| `pixels` | `(20, 3)` | 20 个像素、每个 3 个分量 |
+
+若把通道增益误写成 shape `(2,)`，`image * wrong_gain` 会因尾部维度 `3` 与 `2` 不兼容而失败。正确修复是确认参数应有三个通道值，而不是随意增加或交换 axis。
+
+## 9. Active Recall 主动回忆
+
+1. `shape=(6,8,3)` 能告诉你什么，又不能单独告诉你什么？
+2. `ndim` 与 `shape` 有什么关系？
+3. 为什么 ROI `image[1:4, 2:6]` 的行数是 3、列数是 4？
+4. 一个 `H×W` mask 怎样选择 `H×W×C` 图像中的整像素？
+5. `(H,W,C)` 与 `(C,)` 为什么能自然广播？
+6. reshape 与 transpose 分别改变什么？
+7. 数学矩阵的 shape 检查与 NumPy axis 语义有什么区别？
+
+## 10. Practice 练习
+
+### 理解检查
+
+给出 shape `(12, 20, 4)`，列出至少两种可能的数据语义，并说明为什么仅凭 shape 不能判断最后一个轴一定是什么。完成标准：区分“轴长度”与“轴含义”。
+
+### 数值练习
+
+创建 `np.arange(5*7*3).reshape(5,7,3)`，截取行 `1:4`、列 `2:6` 的 ROI，并写出运行前预测 shape。完成标准：预测和实际都为 `(3,4,3)`，并解释两个切片终点为何不计入。
+
+### 视觉小练习
+
+对同一数组依次完成：`H×W×C → (H*W)×C → H×W×C`；用一个 `(3,)` 增益向量做逐通道运算；建立一个 `(H,W)` mask 修改选中像素。完成标准：不写像素级循环，所有中间 shape 有语义说明，往返使用 `np.array_equal` 或 `np.allclose` 通过。
+
+### 错误诊断
+
+故意执行 `np.zeros((4,5,3)) + np.array([1,2])`。完成标准：保存错误信息；写出两个 shape；指出冲突发生在最后一个 axis；把参数修正为三个通道值，而不是盲目 transpose 图像。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **当前正式 Project 映射**：本轮不修改已发布 Pixel Lab 的 requirements 或 evidence，因此 manifest 暂无由 Project metadata 派生的正式反向关系。
+- **未来 Pixel Lab Stage 2 增量**：数组检查、ROI、mask 和 shape 故障将服务“图像数组检查报告”；映射需与正式 task、deliverable、acceptance criterion 一起发布。
+- **后续 Capability**：为 OpenCV I/O、ROI/Mask、滤波、批处理以及 PyTorch 张量提供数组数据契约。
+- **Application**：在课程、科研或工业脚本中，先确认输入 shape 和轴语义，再进行图像算法或模型推理。
+
+这不表示学完本页已经掌握 BGR/RGB、图像文件异常、滤波或批处理。
+
+## 12. Mastery Evidence 掌握证据
+
+1. 提交一个 `H×W×C` 合成数组实验：包含带语义的 shape 表、ROI、mask、向量化、逐通道 broadcasting、断言和结果解释；不得使用像素级 Python 循环替代核心操作。
+2. 提交一次 reshape/transpose 往返与一次 shape mismatch 诊断：保存错误、修正理由和一致性检查，说明为什么不能靠反复交换 axis 碰运气。
+
+达到 `master` 的含义是能独立完成上述机器视觉数组基础，不是记住 NumPy 的全部函数。
+
+## 13. 后续复用与复习
+
+直接后续是 `python.numpy-dtypes`、`visualization.image-plots` 与 `image.digital-representation`，三者在正式 DAG 中可以并行。之后 `opencv.roi-masks`、`opencv.filtering-basics`、Stage 3 卷积与 Stage 7A 张量都会复用本页。
+
+24 小时后不看正文，为一个 `(H,W,C)` 数组写 shape/axis 表；7 天后换一组尺寸，重新完成 ROI、mask、广播与故障诊断。
+
+## 14. 精选学习资源
+
+- **NumPy: the absolute basics for beginners**：必看 Array fundamentals、Array attributes、Indexing and slicing、shape/size 与 Broadcasting；只复现本页二维/三维小例子。选看必要的 reshape/transpose。达到能预测中间 shape、解释 axis 并诊断简单不兼容即可；跳过完整创建函数清单、stack/split 百科、高级索引组合与性能讨论。

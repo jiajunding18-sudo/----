@@ -29,8 +29,9 @@ describe("Roadmap manifest 派生视图", () => {
       "stage.tooling-foundations",
       "stage.vision-math-immediate",
       "stage.vision-math-geometry-optimization",
+      "stage.image-computing",
     ]);
-    expect(roadmap.plannedStageCount).toBe(14);
+    expect(roadmap.plannedStageCount).toBe(13);
     expect(
       roadmap.tracks.find(({ track }) => track.id === "track.common")?.stages,
     ).toHaveLength(14);
@@ -113,6 +114,10 @@ describe("Roadmap manifest 派生视图", () => {
         publicationStatus: "published",
       }),
     );
+    expect(stageTwo).toMatchObject({
+      contentStatus: "available",
+      conceptCount: 4,
+    });
   });
 
   it("从正式 manifest 派生 Stage 0、推荐顺序、依赖、项目和出口", () => {

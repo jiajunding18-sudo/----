@@ -59,6 +59,12 @@ describe("Knowledge Graph 一跳邻域模型", () => {
         "tooling.debugging",
         "tooling.reproducibility",
       ],
+      [
+        "python.numpy-arrays",
+        "recommended",
+        "tooling.debugging",
+        "python.numpy-arrays",
+      ],
     ]);
   });
 
@@ -83,6 +89,7 @@ describe("Knowledge Graph 一跳邻域模型", () => {
       "tooling.python-core->math.calculus-gradients:hard",
       "tooling.python-core->math.probability-statistics:hard",
       "tooling.python-core->math.vectors-matrices:hard",
+      "tooling.python-core->python.numpy-arrays:hard",
       "tooling.python-core->tooling.debugging:hard",
       "tooling.python-core->tooling.dev-environment:recommended",
       "tooling.python-core->tooling.python-modules:hard",
@@ -153,7 +160,7 @@ describe("Knowledge Graph 全局 scope 与密度模型", () => {
       scope: { kind: "track", id: "track.industrial-3d" },
       dependencyKinds: allKinds,
     });
-    const plannedStageView = selectGlobalKnowledgeGraphView(catalog, {
+    const stageTwoView = selectGlobalKnowledgeGraphView(catalog, {
       scope: { kind: "stage", id: "stage.image-computing" },
       dependencyKinds: allKinds,
     });
@@ -170,11 +177,12 @@ describe("Knowledge Graph 全局 scope 与密度模型", () => {
     expect(stageView.edges).toHaveLength(12);
     expect(stageOneAView.nodes).toHaveLength(4);
     expect(stageOneAView.edges).toHaveLength(2);
-    expect(commonTrackView.nodes).toHaveLength(17);
+    expect(commonTrackView.nodes).toHaveLength(21);
     expect(advancedTrackView.nodes).toEqual([]);
-    expect(plannedStageView.nodes).toEqual([]);
-    expect(publishedView.nodes).toHaveLength(17);
-    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(17);
+    expect(stageTwoView.nodes).toHaveLength(4);
+    expect(stageTwoView.edges).toHaveLength(3);
+    expect(publishedView.nodes).toHaveLength(21);
+    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(21);
   });
 
   it("dependency kind 与 Progress 筛选只改变视图，不修改正式依赖", () => {

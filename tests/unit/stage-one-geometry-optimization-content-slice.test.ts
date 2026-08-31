@@ -222,7 +222,7 @@ describe("Phase 9 Stage 1B 正式学习内容", () => {
 
     const roadmap = await readFile(resolve(workspaceRoot, "ROADMAP.md"), "utf8");
     expect(roadmap).toContain(
-      "`stage.vision-math-geometry-optimization` 为 `available`",
+      "`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`",
     );
     expect(roadmap).toContain(
       "其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布",

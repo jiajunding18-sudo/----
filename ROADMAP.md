@@ -120,7 +120,7 @@ flowchart LR
 
 Stage 1B 有意不设置阶段级 `entryGate`：Stage 1 采用即时、交错学习，坐标系可以在概率统计与梯度全部掌握前按任务进入。Stage 1B 内每个 Concept 仍必须满足第 3.1 节声明的自身 `hard` 前置；移除整段 checkpoint 门槛不表示可以绕过这些知识依赖。Stage 1A checkpoint 继续独立记录该子阶段的完整能力证据。
 
-checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`，以及 S2-U5 的 `opencv.geometric-transforms`，共七个正式 Concept；其余五个节点仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
+checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`，以及 S2-U6 的 `opencv.filtering-basics`，共八个正式 Concept；其余四个节点仍未发布。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 
 ---
 

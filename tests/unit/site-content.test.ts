@@ -33,6 +33,9 @@ describe("网站只读内容接口", () => {
     expect(
       getPublishedConceptBySlug("opencv-geometric-transforms")?.id,
     ).toBe("opencv.geometric-transforms");
+    expect(getPublishedConceptBySlug("opencv-filtering-basics")?.id).toBe(
+      "opencv.filtering-basics",
+    );
     expect(getPublishedProjectBySlug("pixel-lab")?.id).toBe(
       "project.pixel-lab",
     );
@@ -45,7 +48,7 @@ describe("网站只读内容接口", () => {
       throw new Error("测试需要已发布的 Pixel Lab");
     }
 
-    expect(getPublishedConceptSlugs()).toHaveLength(24);
+    expect(getPublishedConceptSlugs()).toHaveLength(25);
     expect(getConceptsForProject(slice.project)).toHaveLength(8);
   });
 });

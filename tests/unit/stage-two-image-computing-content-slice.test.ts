@@ -24,12 +24,12 @@ const stageTwoConceptIds = [
   "opencv.io-color",
   "opencv.roi-masks",
   "opencv.geometric-transforms",
+  "opencv.filtering-basics",
 ] as const;
 
 const stageTwoConceptIdSet = new Set<string>(stageTwoConceptIds);
 
 const unpublishedStageTwoConceptIds = [
-  "opencv.filtering-basics",
   "opencv.threshold-morphology",
   "opencv.edges-contours",
   "pipeline.batch-images",
@@ -53,6 +53,8 @@ const expectedDependencies = [
   ["math.linear-transforms", "opencv.geometric-transforms", "hard"],
   ["opencv.io-color", "opencv.geometric-transforms", "hard"],
   ["math.coordinate-frames", "opencv.geometric-transforms", "recommended"],
+  ["python.numpy-arrays", "opencv.filtering-basics", "hard"],
+  ["opencv.io-color", "opencv.filtering-basics", "hard"],
 ] as const;
 
 const requiredSectionHeadings = [
@@ -95,7 +97,7 @@ async function loadStageTwoConcepts() {
 }
 
 describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
-  it("只发布约定的七个 required/master Concept，并将 checkpoint 保持 available", () => {
+  it("只发布约定的八个 required/master Concept，并将 checkpoint 保持 available", () => {
     const concepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.image-computing")
       .toSorted((left, right) => left.order - right.order);
@@ -104,7 +106,9 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     );
 
     expect(concepts.map(({ id }) => id)).toEqual(stageTwoConceptIds);
-    expect(concepts.map(({ order }) => order)).toEqual([10, 20, 30, 40, 50, 60, 70]);
+    expect(concepts.map(({ order }) => order)).toEqual([
+      10, 20, 30, 40, 50, 60, 70, 80,
+    ]);
     expect(
       concepts.every(
         ({ publicationStatus, requiredness, targetDepth, trackIds }) =>
@@ -142,7 +146,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       ]),
     ).toEqual(expect.arrayContaining([...expectedDependencies]));
     expect(dependencies).toHaveLength(expectedDependencies.length);
-    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(12);
+    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(14);
     expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(4);
     const dependencyPairs = dependencies.map(
       ({ prerequisiteId, targetId }) => `${String(prerequisiteId)}->${String(targetId)}`,
@@ -445,6 +449,97 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     );
   });
 
+  it("opencv.filtering-basics 保持两条 hard dependency、master 边界与数值诊断闭环", async () => {
+    const concepts = await loadStageTwoConcepts();
+    const concept = concepts.find(
+      ({ meta }) => meta.id === "opencv.filtering-basics",
+    );
+
+    expect(concept?.meta).toMatchObject({
+      publicationStatus: "published",
+      requiredness: "required",
+      targetDepth: "master",
+      estimatedHours: { min: 6, max: 8 },
+      resourceIds: ["resource.opencv-python-tutorials"],
+    });
+    expect(concept?.meta.dependencies).toEqual([
+      expect.objectContaining({ conceptId: "python.numpy-arrays", kind: "hard" }),
+      expect.objectContaining({ conceptId: "opencv.io-color", kind: "hard" }),
+    ]);
+    expect(concept?.meta.dependencies).toHaveLength(2);
+    expect(concept?.meta.dependencies.map(({ conceptId }) => conceptId)).not.toEqual(
+      expect.arrayContaining([
+        "dip.convolution-lsi",
+        "python.numpy-dtypes",
+        "image.digital-representation",
+        "opencv.geometric-transforms",
+        "math.numerical-stability",
+      ]),
+    );
+
+    requiredSectionHeadings.forEach((heading) => {
+      expect(
+        concept?.body,
+        `opencv.filtering-basics 缺少 ${heading}`,
+      ).toContain(heading);
+    });
+    expect(concept?.meta.masteryCriteria).toHaveLength(2);
+    expect(concept?.meta.masteryCriteria.every(({ required }) => required)).toBe(
+      true,
+    );
+    expect(concept?.body).toContain("Geometry asks:");
+    expect(concept?.body).toContain("Filtering asks:");
+    expect(concept?.body).toContain("cv2.blur");
+    expect(concept?.body).toContain("cv2.GaussianBlur");
+    expect(concept?.body).toContain("sigmaX=1.0");
+    expect(concept?.body).toContain("sigmaY=1.0");
+    expect(concept?.body).toContain("cv2.filter2D");
+    expect(concept?.body).toContain("cv2.CV_32F");
+    expect(concept?.body).toContain("correlation（相关）");
+    expect(concept?.body).toContain("它不会自动翻转 kernel");
+    expect(concept?.body).toContain("ROADMAP recommended：`dip.convolution-lsi`");
+    expect(concept?.body).toContain("暂不进入正式 manifest/DAG");
+    expect(concept?.body).toContain("BORDER_CONSTANT");
+    expect(concept?.body).toContain("BORDER_REPLICATE");
+    expect(concept?.body).toContain("12.0 / 9.0");
+    expect(concept?.body).toContain("21.0 / 9.0");
+    expect(concept?.body).toContain("np.random.default_rng(20260901)");
+    expect(concept?.body).toContain("source.shape == (9, 15)");
+    expect(concept?.body).toContain("hand_center == 5.0");
+    expect(concept?.body).toContain("mean_3[4, 6] == 88");
+    expect(concept?.body).toContain("mean_5[4, 6] == 95");
+    expect(concept?.body).toContain("gaussian[4, 6] == 79");
+    expect(concept?.body).toContain("gaussian[4, 7] == 142");
+    expect(concept?.body).toContain("flat_region_variation");
+    expect(concept?.body).toContain("edge_contrast");
+    expect(concept?.body).toContain("sharp_float.min().item()");
+    expect(concept?.body).toContain("(-116.0, 542.0)");
+    expect(concept?.body).toContain("sharp_float[4, 6] == -102.0");
+    expect(concept?.body).toContain("sharp_float[4, 7] == 338.0");
+    expect(concept?.body).toContain("sharp_uint8_direct[4, 6] == 0");
+    expect(concept?.body).toContain("sharp_uint8_direct[4, 7] == 255");
+    expect(concept?.body).toContain("np.clip(sharp_float, 0.0, 255.0)");
+    expect(concept?.body).toContain("np.array_equal(source, original)");
+    expect(concept?.body).toContain("### Checkpoint 1");
+    expect(concept?.body).toContain("### Checkpoint 2");
+    expect(concept?.body).toContain("### Checkpoint 3");
+    expect(concept?.body).toContain("### Checkpoint 4");
+    expect(concept?.body?.match(/report_diagnosis\(/gu)).toHaveLength(5);
+    ["input:", "expected:", "actual:", "reason:", "correction:"].forEach(
+      (field) => expect(concept?.body).toContain(field),
+    );
+    expect(concept?.body).not.toContain("cv2.medianBlur");
+    expect(concept?.body).not.toContain("cv2.bilateralFilter");
+    expect(concept?.body).not.toContain("cv2.threshold");
+    expect(concept?.body).not.toContain("cv2.Canny");
+    expect(concept?.meta.masteryCriteria[0]?.evidenceHint).toContain(
+      "flat-region variation",
+    );
+    expect(concept?.meta.masteryCriteria[1]?.evidenceHint).toContain(
+      "uint8 saturation",
+    );
+  });
+
   it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {
     const fixture = await readFile(
       resolve(process.cwd(), "public/media/opencv-io-color-fixture.ppm"),
@@ -468,7 +563,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     ]);
   });
 
-  it("OpenCV 官方资源覆盖 I/O、ROI 与基础 affine，继续跳过 perspective", () => {
+  it("OpenCV 官方资源覆盖 I/O、ROI、基础 affine 与 filtering，并保持后续边界", () => {
     const resource = contentManifest.resources.find(
       ({ id }) => id === "resource.opencv-python-tutorials",
     );
@@ -488,15 +583,23 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(resource?.recommendedParts?.[0]).toContain(
       "Scaling、Translation、Rotation 与 Affine Transformation",
     );
+    expect(resource?.recommendedParts?.[0]).toContain("Averaging、Gaussian Blurring");
+    expect(resource?.recommendedParts?.[0]).toContain(
+      "blur、GaussianBlur、filter2D、ddepth 与 borderType",
+    );
     expect(resource?.recommendedParts?.[1]).toContain("reverse sampling");
+    expect(resource?.recommendedParts?.[1]).toContain("sharpening mask");
     expect(resource?.recommendedParts?.[2]).toContain("warpPerspective");
     expect(resource?.recommendedParts?.[2]).toContain("homography");
+    expect(resource?.recommendedParts?.[2]).toContain("median");
+    expect(resource?.recommendedParts?.[2]).toContain("bilateral");
+    expect(resource?.recommendedParts?.[2]).toContain("Canny");
     expect(resource?.recommendedParts?.[2]).toContain("threshold");
   });
 
-  it("七篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
+  it("八篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
     const concepts = await loadStageTwoConcepts();
-    expect(concepts).toHaveLength(7);
+    expect(concepts).toHaveLength(8);
 
     concepts.forEach(({ body, meta }) => {
       requiredSectionHeadings.forEach((heading) => {
@@ -646,6 +749,9 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     const geometricTransforms = contentManifest.concepts.find(
       ({ id }) => id === "opencv.geometric-transforms",
     );
+    const filteringBasics = contentManifest.concepts.find(
+      ({ id }) => id === "opencv.filtering-basics",
+    );
 
     stageTwoConceptIds.forEach((conceptId) => {
       expect(knowledge.concepts.some(({ concept }) => concept.id === conceptId)).toBe(
@@ -677,21 +783,32 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       missingHard: ["math.linear-transforms", "opencv.io-color"],
       missingRecommended: ["math.coordinate-frames"],
     });
+    expect(
+      filteringBasics &&
+        getConceptReadiness(filteringBasics, initialState.conceptProgress),
+    ).toEqual({
+      ready: false,
+      missingHard: ["python.numpy-arrays", "opencv.io-color"],
+      missingRecommended: [],
+    });
   });
 
-  it("ROADMAP 同步发布边界，并明确剩余五个节点未发布", async () => {
+  it("ROADMAP 同步发布边界，并明确剩余四个节点未发布", async () => {
     const roadmap = await readFile(resolve(process.cwd(), "ROADMAP.md"), "utf8");
     expect(roadmap).toContain(
       "`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`",
     );
     expect(roadmap).toContain(
-      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`，以及 S2-U5 的 `opencv.geometric-transforms`，共七个正式 Concept；其余五个节点仍未发布",
+      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`，以及 S2-U6 的 `opencv.filtering-basics`，共八个正式 Concept；其余四个节点仍未发布",
     );
     expect(roadmap).toContain(
       "| `opencv.geometric-transforms` | 缩放、旋转与仿射变换（Geometric Transforms） | M |",
     );
     expect(roadmap).not.toContain("缩放、旋转、仿射与透视变换");
     expect(roadmap).not.toContain("透视校正小实验");
+    expect(roadmap).toContain(
+      "| `opencv.filtering-basics` | 平滑、锐化与基础滤波（Filtering） | M | `python.numpy-arrays`, `opencv.io-color` | `dip.convolution-lsi` |",
+    );
     expect(roadmap).toContain(
       "| `python.numpy-arrays` | NumPy 数组、轴、切片与广播（Arrays, Axes, Broadcasting） | M | `tooling.dev-environment`, `tooling.python-core`, `math.vectors-matrices` | `tooling.debugging` |",
     );

@@ -498,6 +498,62 @@ test("几何变换正文呈现 H/W、防错、已知点、插值与 clipping 闭
   expect(browserErrors).toEqual([]);
 });
 
+test("基础滤波正文呈现 kernel、数值安全、边界与定量诊断闭环", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-filtering-basics/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /平滑、锐化与基础滤波/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(11);
+  await expect(document.getByRole("table")).toBeVisible();
+  await expect(document).toContainText("hand_center == 5.0");
+  await expect(document).toContainText("sharp_float[4, 6] == -102.0");
+  await expect(document).toContainText("correlation（相关）");
+  await expect(document).toContainText("BORDER_CONSTANT");
+  await expect(document).toContainText("BORDER_REPLICATE");
+  await expect(document).toContainText("flat_region_variation");
+  await expect(document).toContainText("edge_contrast");
+  for (const checkpoint of [1, 2, 3, 4]) {
+    await expect(
+      document.getByRole("heading", {
+        level: 3,
+        name: new RegExp(`Checkpoint ${checkpoint}`, "u"),
+      }),
+    ).toBeVisible();
+  }
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await workedExampleLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example");
+  await page.reload();
+  await expect(page.locator("#section-8-worked-example")).toBeVisible();
+
+  await expect(
+    page
+      .getByLabel("精选学习资源")
+      .getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

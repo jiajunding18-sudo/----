@@ -38,6 +38,7 @@ const stageTwoConceptIds = [
   "opencv.io-color",
   "opencv.roi-masks",
   "opencv.geometric-transforms",
+  "opencv.filtering-basics",
 ] as const;
 
 describe("Knowledge manifest 派生视图", () => {
@@ -53,7 +54,7 @@ describe("Knowledge manifest 派生视图", () => {
       ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      Array.from({ length: 24 }, (_, index) => index + 1),
+      Array.from({ length: 25 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -97,12 +98,12 @@ describe("Knowledge manifest 派生视图", () => {
     });
     expect(stageTwo).toMatchObject({
       contentStatus: "available",
-      publishedConceptCount: 7,
+      publishedConceptCount: 8,
     });
     expect(knowledge.availableStageCount).toBe(4);
     expect(knowledge.plannedStageCount).toBe(13);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      24, 0, 0,
+      25, 0, 0,
     ]);
   });
 

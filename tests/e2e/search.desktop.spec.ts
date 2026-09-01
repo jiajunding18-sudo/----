@@ -294,6 +294,23 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   );
   await geometricTransformsLink.click();
   await expect(page).toHaveURL(/\/knowledge\/opencv-geometric-transforms\/$/u);
+
+  await page.goto("/search/?q=GaussianBlur");
+  const filteringBasics = page.locator(
+    '[data-search-result-id="opencv.filtering-basics"]',
+  );
+  await expect(filteringBasics).toBeVisible();
+  await expect(filteringBasics).toContainText("available · 正式内容");
+  const filteringBasicsLink = filteringBasics.getByRole("link", {
+    name: "平滑、锐化与基础滤波",
+  });
+  await expect(filteringBasicsLink).toHaveAttribute(
+    "href",
+    "/knowledge/opencv-filtering-basics/",
+  );
+  await filteringBasicsLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/knowledge\/opencv-filtering-basics\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

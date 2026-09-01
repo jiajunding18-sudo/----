@@ -57,6 +57,7 @@ const stageTwoConceptIds = [
   "opencv.io-color",
   "opencv.roi-masks",
   "opencv.geometric-transforms",
+  "opencv.filtering-basics",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

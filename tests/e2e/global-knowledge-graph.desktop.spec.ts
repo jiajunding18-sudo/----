@@ -77,10 +77,10 @@ test("全局图按正式 Stage、Track 与 dependency kind 浏览，并保留完
   await expect(nodeItems).toHaveCount(0);
   await expect(graph).toContainText("不会用占位节点伪造路线覆盖");
   await filters.getByLabel("Track").selectOption("track.common");
-  await expect(nodeItems).toHaveCount(24);
+  await expect(nodeItems).toHaveCount(25);
 
   await filters.locator('[data-global-scope="published"]').click();
-  await expect(nodeItems).toHaveCount(24);
+  await expect(nodeItems).toHaveCount(25);
   await filters.locator('[data-global-scope="stage"]').click();
   await filters
     .getByLabel("Stage")
@@ -98,8 +98,8 @@ test("全局图按正式 Stage、Track 与 dependency kind 浏览，并保留完
     nodeItems.filter({ hasText: "最小二乘、残差与超定方程" }),
   ).toHaveCount(1);
   await filters.getByLabel("Stage").selectOption("stage.image-computing");
-  await expect(nodeItems).toHaveCount(7);
-  await expect(edgeItems).toHaveCount(8);
+  await expect(nodeItems).toHaveCount(8);
+  await expect(edgeItems).toHaveCount(10);
   await expect(
     nodeItems.filter({ hasText: "NumPy 数组、轴、切片与广播" }),
   ).toHaveCount(1);
@@ -108,6 +108,9 @@ test("全局图按正式 Stage、Track 与 dependency kind 浏览，并保留完
   ).toHaveCount(1);
   await expect(
     nodeItems.filter({ hasText: "感兴趣区域与掩膜" }),
+  ).toHaveCount(1);
+  await expect(
+    nodeItems.filter({ hasText: "平滑、锐化与基础滤波" }),
   ).toHaveCount(1);
 
   await filters.getByRole("button", { name: "恢复默认 Stage scope" }).click();

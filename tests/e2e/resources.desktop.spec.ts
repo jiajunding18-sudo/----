@@ -150,6 +150,16 @@ test("15 个 Resource 均有静态详情，正式外链只由详情主动打开"
   await expect(
     page.getByRole("heading", { level: 1, name: "The Python Tutorial" }),
   ).toBeVisible();
+
+  await page.goto("/resources/opencv-python-tutorials/");
+  const openCvDetail = page.locator('[data-resource-detail="true"]');
+  await expect(openCvDetail).toContainText("Averaging、Gaussian Blurring");
+  await expect(openCvDetail).toContainText("filter2D");
+  await expect(openCvDetail).toContainText("sharpening mask");
+  await expect(openCvDetail).toContainText("median、bilateral");
+  await expect(
+    openCvDetail.getByRole("link", { name: "平滑、锐化与基础滤波" }),
+  ).toHaveAttribute("href", "/knowledge/opencv-filtering-basics/");
   await expectNoHorizontalOverflow(page);
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);

@@ -48,11 +48,11 @@ learningOutcomes:
 masteryCriteria:
   - id: criterion.opencv-filtering-basics.smoothing-comparison
     description: 独立完成 mean 与 Gaussian smoothing 对照，通过手算、关键像素、平坦区波动、边缘对比和 border 说明解释降噪与细节损失的权衡，并证明 source 未被意外修改。
-    evidenceHint: 提交 input contract、3×3/5×5 mean、Gaussian kernel/sigma/border、一处手算、关键像素、flat-region variation、edge contrast、可信 before/after、source 相等性断言，以及一次过度平滑或非法 kernel 的 input/expected/actual/reason/correction 诊断。
+    evidenceHint: 提交 input contract、3×3/5×5 mean、Gaussian kernel/sigma/border、一处手算、关键像素、不受 5×5 border 影响的 flat-region variation、edge contrast、同范围可信 before/after、source 相等性断言，以及一次过度平滑或非法 kernel 的 input/expected/actual/reason/correction 诊断。
     required: true
   - id: criterion.opencv-filtering-basics.sharpen-numeric-safety
     description: 独立用对称 sharpening kernel 完成 float32 与 uint8 路径对照，解释负值、超范围响应、saturation、噪声增强和安全显示/转换边界。
-    evidenceHint: 提交 kernel、working dtype、ddepth、before/after min/max、边缘关键像素、noise-region 对照、uint8 saturation 与 float response、clip/display/convert 决策、source 断言，以及一个 dtype/range 的 input/expected/actual/reason/correction 失败卡。
+    evidenceHint: 提交 kernel、两个关键位置的局部算术、working dtype、ddepth、before/after min/max、noise-region 对照、uint8 saturation 与 float response、可信 raw display、clip/rint/astype 职责、source 断言，以及一个 dtype/range 的 input/expected/actual/reason/correction 失败卡。
     required: true
 resourceIds:
   - resource.opencv-python-tutorials
@@ -89,7 +89,7 @@ validated image
 - **weighted combination**：邻域值分别乘对应权重后相加；
 - **border rule**：邻域伸出图像时，怎样提供图像外的值。
 
-最小的 3×3 averaging kernel 是：
+3×3 是包含中心像素、上下左右以及四个对角邻居的最小常见奇数方形邻域，总共有 9 个位置。简单 mean 让九个位置等权，因此每个权重都是 $1/9$：
 
 $$
 K=\frac{1}{9}
@@ -100,7 +100,7 @@ K=\frac{1}{9}
 \end{bmatrix}.
 $$
 
-把 kernel 中心放在当前输出位置上，将九个输入值各乘 $1/9$ 后相加。权重和为 1，所以常量 patch 的输出仍是原常量；但局部高低变化会被平均。
+把 kernel 中心放在当前输出位置上，将九个输入值各乘 $1/9$ 后相加。九个权重的总和为 1，所以常量 patch 理想情况下仍保持原亮度；但局部高低变化会被平均。
 
 ## 2. 为什么机器视觉需要它
 
@@ -203,6 +203,15 @@ $$
 
 中心像素被强调，上下左右邻居被减去，因此平坦区域变化较小，边缘或噪点附近的响应可能被放大。它不会恢复或创造原本不存在的信息，输入若已经失去细节，锐化不能凭空找回真实结构。
 
+对一个位置，当前 kernel 的局部算术就是 `5 × center − up − down − left − right`。正文固定图像的两个边缘位置分别得到：
+
+```text
+(4,6): 5×40  − 36  − 48  − 35  − 183 = -102
+(4,7): 5×183 − 183 − 179 − 40  − 175 = 338
+```
+
+第一个中心比右侧邻居暗很多，所以可能得到负响应；第二个中心比左侧邻居亮很多，所以可能超过 255。正因为这些响应对局部变化有意义，正式分析路径必须先用 `float32` 保留它们，而不是立刻塞回 `uint8`。
+
 锐化会产生负值和大于 255 的值。正式路径先转 `float32`：
 
 ```python
@@ -236,7 +245,11 @@ sharp_uint8_for_output = np.rint(
 ).astype(np.uint8)
 ```
 
-clip 会主动丢失负值和大于 255 的响应，所以不能先 clip 再假装原始响应从未越界。`float32` 不自动表示 0–1，`uint8` 也不表示当前图像一定实际覆盖 0–255。
+- **`clip`**：把数值限制到输出图像契约允许的范围；这里是 `[0,255]`，会主动丢失超范围信息；
+- **`rint`**：把浮点值舍入到最近整数，决定它落在哪个离散整数值；
+- **`astype(np.uint8)`**：只把已经准备好的数值转换为目标存储 dtype，不会替学习者选择合理范围或设计正确舍入策略。
+
+因此推荐顺序是 `inspect raw float → clip if output contract requires → rint → astype(uint8)`。如果只是分析 response，可以继续保留 float，完全不需要转回 `uint8`。不能先 clip 再假装原始响应从未越界；`float32` 不自动表示 0–1，`uint8` 也不表示当前图像一定实际覆盖 0–255。
 
 ### 4.6 border：不存在的邻域像素从哪里来
 
@@ -246,6 +259,8 @@ clip 会主动丢失负值和大于 255 的响应，所以不能先 clip 再假�
 - `BORDER_REPLICATE`：复制最靠近的边缘像素。
 
 对 `[[1,2,3],[4,5,6],[7,8,9]]` 使用 3×3 mean：中心都是 5；左上角在 constant-zero 下约为 1.3333，在 replicate 下约为 2.3333。差异来自边界假设，不是 kernel 主体突然改变。
+
+kernel 越大，靠近图像边缘时需要访问图像外位置的区域就越宽，因此更多输出像素可能受 border rule 影响。比较 smoothing strength 时，应另外选择能容纳最大 kernel、且不跨真实结构边缘的内部测量区域。
 
 ### 4.7 filter2D：当前必须知道的 correlation 边界
 
@@ -259,7 +274,7 @@ OpenCV 文档有时会宽泛地把 `filter2D` 放在 convolution 语境中，但
 
 ```python
 def flat_region_variation(image):
-    region = image[3:8, 1:4].astype(np.float32)
+    region = image[2:7, 2:5].astype(np.float32)
     return float(np.std(region))
 
 
@@ -269,8 +284,8 @@ def edge_contrast(image):
     return float(np.mean(right_band) - np.mean(left_band))
 ```
 
-- flat-region variation：平坦区域的简单波动大小；
-- edge contrast：已知边界两侧固定区域均值之差。
+- flat-region variation：`std`（standard deviation，标准差）在这里仅描述同一固定区域中的像素值围绕该区域平均值分散得有多大。当前 `[2:7,2:5]` 完整避开图像外边界和 column 7 的阶跃，能容纳 5×5 kernel；std 较小通常表示这个固定平坦区域内部更均匀，但不是整张图像质量分数。如果区域跨越真实边缘，它就不能单独表示 noise variation；
+- edge contrast：对 column 7 已知阶跃两侧的固定带 `rows 2:7, columns 5:7` 与 `rows 2:7, columns 7:9` 分别求均值，再计算右侧减左侧。source、mean、Gaussian 和 sharpen 始终调用同一个函数；数值降低只说明当前这条边界在实验中变软，不等于整张图像变差。
 
 它们只服务当前受控实验，不是完整图像质量评价体系，也不引入 PSNR 或 SSIM。
 
@@ -337,7 +352,8 @@ def make_filtering_image():
 
 
 def flat_region_variation(image):
-    return float(np.std(image[3:8, 1:4].astype(np.float32)))
+    # rows 2..6、columns 2..4 能容纳 5×5 kernel，且不跨 column 7 的阶跃。
+    return float(np.std(image[2:7, 2:5].astype(np.float32)))
 
 
 def edge_contrast(image):
@@ -369,9 +385,9 @@ assert mean_3.dtype == mean_5.dtype == source.dtype
 assert mean_3[4, 6] == 88
 assert mean_5[4, 6] == 95
 
-print("source variation:", flat_region_variation(source))   # ≈ 4.7954
-print("mean 3 variation:", flat_region_variation(mean_3))   # ≈ 1.7436
-print("mean 5 variation:", flat_region_variation(mean_5))   # ≈ 0.6182
+print("source variation:", flat_region_variation(source))   # ≈ 4.2531
+print("mean 3 variation:", flat_region_variation(mean_3))   # ≈ 1.6193
+print("mean 5 variation:", flat_region_variation(mean_5))   # ≈ 0.7180
 print("source contrast:", edge_contrast(source))             # ≈ 140.4
 print("mean 3 contrast:", edge_contrast(mean_3))             # ≈ 94.3
 print("mean 5 contrast:", edge_contrast(mean_5))             # ≈ 57.0
@@ -398,6 +414,7 @@ assert gaussian.shape == source.shape
 assert gaussian.dtype == source.dtype
 assert gaussian[4, 6] == 79
 assert gaussian[4, 7] == 142
+assert mean_3[4, 7] == 134
 assert mean_3[1, 12] == 191
 assert gaussian[1, 12] == 198
 assert np.count_nonzero(mean_3 != gaussian) == 72
@@ -407,6 +424,19 @@ print("Gaussian contrast:", edge_contrast(gaussian))            # ≈ 102.5
 
 assert not np.array_equal(mean_3, gaussian)
 assert np.array_equal(source, original)
+
+# 同一 cmap、vmin、vmax：视觉差异才能与 std / edge contrast 对应。
+smoothing_figure, smoothing_axes = plt.subplots(1, 4, figsize=(11, 3))
+for axis, image, title in zip(
+    smoothing_axes,
+    [source, mean_3, mean_5, gaussian],
+    ["source", "mean 3×3", "mean 5×5", "Gaussian 3×3"],
+):
+    axis.imshow(image, cmap="gray", vmin=0, vmax=255)
+    axis.set_title(title)
+    axis.axis("off")
+plt.tight_layout()
+plt.show()
 ```
 
 同样是 3×3，mean 在当前边缘关键像素 `(4,6)` 给出 88，Gaussian 给出 79；在 `(4,7)` 分别是 134 与 142。Gaussian 没有“全面胜出”，只是采用了不同权重，因此必须结合任务和指标解释。
@@ -456,6 +486,12 @@ sharp_uint8_direct = cv2.filter2D(
     borderType=cv2.BORDER_REPLICATE,
 )
 
+# 两个位置都按 5×center − up − down − left − right 计算。
+dark_response = 5 * int(source[4, 6]) - int(source[3, 6]) - int(source[5, 6]) - int(source[4, 5]) - int(source[4, 7])
+bright_response = 5 * int(source[4, 7]) - int(source[3, 7]) - int(source[5, 7]) - int(source[4, 6]) - int(source[4, 8])
+assert dark_response == 5 * 40 - 36 - 48 - 35 - 183 == -102
+assert bright_response == 5 * 183 - 183 - 179 - 40 - 175 == 338
+
 assert sharp_float.dtype == np.float32
 assert (sharp_float.min().item(), sharp_float.max().item()) == (-116.0, 542.0)
 assert sharp_float[4, 6] == -102.0
@@ -464,8 +500,8 @@ assert sharp_uint8_direct.dtype == np.uint8
 assert sharp_uint8_direct[4, 6] == 0
 assert sharp_uint8_direct[4, 7] == 255
 
-print("source variation:", flat_region_variation(source))       # ≈ 4.7954
-print("sharp variation:", flat_region_variation(sharp_float))  # ≈ 27.0875
+print("source variation:", flat_region_variation(source))       # ≈ 4.2531
+print("sharp variation:", flat_region_variation(sharp_float))  # ≈ 20.6619
 print("source contrast:", edge_contrast(source))                # ≈ 140.4
 print("sharp contrast:", edge_contrast(sharp_float))           # ≈ 279.4
 
@@ -477,7 +513,7 @@ sharp_uint8_for_output = np.rint(
 figure, axes = plt.subplots(1, 3, figsize=(10, 3))
 axes[0].imshow(source, cmap="gray", vmin=0, vmax=255)
 axes[0].set_title("source 0..255")
-raw_plot = axes[1].imshow(sharp_float, cmap="coolwarm", vmin=-128, vmax=512)
+raw_plot = axes[1].imshow(sharp_float, cmap="coolwarm", vmin=-128, vmax=560)
 axes[1].set_title("raw float response")
 figure.colorbar(raw_plot, ax=axes[1])
 axes[2].imshow(sharp_uint8_for_output, cmap="gray", vmin=0, vmax=255)
@@ -490,7 +526,7 @@ plt.show()
 assert np.array_equal(source, original)
 ```
 
-预期：float 路径保留 `-102` 和 `338`，直接 `uint8` 路径只能看到 0 和 255。边缘对比增加的同时，平坦区波动也明显增加；因此 sharper 不是无条件 better。
+预期：float 路径保留 `-102` 和 `338`，直接 `uint8` 路径只能看到 0 和 255。`vmin=-128, vmax=560` 覆盖当前真实范围 `-116..542`；改变显示范围只改变数值到颜色的映射，不修改数组。显示端把超出 `vmin/vmax` 的值映射为端点颜色，与先用 `np.clip` 永久改变数值是两件事。边缘对比增加的同时，平坦区波动也明显增加；因此 sharper 不是无条件 better。
 
 ### Checkpoint 4：Border 与统一 failure diagnosis
 
@@ -520,6 +556,15 @@ assert np.isclose(constant[1, 1], 5.0)
 assert np.isclose(replicate[1, 1], 5.0)
 assert np.isclose(constant[0, 0], 12.0 / 9.0)   # ≈ 1.3333
 assert np.isclose(replicate[0, 0], 21.0 / 9.0)  # ≈ 2.3333
+
+report_diagnosis(
+    "小图像中的大 kernel 与 border 耦合",
+    {"source shape": border_patch.shape, "kernel size": (5, 5)},
+    "比较 smoothing strength 时，测量区域不受图像外补值影响",
+    "3×3 图像的每个 5×5 邻域都会伸出图像",
+    "图像太小，border effect 占据全部输出位置，不能把差异只归因于 smoothing strength。",
+    "改用更大 fixture，并在距离外边界至少 2 像素、且不跨真实边缘的内部区域测量。",
+)
 
 report_diagnosis(
     "ddepth=-1 的错误预期",
@@ -581,10 +626,15 @@ assert np.array_equal(source, original)
 8. filtering 与 geometric interpolation、clipping 的目标各是什么？
 9. 为什么可信显示不能替代 raw dtype/min/max 和关键像素检查？
 10. 为什么本篇不把 `filter2D` 无条件称为严格数学 convolution？
+11. 为什么 flat-region std 必须选择真正平坦、且能容纳最大 kernel 的区域？
+12. 为什么 raw response 必须在 clip 前记录？
+13. `rint` 与 `astype` 分别负责什么？
 
 完成标准：不看正文解释每项，并能为 mean、Gaussian、sharpen 分别写出最小输入契约、参数、数值检查和失败诊断。只会背 API 名称不算完成。
 
 ## 10. Practice
+
+Practice 不是额外的第二套完整作业。可以在同一个 notebook / report 中完成下面的计算和诊断，再把满足 Evidence 要求的结果直接整理成 Mastery Evidence；不需要重复运行完全相同的实验。建议保留一条连续记录：`Practice calculations / diagnostics → Evidence summary`。
 
 ### 理解检查
 
@@ -635,17 +685,19 @@ assert np.array_equal(source, original)
 
 ### Evidence 1：Smoothing comparison
 
-独立提交 input contract、source shape/dtype/range、3×3/5×5 mean、Gaussian kernel/sigma/border、一处手算、关键输出像素、flat-region variation、edge contrast、before/after 可信显示与 source 未修改断言；另提交一次过度平滑或非法 kernel 诊断。
+独立提交 input contract、source shape/dtype/range、3×3/5×5 mean、Gaussian kernel/sigma/border、一处手算、关键输出像素、不受 5×5 border 影响的 flat-region variation、edge contrast、同范围 before/after 可信显示与 source 未修改断言；另提交一次过度平滑或非法 kernel 诊断。
 
 通过标准：至少两种 filter 的差异由数值和显示共同证明；能解释波动降低和边缘损失的 trade-off；失败卡包含 input、expected、actual、reason、correction。无需正式 noise model 或完整 convolution 理论。
 
 ### Evidence 2：Sharpen numeric safety
 
-独立提交 sharpening kernel、float working dtype、`CV_32F`、before/after min/max、边缘关键像素、noise-region 对照、`uint8 + ddepth=-1` 路径、saturation 与 float 原始响应、明确的 clip/display/convert 决策、source 断言，以及一个 dtype/range failure card。
+独立提交 sharpening kernel、两个关键位置的局部算术、float working dtype、`CV_32F`、before/after min/max、noise-region 对照、`uint8 + ddepth=-1` 路径、saturation 与 float 原始响应、覆盖当前 raw range 的可信显示、明确的 clip/rint/astype 决策、source 断言，以及一个 dtype/range failure card。
 
 通过标准：负值和 >255 响应在 clip 前被记录；正确区分 saturation 与模回绕；解释 sharpening 增强已有局部变化但不能创造信息；failure card 包含 input、expected、actual、reason、correction。
 
 两项都达到才符合本页 `master`：能够独立完成基础滤波、解释和诊断，不代表掌握完整 OpenCV filtering API、DSP 或高级去噪。
+
+两项 Evidence 可以直接复用上面 Practice 的同一份数组、图、指标和 failure card；验收关注证据是否完整、解释是否独立，不要求为相同结论再跑第二套重复实验。
 
 ## 13. 后续复用与复习
 

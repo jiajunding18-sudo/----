@@ -13,6 +13,8 @@ SHARPEN_KERNEL = np.array(
     ],
     dtype=np.float32,
 )
+FLAT_ROWS = slice(2, 7)
+FLAT_COLUMNS = slice(2, 5)
 
 
 def make_filtering_image() -> np.ndarray:
@@ -27,7 +29,7 @@ def make_filtering_image() -> np.ndarray:
 
 
 def flat_region_variation(image: np.ndarray) -> float:
-    region = image[3:8, 1:4].astype(np.float32)
+    region = image[FLAT_ROWS, FLAT_COLUMNS].astype(np.float32)
     return float(np.std(region))
 
 
@@ -54,6 +56,20 @@ class OpenCvFilteringBasicsBehaviorTest(unittest.TestCase):
         self.assertEqual(expected_center, 5.0)
         self.assertEqual(float(filtered[1, 1]), expected_center)
 
+    def test_flat_region_support_stays_inside_image_and_left_plateau(self) -> None:
+        height, width = self.source.shape
+        five_by_five_radius = 2
+        step_column = 7
+
+        self.assertGreaterEqual(FLAT_ROWS.start, five_by_five_radius)
+        self.assertLessEqual(FLAT_ROWS.stop, height - five_by_five_radius)
+        self.assertGreaterEqual(FLAT_COLUMNS.start, five_by_five_radius)
+        self.assertLessEqual(
+            FLAT_COLUMNS.stop - 1 + five_by_five_radius,
+            step_column - 1,
+        )
+        self.assertLess(FLAT_COLUMNS.stop, width)
+
     def test_three_and_five_pixel_mean_have_reproducible_tradeoffs(self) -> None:
         mean_3 = cv2.blur(self.source, (3, 3), borderType=MEAN_BORDER)
         mean_5 = cv2.blur(self.source, (5, 5), borderType=MEAN_BORDER)
@@ -63,6 +79,9 @@ class OpenCvFilteringBasicsBehaviorTest(unittest.TestCase):
         self.assertFalse(np.array_equal(mean_3, mean_5))
         self.assertEqual(int(mean_3[4, 6]), 88)
         self.assertEqual(int(mean_5[4, 6]), 95)
+        self.assertAlmostEqual(flat_region_variation(self.source), 4.2531, places=4)
+        self.assertAlmostEqual(flat_region_variation(mean_3), 1.6193, places=4)
+        self.assertAlmostEqual(flat_region_variation(mean_5), 0.7180, places=4)
         self.assertLess(flat_region_variation(mean_5), flat_region_variation(mean_3))
         self.assertLess(edge_contrast(mean_5), edge_contrast(mean_3))
 
@@ -87,6 +106,7 @@ class OpenCvFilteringBasicsBehaviorTest(unittest.TestCase):
         self.assertEqual(first.dtype, self.source.dtype)
         self.assertEqual(int(first[4, 6]), 79)
         self.assertEqual(int(first[4, 7]), 142)
+        self.assertAlmostEqual(flat_region_variation(first), 1.8427, places=4)
 
     def test_mean_and_gaussian_are_numerically_distinct(self) -> None:
         mean_3 = cv2.blur(self.source, (3, 3), borderType=MEAN_BORDER)
@@ -130,6 +150,22 @@ class OpenCvFilteringBasicsBehaviorTest(unittest.TestCase):
         self.assertEqual(float(sharpened.max()), 542.0)
         self.assertEqual(float(sharpened[4, 6]), -102.0)
         self.assertEqual(float(sharpened[4, 7]), 338.0)
+        dark_response = (
+            5 * int(self.source[4, 6])
+            - int(self.source[3, 6])
+            - int(self.source[5, 6])
+            - int(self.source[4, 5])
+            - int(self.source[4, 7])
+        )
+        bright_response = (
+            5 * int(self.source[4, 7])
+            - int(self.source[3, 7])
+            - int(self.source[5, 7])
+            - int(self.source[4, 6])
+            - int(self.source[4, 8])
+        )
+        self.assertEqual(dark_response, -102)
+        self.assertEqual(bright_response, 338)
         self.assertGreater(edge_contrast(sharpened), edge_contrast(self.source))
         self.assertGreater(
             flat_region_variation(sharpened),

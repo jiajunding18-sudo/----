@@ -490,6 +490,8 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).toContain("Geometry asks:");
     expect(concept?.body).toContain("Filtering asks:");
     expect(concept?.body).toContain("cv2.blur");
+    expect(concept?.body).toContain("总共有 9 个位置");
+    expect(concept?.body).toContain("每个权重都是 $1/9$");
     expect(concept?.body).toContain("cv2.GaussianBlur");
     expect(concept?.body).toContain("sigmaX=1.0");
     expect(concept?.body).toContain("sigmaY=1.0");
@@ -510,21 +512,35 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).toContain("mean_5[4, 6] == 95");
     expect(concept?.body).toContain("gaussian[4, 6] == 79");
     expect(concept?.body).toContain("gaussian[4, 7] == 142");
+    expect(concept?.body).toContain("image[2:7, 2:5]");
+    expect(concept?.body).toContain("standard deviation，标准差");
+    expect(concept?.body).toContain("≈ 4.2531");
+    expect(concept?.body).toContain("≈ 1.6193");
+    expect(concept?.body).toContain("≈ 0.7180");
+    expect(concept?.body).toContain("≈ 1.8427");
     expect(concept?.body).toContain("flat_region_variation");
     expect(concept?.body).toContain("edge_contrast");
+    expect(concept?.body).toContain("smoothing_axes");
+    expect(concept?.body).toContain('cmap="gray", vmin=0, vmax=255');
     expect(concept?.body).toContain("sharp_float.min().item()");
     expect(concept?.body).toContain("(-116.0, 542.0)");
+    expect(concept?.body).toContain("5 * 40 - 36 - 48 - 35 - 183 == -102");
+    expect(concept?.body).toContain("5 * 183 - 183 - 179 - 40 - 175 == 338");
     expect(concept?.body).toContain("sharp_float[4, 6] == -102.0");
     expect(concept?.body).toContain("sharp_float[4, 7] == 338.0");
     expect(concept?.body).toContain("sharp_uint8_direct[4, 6] == 0");
     expect(concept?.body).toContain("sharp_uint8_direct[4, 7] == 255");
     expect(concept?.body).toContain("np.clip(sharp_float, 0.0, 255.0)");
+    expect(concept?.body).toContain("vmin=-128, vmax=560");
+    expect(concept?.body).toContain("inspect raw float → clip if output contract requires → rint → astype(uint8)");
+    expect(concept?.body).toContain("小图像中的大 kernel 与 border 耦合");
+    expect(concept?.body).toContain("Practice calculations / diagnostics → Evidence summary");
     expect(concept?.body).toContain("np.array_equal(source, original)");
     expect(concept?.body).toContain("### Checkpoint 1");
     expect(concept?.body).toContain("### Checkpoint 2");
     expect(concept?.body).toContain("### Checkpoint 3");
     expect(concept?.body).toContain("### Checkpoint 4");
-    expect(concept?.body?.match(/report_diagnosis\(/gu)).toHaveLength(5);
+    expect(concept?.body?.match(/report_diagnosis\(/gu)).toHaveLength(6);
     ["input:", "expected:", "actual:", "reason:", "correction:"].forEach(
       (field) => expect(concept?.body).toContain(field),
     );

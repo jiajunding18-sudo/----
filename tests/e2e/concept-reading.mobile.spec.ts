@@ -211,7 +211,11 @@ test("360px 下基础滤波的代码、表格、TOC、深链接与键盘保持�
   await expect(document.locator('[data-code-language="python"]')).toHaveCount(11);
   await expect(document.getByRole("table")).toBeVisible();
   await expect(document).toContainText("hand_center == 5.0");
+  await expect(document).toContainText("image[2:7, 2:5]");
+  await expect(document).toContainText("smoothing_axes");
   await expect(document).toContainText("sharp_float[4, 6] == -102.0");
+  await expect(document).toContainText("vmin=-128, vmax=560");
+  await expect(document).toContainText("小图像中的大 kernel 与 border 耦合");
   await expect(document).toContainText("BORDER_REPLICATE");
   await expect(document).toContainText("input → expected → actual → reason → correction");
 

@@ -514,12 +514,25 @@ test("基础滤波正文呈现 kernel、数值安全、边界与定量诊断闭�
   await expect(document.locator('[data-code-language="python"]')).toHaveCount(11);
   await expect(document.getByRole("table")).toBeVisible();
   await expect(document).toContainText("hand_center == 5.0");
+  await expect(document).toContainText("总共有 9 个位置");
+  await expect(document).toContainText("image[2:7, 2:5]");
+  await expect(document).toContainText("standard deviation，标准差");
+  await expect(document).toContainText("smoothing_axes");
+  await expect(document).toContainText("5 * 40 - 36 - 48 - 35 - 183 == -102");
   await expect(document).toContainText("sharp_float[4, 6] == -102.0");
+  await expect(document).toContainText("vmin=-128, vmax=560");
+  await expect(document).toContainText(
+    "inspect raw float → clip if output contract requires → rint → astype(uint8)",
+  );
   await expect(document).toContainText("correlation（相关）");
   await expect(document).toContainText("BORDER_CONSTANT");
   await expect(document).toContainText("BORDER_REPLICATE");
   await expect(document).toContainText("flat_region_variation");
   await expect(document).toContainText("edge_contrast");
+  await expect(document).toContainText("小图像中的大 kernel 与 border 耦合");
+  await expect(document).toContainText(
+    "Practice calculations / diagnostics → Evidence summary",
+  );
   for (const checkpoint of [1, 2, 3, 4]) {
     await expect(
       document.getByRole("heading", {

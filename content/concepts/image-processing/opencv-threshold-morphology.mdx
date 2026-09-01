@@ -50,11 +50,11 @@ learningOutcomes:
 masteryCriteria:
   - id: criterion.opencv-threshold-morphology.threshold-mask
     description: 独立从经过验证的 grayscale 输入产生固定阈值 mask，解释 ret、前景极性和 bool/u8 契约，并比较 dark、nominal、bright 三种受控照明条件。
-    evidenceHint: 提交输入 shape/ndim/dtype/range、T/maxval/type/ret、输出 shape/dtype/unique、foreground count、已知像素、bool/u8 往返、三种照明结果，以及一次 too-high/too-low 或 polarity 的 input/expected/actual/reason/correction 失败卡。
+    evidenceHint: 提交输入 shape/ndim/dtype/range、T/maxval/type/ret、输出 shape/dtype/unique、foreground count、已知像素、bool/u8 往返、三种照明结果及其强度跨越 T 的因果解释，以及一次 too-high/too-low 或 polarity 的 input/expected/actual/reason/correction 失败卡。
     required: true
   - id: criterion.opencv-threshold-morphology.morphology-structure
     description: 独立用 3×3 结构元素完成 erosion、dilation、opening 与 closing 的受控结构实验，解释目标、噪点和小缺口为何变化，并识别一次过度 morphology。
-    evidenceHint: 提交 input mask contract、结构元素、erosion/dilation 预测与实测、opening/closing 前后计数、target ROI/noise/hole 已知检查、source 断言、5×5 aggressive failure 与 border 假设；不要求 connected components 或轮廓 API。
+    evidenceHint: 提交 input mask contract、结构元素、erosion/dilation 位置级预测与实测、opening 删除的 noise/target 位置、closing 增加的原始 hole 与 opening-induced loss、source 断言、5×5 aggressive failure 与 border 假设；不要求 connected components 或轮廓 API。
     required: true
 resourceIds:
   - resource.opencv-python-tutorials
@@ -178,6 +178,8 @@ mask_bool_again = mask_u8 > 0
 ```
 
 必须先检查 binary values，再使用 `>0`。任意普通 `uint8` 灰度图也可以含非零值；直接 `>0` 会把它们全部选为 True。
+
+当前正式教学契约和本项目验证路径统一使用 H×W、`uint8`、values=`{0,255}` 的 OpenCV binary image。当前项目所验证的 OpenCV 环境不接受把 bool 数组直接传给 morphology API，因此不要依赖 bool 输入会被接受；需要 NumPy boolean indexing 时，再用 `mask_bool = mask_u8 > 0`。其他绑定版本是否接受不同 dtype，不属于本篇契约。
 
 ### 4.4 Structuring element 不是 averaging kernel
 
@@ -382,7 +384,17 @@ assert np.count_nonzero(too_high) == 2
 assert np.array_equal(source, original)
 ```
 
-预期：同一 `T=127` 在 dark 条件下丢失整个 target，在 nominal 条件下保留 34/35 个 target pixels，在 bright 条件下把全部 117 个位置都判为 foreground。这是 fixed threshold 的边界，不是引入 Otsu 或 adaptive threshold 的理由。
+`np.count_nonzero(mask)` 统计的是非零位置数量。对当前 0/255 binary mask，`foreground_count = np.count_nonzero(mask)`，而 `mask.sum() = 255 × foreground_count`；count 和像素值总和不是同一个量。
+
+`shift_intensity_safely` 先把 `uint8` 扩大为有符号 `int16`，再加减 offset、clip 并转回 `uint8`。不能直接在 `uint8` 上执行 `image - 70`：`uint8` 无法表示负数，直接运算可能回绕，破坏当前“亮度整体移动”的实验含义。
+
+同一 `T=127` 下，三种结果来自输入强度分布跨越阈值的位置不同：
+
+- **dark**：target 的 `180 - 70 = 110 < 127`，所以 target ROI 全部落入 background；两个孤立亮噪点的 `220 - 70 = 150 > 127`，所以仍保留为 foreground，得到 `foreground=2, target=0`；
+- **nominal**：target 中除原始 hole 外的 34 个位置为 `180 > 127`，hole 仍为 `30 < 127`；两个亮噪点为 `220 > 127`，因此得到 `target=34, foreground=36`；
+- **bright**：原 background 也变为 `30 + 110 = 140 > 127`，所以 9×13 共 117 个位置全部成为 foreground，target ROI 的 35 个位置也全部成为 foreground。
+
+这里的 **illumination failure** 是输入强度分布变化而 `T` 不变；`too_low` / `too_high` 则是输入不变而 threshold 参数变化。两者都可能让大量像素跨过 `T`，但失败来源不同。这说明 fixed threshold 只在受控条件下有效，不是引入 Otsu 或 adaptive threshold 的理由。
 
 ### Checkpoint 2 — Erosion / Dilation 手算与 bool 边界
 
@@ -438,7 +450,12 @@ except cv2.error:
 assert bool_rejected
 ```
 
-预测与实测一致：3×3 foreground block 被 erosion 留下一个中心点；单个 foreground point 被 dilation 扩为 3×3 block。这里验证的是结构关系，不是加权平均。
+预测与实测一致。在当前 `255=foreground` 契约下：
+
+- **erosion**：中心位置 `[2,2]` 的 3×3 neighborhood 全部是 foreground，因此中心保留；原 3×3 block 的边缘位置（例如 `[1,1]`）的 neighborhood 包含 background，因此不能保留，最终 `9 → 1`；
+- **dilation**：原中心附近的八个位置，各自的 3×3 neighborhood 都包含原中心 foreground point，因此它们也成为 foreground，最终 `1 → 9`。
+
+这里验证的是位置级结构关系，不是加权平均。当前项目所验证的 OpenCV 环境会拒绝上面的 bool morphology 输入；正式路径始终先使用已验证的 `uint8` 0/255 binary contract，不把这一行为泛化为所有未来绑定版本的永久规则。
 
 ### Checkpoint 3 — Opening / Closing cleanup 与过激参数
 
@@ -501,7 +518,11 @@ plt.tight_layout()
 plt.show()
 ```
 
-opening 删除了两个孤立 noise pixels，但也暂时损失了 target 中的四个 foreground pixels；closing 随后填回小缺口，使 target ROI 达到 35。计数变化本身不是“更好”的证明，已知 target/noise/hole 检查才说明当前变化是否符合任务。
+raw mask 的 36 个 foreground 包含 target ROI 中的 34 个位置和两个 isolated noise。opening 删除两个 noise，同时把 target ROI 中位于 `x=6`、`y∈{2,3,5,6}` 的四个 foreground 暂时删除，因此总数和 target count 分别从 `36 → 30`、`34 → 30`；opening 不是“只去噪不伤目标”。
+
+opening 后 target 中间形成一整条五个位置的窄缺口。closing 在当前 3×3 structuring element 下填回 `x=6, y=2..6`：其中 `[4,6]` 是原始 target hole，另外四个是 opening 暂时删除的 target 结构位置，因此 target ROI 从 `30 → 35`。closing 不知道哪些像素是真实目标；它只按当前 structuring element 改变结构，不能称为 ground-truth recovery。
+
+计数变化本身不是“更好”的证明，已知 target/noise/hole 检查才说明当前变化是否符合任务。
 
 5×5 opening 把 foreground 降为 0：输入目标相对 structuring element 太小，主体被完全删除。修正应是减小 kernel，或重新判断 morphology 是否适合，而不是继续增加 iterations。
 
@@ -599,6 +620,9 @@ wrong polarity、bool input、threshold too low/high 也按同一五字段格式
 10. kernel 变大为什么可能把 desired target 一起删除？
 11. borderValue 表达了什么任务假设？
 12. 如何用计数和已知像素证明 cleanup 留下的是目标，而不只是“看起来更干净”？
+13. illumination 改变与 threshold 参数改变，分别改变了比较中的哪一部分？
+14. 为什么 closing 后 `+5` 不代表“恢复了 5 个真实像素”？
+15. 对 0/255 mask，`count_nonzero` 与 `mask.sum()` 分别表示什么？
 
 完成标准：不背 API 列表，能从数据契约、比较规则、局部结构和验证证据解释每一步。
 
@@ -615,18 +639,18 @@ Practice 可以沿用 Worked Example 的同一 notebook / report，完成计算�
 1. 对正文 2×5 数组手算 `T=127` 的 binary output，并圈出等于 T 的位置。完成标准：逐元素结果与正文 expected array 相同。
 2. 改用 `THRESH_BINARY_INV`，预测并验证输出。完成标准：当前 0/255 契约下与 `255 - expected` 相同。
 3. 对 fixture 使用 T=20、127、200，记录总 foreground 与 target ROI count。完成标准：分别得到 `(117,35)`、`(36,34)`、`(2,0)`，并解释 too low / nominal / too high。
-4. 完成 dark、nominal、bright 三条件表。完成标准：报告输入 range、ret、总 foreground 与 target count，不能只贴三张图。
+4. 完成 dark、nominal、bright 三条件表。完成标准：报告输入 range、ret、总 foreground 与 target count，并用 `180→110`、`220→150`、`30→140` 解释像素如何跨越 `T=127`；另用一句话区分 input distribution change 与 threshold parameter change，不能只贴三张图。
 
 ### Binary contract
 
-5. 构造 H×W bool mask，转成 uint8 0/255，再转回 bool。完成标准：先验证 unique values，并用 `np.array_equal` 证明 round-trip。
+5. 构造 H×W bool mask，转成 uint8 0/255，再转回 bool。完成标准：先验证 unique values，并用 `np.array_equal` 证明 round-trip；再对 uint8 mask 同时计算 `count_nonzero` 和 `sum`，解释为什么后者等于前者的 255 倍。
 6. 构造含值 `{0,32,255}` 的 uint8 数组，解释为什么它还不能直接宣称是本页 binary mask。
 
 ### 视觉小练习
 
-7. 手算 5×5 中央 3×3 block 的 erosion。完成标准：预测并验证仅中心一个 foreground。
-8. 手算 5×5 中心单点的 dilation。完成标准：预测并验证中心 3×3 共 9 个 foreground。
-9. 比较 raw/opened/cleaned 的 foreground、target、noise 与 hole。完成标准：每个变化都由 count 或已知像素支持。
+7. 手算 5×5 中央 3×3 block 的 erosion。完成标准：预测并验证仅中心一个 foreground，并解释一个保留位置和一个被删除位置的 neighborhood。
+8. 手算 5×5 中心单点的 dilation。完成标准：预测并验证中心 3×3 共 9 个 foreground，并解释至少一个新增位置为何能看到原中心 foreground。
+9. 比较 raw/opened/cleaned 的 foreground、target、noise 与 hole。完成标准：解释 opening 删除的两个 noise 和四个 target 位置，以及 closing 增加的一个原始 hole 和四个 opening-induced loss；不能把 `30→35` 称为 ground-truth recovery。
 10. 把 opening kernel 改成 5×5。完成标准：诊断 target count 变为 0，并给出 correction。
 
 ### Failure diagnosis
@@ -649,15 +673,15 @@ Pixel Lab 的未来 Stage 2 增量可使用 threshold mask card 与 morphology s
 
 ### Evidence 1 — Threshold mask
 
-独立提交 grayscale input contract、dtype/actual range、T、maxval、threshold type、ret、输出 shape/dtype/unique、foreground count、known pixels、bool/u8 mapping，以及 dark/nominal/bright 三条件结果；另提交一次 too-high/too-low 或 polarity failure card。
+独立提交 grayscale input contract、dtype/actual range、T、maxval、threshold type、ret、输出 shape/dtype/unique、foreground count、known pixels、bool/u8 mapping，以及 dark/nominal/bright 三条件结果与强度跨越 `T` 的因果链；另提交一次 too-high/too-low 或 polarity failure card。
 
-通过标准：能解释 `pixel == T`、ret、foreground polarity 与 threshold/range 单位；三条件不能只靠图片判断，failure card 包含 input、expected、actual、reason、correction。
+通过标准：能解释 `pixel == T`、ret、foreground polarity 与 threshold/range 单位；三条件不能只靠图片或背 count，必须区分输入分布变化与 threshold 参数变化；failure card 包含 input、expected、actual、reason、correction。
 
 ### Evidence 2 — Morphology structure experiment
 
-独立提交 input mask contract、3×3 structuring element、erosion/dilation 预测与实测、opening/closing before/after counts、target ROI、isolated noise、hole、source unchanged、5×5 aggressive failure 与 border assumption。
+独立提交 input mask contract、3×3 structuring element、erosion/dilation 位置级预测与实测、opening/closing before/after counts、target ROI、isolated noise、hole、source unchanged、5×5 aggressive failure 与 border assumption。
 
-通过标准：解释每项结构变化为何发生，证明 desired target 在正式结果中保留，并能说明为什么更大的 kernel 或更多 foreground 不自动等于更好。不要求 connected components、contours 或完整 morphology 理论。
+通过标准：解释 opening 删除的两个 noise 与四个 target 位置、closing 增加的一个原始 hole 与四个 opening-induced loss，并说明这不是 ground-truth recovery；证明 desired target 在正式结果中保留，并能说明为什么更大的 kernel 或更多 foreground 不自动等于更好。不要求 connected components、contours 或完整 morphology 理论。
 
 两项 Evidence 可以直接复用 Practice 的计算、图、计数和 failure cards。当前 `master` 仅表示能独立完成这一基础 mask 生成、结构修改和诊断闭环。
 

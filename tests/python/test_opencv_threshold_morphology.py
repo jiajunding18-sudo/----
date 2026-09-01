@@ -125,6 +125,22 @@ class OpenCvThresholdMorphologyBehaviorTest(unittest.TestCase):
             self.assertEqual(mask.shape, self.source.shape)
             self.assertEqual(mask.dtype, np.uint8)
 
+        dark = shift_intensity_safely(self.source, -70)
+        bright = shift_intensity_safely(self.source, 110)
+        self.assertEqual(int(dark[2, 3]), 110)
+        self.assertEqual(int(dark[1, 1]), 150)
+        self.assertEqual(int(bright[0, 0]), 140)
+        self.assertEqual(dark.dtype, np.uint8)
+        self.assertEqual(bright.dtype, np.uint8)
+
+    def test_binary_foreground_count_is_not_uint8_value_sum(self) -> None:
+        _, mask = threshold_binary(self.source)
+        foreground_count = int(np.count_nonzero(mask))
+        value_sum = int(mask.sum())
+
+        self.assertEqual(foreground_count, 36)
+        self.assertEqual(value_sum, 255 * foreground_count)
+
     def test_too_low_and_too_high_thresholds_are_diagnosable(self) -> None:
         too_low = cv2.threshold(
             self.source,
@@ -227,6 +243,24 @@ class OpenCvThresholdMorphologyBehaviorTest(unittest.TestCase):
         self.assertEqual(int(raw[4, 6]), 0)
         self.assertEqual(int(opened[4, 6]), 0)
         self.assertEqual(int(cleaned[4, 6]), 255)
+
+        target_region = np.zeros(self.source.shape, dtype=bool)
+        target_region[2:7, 3:10] = True
+        opening_removed_target = np.argwhere(
+            target_region & (raw == 255) & (opened == 0)
+        )
+        closing_added_target = np.argwhere(
+            target_region & (opened == 0) & (cleaned == 255)
+        )
+
+        np.testing.assert_array_equal(
+            opening_removed_target,
+            [[2, 6], [3, 6], [5, 6], [6, 6]],
+        )
+        np.testing.assert_array_equal(
+            closing_added_target,
+            [[2, 6], [3, 6], [4, 6], [5, 6], [6, 6]],
+        )
 
     def test_five_by_five_opening_deletes_current_target(self) -> None:
         _, raw = threshold_binary(self.source)

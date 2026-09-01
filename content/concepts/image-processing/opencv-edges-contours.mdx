@@ -1,0 +1,638 @@
+---
+schemaVersion: 1
+id: opencv.edges-contours
+slug: opencv-edges-contours
+title: 边缘、轮廓与区域测量
+englishTitle: Edges & Contours
+aliases:
+  - OpenCV 边缘与轮廓
+  - Canny and contours
+  - 区域面积与外接框
+searchKeywords:
+  - Sobel
+  - Canny
+  - cv2.findContours
+  - contourArea
+  - arcLength
+  - boundingRect
+  - edge map
+summary: 从经过验证的灰度图和二值区域 mask 出发，区分边缘证据与区域内部，验证 Sobel/Canny 数据契约，并用轮廓完成面积、周长、外接框和微小伪目标筛选。
+why: 真实视觉流程不能把“白色像素”都叫作目标；边缘图、区域 mask 和轮廓表达不同对象。只有先验证它们的数据契约，面积与外接框才有可信含义。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 100
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 7
+  max: 9
+dependencies:
+  - conceptId: opencv.filtering-basics
+    kind: hard
+    reason: 需要先理解噪声、边缘与可选平滑之间的权衡，才能解释 Canny 参数或预处理为何改变 edge evidence。
+  - conceptId: opencv.threshold-morphology
+    kind: hard
+    reason: 需要先能产生并验证 H×W、uint8、0/255 的区域 mask，才能把它与 edge map 区分并安全提取轮廓。
+tags:
+  - OpenCV
+  - Edge Detection
+  - Contours
+  - Region Measurement
+learningOutcomes:
+  - 能用已知明暗阶跃解释 Sobel 有符号响应，用 shape、dtype、values、位置和计数验证 Canny edge map，并诊断阈值与噪声造成的失败。
+  - 能区分 edge map、binary region mask 与 contour，验证 findContours 输入和输出契约，并正确解释 N×1×2 轮廓点中的 x/y。
+  - 能对已知区域计算 area、perimeter 与 bounding box，解释像素计数与多边形面积差异，过滤明显微小伪目标并保护 source。
+masteryCriteria:
+  - id: criterion.opencv-edges-contours.edge-contract
+    description: 独立完成一个受控阶跃的 Sobel/Canny 实验，解释梯度符号、Canny 双阈值角色与 edge-map 契约，并诊断噪声、阈值或错误 dtype 造成的至少一个失败。
+    evidenceHint: 提交 grayscale 输入契约、暗到亮与亮到暗的 CV_32F Sobel 关键响应、flat response、Canny low/high、输出 shape/dtype/unique、已知 edge 位置与计数，以及一张包含 input/expected/actual/reason/correction 的失败卡；不要求推导 Sobel/Canny 算法。
+    required: true
+  - id: criterion.opencv-edges-contours.contour-measurement
+    description: 独立从经过验证的 binary region mask 提取外轮廓，解释 contour 坐标和输出 shape，测量 area/perimeter/bounding box，并用透明规则过滤明显微小伪目标。
+    evidenceHint: 提交 mask shape/dtype/values/polarity、findContours 模式与近似方法、contour count/shape/known points、foreground pixel count 与 polygon area 差异、perimeter、bbox、image[y:y+h,x:x+w]、筛选前后结果、source 断言，以及一次 invalid input、polarity、coordinate 或 tiny-contour 失败卡。
+    required: true
+resourceIds:
+  - resource.opencv-python-tutorials
+publicationStatus: published
+contentVersion: 2026.09.01
+---
+
+# 边缘、轮廓与区域测量（Edges & Contours）
+
+本页只解决一个工程问题：**怎样把“哪里可能有边界”的证据与“哪里属于目标”的区域分开，再从可信区域边界得到可解释的测量结果。**
+
+```text
+validated grayscale
+→ edge evidence
+→ inspect edge-map contract and known edge
+→ validated binary region mask
+→ find external contours
+→ inspect contour representation
+→ area / perimeter / bounding box
+→ filter obvious tiny contours
+→ verify known geometry and source protection
+→ diagnose failures
+```
+
+## 1. 这是什么
+
+**边缘（edge）**是像素强度在空间上明显变化的位置证据。Sobel 保留变化方向与符号；Canny 把候选边界整理成二值 **edge map（边缘图）**。
+
+**区域 mask（region mask）**描述哪些空间位置属于 foreground。白色 `255` 通常表示区域内部，黑色 `0` 表示背景。
+
+**轮廓（contour）**是沿一个二值区域边界排列的二维点序列。它让我们能计算多边形面积、周长和外接矩形。
+
+| 数据 | 当前含义 | 常见契约 | 白色 255 表示什么 |
+| --- | --- | --- | --- |
+| Sobel response | 某方向的有符号强度变化 | H×W，float32 | 不适用 |
+| Canny edge map | 边界证据 | H×W，uint8，0/255 | 边界位置 |
+| Binary region mask | 区域归属 | H×W，uint8，0/255 | foreground 内部 |
+| Contour | 区域边界点序列 | 常见 N×1×2，整数 `(x,y)` | 不适用 |
+
+最重要的边界是：**edge map 的 255 是边界证据，不是目标区域内部。** 不能因为两个数组都是 H×W、uint8、0/255，就把它们当成同一种数据。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+`opencv.filtering-basics` 已经建立噪声与边缘的权衡；`opencv.threshold-morphology` 已经让你能得到可信 region mask。现在把它们连接为可测量对象：先用 edge evidence 检查边界，再从 region mask 提取 contour，并证明测量对应已知几何。
+
+### 在机器视觉中会在哪里使用
+
+- planned `pipeline.batch-images` 会记录每张图的 edge/contour 参数、测量与失败；
+- planned `opencv.features-preview` 会继续使用局部结构与可信显示能力；
+- ROADMAP 中 draft `project.classical-inspection` 需要轮廓筛选和规则判定；
+- 受控零件、瓶盖、硬币或打印几何图形可用 area/bbox 做相对区域筛选。
+
+这些映射不表示学完本页就能完成真实工业检测、物理尺寸标定或通用 segmentation。本轮不修改任何 Project requirement。
+
+## 3. 前置知识
+
+正式 hard dependency 只有：
+
+- `opencv.filtering-basics`：复用 validated grayscale、noise/edge trade-off、可选 Gaussian 和 source/result 分离；
+- `opencv.threshold-morphology`：复用 H×W、uint8、0/255、foreground polarity 与 morphology 的条件化使用。
+
+ROADMAP 把 `dip.segmentation` 列为 recommended，但该 Concept 尚未发布，因此本页 frontmatter 暂不建立正式 edge。未来学习它后，再系统理解区域划分与评估；它不是本页开始学习的前置条件。
+
+## 4. 核心概念
+
+### 4.1 Sobel：先保留变化方向和符号
+
+本页只用 Sobel 建立工程直觉，不推导 kernel。`dx=1, dy=0` 检查水平方向坐标 `x` 上的强度变化，也就是对竖直边界产生响应；`dx=0, dy=1` 检查 `y` 方向变化。
+
+```python
+sobel_x = cv2.Sobel(gray, cv2.CV_32F, dx=1, dy=0, ksize=3)
+sobel_y = cv2.Sobel(gray, cv2.CV_32F, dx=0, dy=1, ksize=3)
+```
+
+使用 `CV_32F` 是为了保留正值和负值：暗→亮是正响应，亮→暗是负响应。若直接写入 `uint8`，负值无法表达，方向信息会丢失。平坦区域应接近 0；这比只看一张 auto-scaled 图更可信。
+
+### 4.2 Canny：两个阈值控制连接与保留
+
+```python
+edges = cv2.Canny(gray, threshold1=50, threshold2=150)
+```
+
+- low threshold（低阈值）帮助决定较弱响应能否在与强边缘连接时保留；
+- high threshold（高阈值）标记强边缘候选；
+- 本页保持 `low <= high`，并把两者记录为同一实验参数。
+
+当前输出契约必须验证：H×W、`uint8`、values 属于 `{0,255}`。阈值偏低时噪声响应可能大量进入 edge map；偏高时真实阶跃也可能消失。Gaussian 只在噪声确实干扰当前 edge evidence 时作为显式、可比较的预处理，不是 Canny 前必做仪式。
+
+Canny 的 low/high 是边缘候选连接与确认参数；上一页 fixed threshold 则逐像素决定 foreground/background。两者都叫 threshold，但语义不同。
+
+本页不展开非极大值抑制、滞后连接或完整 Canny 推导。
+
+### 4.3 Region mask 才是 findContours 的正式主输入
+
+```python
+values = set(np.unique(mask).tolist())
+assert mask.ndim == 2
+assert mask.dtype == np.uint8
+assert values.issubset({0, 255})
+
+snapshot = mask.copy()
+contours, hierarchy = cv2.findContours(
+    mask,
+    cv2.RETR_EXTERNAL,
+    cv2.CHAIN_APPROX_SIMPLE,
+)
+assert np.array_equal(mask, snapshot)
+```
+
+当前正式路径使用 H×W、单通道 `uint8` region mask，foreground 为 `255`。OpenCV 也会把非零 `uint8` 值（例如 7）当作 foreground，但这不等于任意 grayscale 都是合法 region mask；本页先把值收敛为 0/255，防止区域语义不清。
+
+当前 Python binding 返回两个值：`contours, hierarchy`。本项目验证路径中 input 未变化，但仍保留 snapshot/assert，不把绑定行为当成忽略 source protection 的理由。float32 或三通道输入在当前正式路径中无效，应在调用前诊断，而不是依赖 traceback。
+
+### 4.4 Contour 的 shape 与坐标
+
+单个轮廓常见 shape 是 `N×1×2`：
+
+- `N` 是保留下来的边界点数量；
+- 最后一维两个数是 `(x,y)`；
+- 数组访问仍是 `image[y,x]`。
+
+因此轮廓点 `(3,2)` 对应图像位置 `[2,3]`。不能把 contour `(x,y)` 的顺序机械抄成 NumPy `[row,column]`。
+
+本页只用 `RETR_EXTERNAL` 获取最外层边界，只用 `CHAIN_APPROX_SIMPLE` 压缩水平/竖直直线上的冗余点。带孔区域可能有内部边界，但 `RETR_EXTERNAL` 不返回它；hierarchy 细节留到后续，不在这里展开。
+
+### 4.5 Area、perimeter 与 bounding box 回答不同问题
+
+- `cv2.contourArea(contour)`：轮廓多边形围成的几何面积；
+- `cv2.arcLength(contour, True)`：闭合轮廓的周长；
+- `cv2.boundingRect(contour)`：返回 `(x,y,w,h)` 的轴对齐外接矩形。
+
+外接 ROI 写成 `image[y:y+h, x:x+w]`。这再次体现 contour/bbox 用 `(x,y)`，NumPy slice 用 `[y,x]`。
+
+对 `mask[2:7, 3:11] = 255`：前景像素数是 `5×8=40`；轮廓角点坐标跨度却是 `(10-3)×(6-2)=7×4=28`，所以 `contourArea=28`。40 在数离散像素样本，28 在测边界点围成的连续多边形；两者不是同一个定义，不能互相替代。
+
+### 4.6 Tiny contour filtering 必须公开规则
+
+一个孤立 foreground pixel 也可能形成 contour，常见 `area=0`、`bbox=1×1`。本页可用 `area >= 1` 删除这个**已知合成实验**中的伪目标，但这不是通用阈值：真实小目标也可能被删。正式记录必须包含 threshold、筛选前后 contour count，以及被删除对象的 area/bbox。
+
+### 4.7 Filtering 与 morphology 都是条件化选择
+
+- 有噪声使 Canny 产生大量 off-edge 响应时，可比较 3×3 Gaussian 前后；
+- binary mask 有已知小缺口或孤立点、且结构元素与目标尺度匹配时，可选择 morphology；
+- 输入已干净时，不应为了流程整齐固定 blur 或 morphology。
+
+## 5. 初学者直觉解释
+
+把 edge map 想成沿边界画的“细线提示”，region mask 想成把目标内部“涂满”，contour 则是沿涂满区域外沿记录的一串 `(x,y)` 点。细线提示可以帮助看边在哪里，却没有自动告诉你线内哪边属于目标；所以轮廓测量主线从已验证的 region mask 出发。
+
+## 6. 必须掌握到什么程度
+
+- 能用 `CV_32F` Sobel 解释暗→亮、亮→暗与 flat response；
+- 能记录并判断 Canny low/high、shape、dtype、values、known edge 和 edge count；
+- 能区分 edge map、region mask 与 contour；
+- 能验证 findContours input/output、contour shape 和 `(x,y)`；
+- 能计算并解释 area、perimeter、bbox 与 foreground count；
+- 能用透明最小规则过滤明显 tiny contour，并证明 source 未修改；
+- 能用统一失败卡诊断输入、阈值、极性、坐标与显示问题。
+
+当前不学习完整 Sobel/Canny 推导、segmentation 理论、contour hierarchy、connected components、convex hull、moments、shape matching、Hough、sub-pixel edge、物理尺寸标定或轮廓跟踪。
+
+## 7. 常见误区
+
+| 误区 | 实际问题 | 当前修正 |
+| --- | --- | --- |
+| 用 uint8 保存 signed Sobel | 负响应无法表达 | `CV_32F` 并检查关键像素 |
+| Canny 阈值越低越“灵敏越好” | 噪声边也会大量进入 | 记录 main/off-edge count |
+| edge map 的 255 就是目标内部 | 它表示边界证据 | region mask 单独验证 |
+| 任意 grayscale 都能直接找轮廓 | 非零灰度会被视作 foreground | 收敛到 H×W uint8 0/255 |
+| contour point 当成 `[row,column]` | contour 是 `(x,y)` | 访问图像时改为 `[y,x]` |
+| foreground count 等于 contour area | 离散样本数与多边形面积定义不同 | 同时报告 40 与 28 |
+| 轮廓越小越该删 | 小目标可能是真目标 | 公开筛选规则与任务假设 |
+| 有孔区域用 `RETR_EXTERNAL` 会返回孔 | 该模式只保留最外层边界 | 记录 retrieval mode |
+| 直接在 source 上画轮廓 | 污染测量输入与基准 | `result = source.copy()` |
+
+## 8. Worked Example
+
+四个 checkpoint 可逐段运行。阶跃和矩形都是已知几何合成数据，用来验证数值契约，不是新的图像生成课程。
+
+### Checkpoint 1 — Signed Sobel
+
+```python
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+dark_to_bright = np.full((7, 11), 30, dtype=np.uint8)
+dark_to_bright[:, 5:] = 220
+bright_to_dark = np.full((7, 11), 220, dtype=np.uint8)
+bright_to_dark[:, 5:] = 30
+assert dark_to_bright.shape == bright_to_dark.shape == (7, 11)
+assert dark_to_bright.dtype == bright_to_dark.dtype == np.uint8
+assert (dark_to_bright.min().item(), dark_to_bright.max().item()) == (30, 220)
+
+sobel_positive = cv2.Sobel(dark_to_bright, cv2.CV_32F, 1, 0, ksize=3)
+sobel_negative = cv2.Sobel(bright_to_dark, cv2.CV_32F, 1, 0, ksize=3)
+sobel_y = cv2.Sobel(dark_to_bright, cv2.CV_32F, 0, 1, ksize=3)
+
+assert sobel_positive.dtype == np.float32
+assert sobel_positive[3, 4] == sobel_positive[3, 5] == 760.0
+assert sobel_negative[3, 4] == sobel_negative[3, 5] == -760.0
+assert np.max(np.abs(sobel_positive[:, :4])) == 0.0
+assert np.max(np.abs(sobel_y)) == 0.0
+
+# 只为显示构造 magnitude mapping；signed response 本身没有被覆盖。
+sobel_magnitude_for_display = np.abs(sobel_positive)
+assert sobel_magnitude_for_display.min() == 0.0
+assert sobel_magnitude_for_display.max() == 760.0
+assert sobel_positive[3, 4] == 760.0
+```
+
+相同绝对变化 `220-30=190` 因方向相反得到 `+760` 与 `-760`。`sobel_y=0` 是因为这个 fixture 沿 row 方向不变。这里关注符号、flat response 和已知位置，不要求手算 Sobel kernel。
+
+### Checkpoint 2 — Canny edge-map contract
+
+```python
+step_edges = cv2.Canny(dark_to_bright, 50, 150)
+assert step_edges.shape == dark_to_bright.shape
+assert step_edges.dtype == np.uint8
+assert set(np.unique(step_edges).tolist()) == {0, 255}
+assert np.count_nonzero(step_edges) == 7
+assert np.flatnonzero(np.any(step_edges > 0, axis=0)).tolist() == [4]
+
+rng = np.random.default_rng(7)
+noisy = np.full((25, 41), 80, dtype=np.float64)
+noisy[:, 20:] = 180
+noisy = np.clip(
+    noisy + rng.normal(0.0, 8.0, noisy.shape),
+    0,
+    255,
+).astype(np.uint8)
+
+low_edges = cv2.Canny(noisy, 10, 30)
+mid_edges = cv2.Canny(noisy, 50, 150)
+high_edges = cv2.Canny(noisy, 900, 1000)
+smoothed = cv2.GaussianBlur(noisy, (3, 3), 0)
+smoothed_edges = cv2.Canny(smoothed, 50, 150)
+
+def edge_counts(edge_map):
+    known_main = int(np.count_nonzero(edge_map[:, 19:21]))
+    total = int(np.count_nonzero(edge_map))
+    off = total - int(np.count_nonzero(edge_map[:, 17:23]))
+    return {"total": total, "known main": known_main, "off": off}
+
+assert edge_counts(low_edges) == {"total": 403, "known main": 25, "off": 359}
+assert edge_counts(mid_edges) == {"total": 26, "known main": 25, "off": 0}
+assert edge_counts(high_edges) == {"total": 0, "known main": 0, "off": 0}
+assert edge_counts(smoothed_edges) == {"total": 25, "known main": 25, "off": 0}
+```
+
+`known main` 统计理论阶跃相邻的 columns 19–20；`off` 只统计远离 columns 17–22 的响应，把近边界的一像素定位差异留作单独观察。低阈值保留了 359 个远离主边界的响应；中间阈值有 25 个主边界响应和 1 个紧邻响应；极高阈值删除了真实边缘。3×3 Gaussian 在这个固定噪声实验中把输出收敛为 25 个主边缘像素，但这只支持“当前噪声条件下有帮助”，不支持“Canny 前永远要 blur”。
+
+### Checkpoint 3 — Known contour geometry
+
+```python
+mask = np.zeros((10, 16), dtype=np.uint8)
+mask[2:7, 3:11] = 255
+mask_snapshot = mask.copy()
+
+contours, hierarchy = cv2.findContours(
+    mask,
+    cv2.RETR_EXTERNAL,
+    cv2.CHAIN_APPROX_SIMPLE,
+)
+assert np.array_equal(mask, mask_snapshot)
+assert len(contours) == 1
+
+contour = contours[0]
+points = contour.reshape(-1, 2)
+expected_points = {(3, 2), (3, 6), (10, 6), (10, 2)}
+assert contour.shape == (4, 1, 2)
+assert {tuple(point) for point in points.tolist()} == expected_points
+assert mask[2, 3] == 255  # contour (x=3,y=2) → image[y=2,x=3]
+
+foreground_pixels = int(np.count_nonzero(mask))
+area = float(cv2.contourArea(contour))
+perimeter = float(cv2.arcLength(contour, True))
+x, y, w, h = cv2.boundingRect(contour)
+roi = mask[y:y+h, x:x+w]
+
+assert foreground_pixels == 40
+assert area == 28.0
+assert perimeter == 22.0
+assert (x, y, w, h) == (3, 2, 8, 5)
+assert roi.shape == (5, 8)
+assert np.count_nonzero(roi) == 40
+```
+
+`CHAIN_APPROX_SIMPLE` 把当前轴对齐矩形压缩成四个角点。foreground count 40 与 polygon area 28 同时正确：前者数 8×5 个像素样本，后者按角点跨度 7×4 计算几何多边形面积。
+
+### Checkpoint 4 — Tiny target、holes 与统一失败诊断
+
+```python
+def report_diagnosis(case, input_contract, expected, actual, reason, correction):
+    print("case:", case)
+    print("input:", input_contract)
+    print("expected:", expected)
+    print("actual:", actual)
+    print("reason:", reason)
+    print("correction:", correction)
+
+
+mask_with_noise = mask.copy()
+mask_with_noise[8, 14] = 255
+noisy_snapshot = mask_with_noise.copy()
+noisy_contours, _ = cv2.findContours(
+    mask_with_noise,
+    cv2.RETR_EXTERNAL,
+    cv2.CHAIN_APPROX_SIMPLE,
+)
+records = sorted(
+    [
+        {
+            "area": float(cv2.contourArea(item)),
+            "bbox": cv2.boundingRect(item),
+            "contour": item,
+        }
+        for item in noisy_contours
+    ],
+    key=lambda item: item["area"],
+)
+assert [(item["area"], item["bbox"]) for item in records] == [
+    (0.0, (14, 8, 1, 1)),
+    (28.0, (3, 2, 8, 5)),
+]
+
+minimum_area = 1.0  # only for this known synthetic task
+kept = [item for item in records if item["area"] >= minimum_area]
+assert len(kept) == 1
+assert kept[0]["bbox"] == (3, 2, 8, 5)
+assert np.array_equal(mask_with_noise, noisy_snapshot)
+
+mask_with_hole = mask.copy()
+mask_with_hole[4, 6] = 0
+external, _ = cv2.findContours(
+    mask_with_hole,
+    cv2.RETR_EXTERNAL,
+    cv2.CHAIN_APPROX_SIMPLE,
+)
+assert len(external) == 1  # RETR_EXTERNAL only reports the outer boundary
+
+edge_map = cv2.Canny(mask, 50, 150)
+wrong_signed = cv2.Sobel(bright_to_dark, cv2.CV_8U, 1, 0, ksize=3)
+report_diagnosis(
+    "signed Sobel 写入 uint8",
+    {"transition": "bright→dark", "ddepth": "CV_8U"},
+    "保留 -760 的方向信息",
+    {"edge response": int(wrong_signed[3, 4]), "dtype": wrong_signed.dtype},
+    "uint8 无法表达负响应，当前像素被饱和为 0。",
+    "使用 CV_32F 分析 signed response，显示或保存时再单独映射。",
+)
+
+report_diagnosis(
+    "Canny low/high 顺序",
+    {"low": 150, "high": 50},
+    "0 <= low <= high，并记录两者角色",
+    "参数不满足本页正式实验契约",
+    "低阈值与高阈值的角色被写反；API 是否报错不能替代参数验证。",
+    "调用前验证 low <= high，再用 known edge/off-edge count 判断结果。",
+)
+
+report_diagnosis(
+    "Canny threshold too low",
+    {"low": 10, "high": 30, "fixture": "seeded noisy step"},
+    "保留已知主边缘，同时拒绝远离阶跃的噪声响应",
+    edge_counts(low_edges),
+    "阈值过低使 359 个远离主边界的响应进入 edge map；edge count 更多不代表更好。",
+    "提高并记录 low/high，再比较 known-main 与 off-edge count。",
+)
+
+report_diagnosis(
+    "Canny threshold too high",
+    {"low": 900, "high": 1000, "fixture": "seeded noisy step"},
+    "至少保留 25 个已知主边缘响应",
+    edge_counts(high_edges),
+    "阈值超过当前真实阶跃响应范围，已知边缘被全部删除。",
+    "降低阈值并用 known edge 位置验证；不能以 edge count 越少越好。",
+)
+
+report_diagnosis(
+    "edge map 被当成 region mask",
+    {"shape": edge_map.shape, "dtype": edge_map.dtype, "values": [0, 255]},
+    "255 表示目标内部，可用于区域面积",
+    {"255 meaning": "boundary evidence", "edge pixels": int(np.count_nonzero(edge_map))},
+    "相同 shape/dtype/values 不能证明语义相同。",
+    "从经过验证的 region-generation 规则获得 mask，再提取 contour。",
+)
+
+for bad in [mask.astype(np.float32), np.repeat(mask[:, :, None], 3, axis=2)]:
+    report_diagnosis(
+        "invalid findContours input",
+        {"shape": bad.shape, "dtype": bad.dtype},
+        "H×W single-channel uint8 region mask",
+        "input contract rejected before measurement",
+        "dtype 或 ndim 不符合本页正式路径。",
+        "先建立 H×W uint8 0/255 mask，不依赖 traceback 诊断。",
+    )
+
+ordinary_gray = np.array([[0, 20, 40], [60, 80, 100]], dtype=np.uint8)
+ordinary_contours, _ = cv2.findContours(
+    ordinary_gray,
+    cv2.RETR_EXTERNAL,
+    cv2.CHAIN_APPROX_SIMPLE,
+)
+report_diagnosis(
+    "arbitrary grayscale 被当成 region mask",
+    {"shape": ordinary_gray.shape, "dtype": ordinary_gray.dtype, "values": np.unique(ordinary_gray).tolist()},
+    "0/255 与 foreground polarity 已被明确验证",
+    {"contour count": len(ordinary_contours), "nonzero treated as foreground": True},
+    "findContours 接受非零 uint8，不代表这些灰度值具有区域归属语义。",
+    "先 threshold/region rule，再检查 values 与 known foreground/background pixels。",
+)
+
+report_diagnosis(
+    "polarity reversed",
+    {"foreground convention": "0 instead of 255"},
+    "目标矩形是 foreground，背景是 0",
+    "外部背景可能成为主要 contour",
+    "foreground polarity 与 findContours 的非零前景约定相反。",
+    "显式记录 polarity，并在调用前检查 known target/background pixels。",
+)
+
+report_diagnosis(
+    "coordinate order",
+    {"contour point": (3, 2), "wrong access": "image[3,2]"},
+    "contour (x,y)=(3,2) 对应 image[y,x]=image[2,3]",
+    {"wrong pixel": int(mask[3, 2]), "correct pixel": int(mask[2, 3])},
+    "把 contour 的 (x,y) 机械当成 NumPy [row,column]。",
+    "访问数组时写 image[y,x]；bbox ROI 写 image[y:y+h,x:x+w]。",
+)
+
+report_diagnosis(
+    "tiny contour",
+    {"area": 0.0, "bbox": (14, 8, 1, 1)},
+    "筛选规则公开且保留当前已知矩形",
+    {"minimum_area": minimum_area, "kept": len(kept)},
+    "孤立像素也能形成 contour；area=0 不等于 API 失败。",
+    "按任务记录 area/bbox 和阈值，不把 1.0 宣称为通用规则。",
+)
+
+report_diagnosis(
+    "hole retrieval mode",
+    {"mode": "RETR_EXTERNAL", "hole pixel (x,y)": (6, 4)},
+    "只测量最外层目标边界",
+    {"contour count": len(external)},
+    "RETR_EXTERNAL 有意不返回内部 hole 边界。",
+    "若任务以后需要孔层级，再单独学习 hierarchy；本页不静默换模式。",
+)
+
+source_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+source_snapshot = source_bgr.copy()
+polluted_demo = source_bgr.copy()
+polluted_snapshot = polluted_demo.copy()
+cv2.drawContours(polluted_demo, [contour], -1, (0, 0, 255), 1)
+result = source_bgr.copy()
+cv2.drawContours(result, [contour], -1, (0, 0, 255), 1)
+assert np.array_equal(source_bgr, source_snapshot)
+assert not np.array_equal(polluted_demo, polluted_snapshot)
+assert not np.array_equal(result, source_bgr)
+report_diagnosis(
+    "drawContours 污染 source",
+    {"source role": "validated measurement input", "operation": "draw in place"},
+    "source 与 snapshot 相等，annotation 单独保存在 result",
+    {"polluted demo unchanged": np.array_equal(polluted_demo, polluted_snapshot), "safe source unchanged": np.array_equal(source_bgr, source_snapshot)},
+    "直接在承担 source 角色的数组上绘制会覆盖像素基准。",
+    "先 result = source.copy()，只在 result 上 drawContours，最后断言 source。",
+)
+
+figure, axes = plt.subplots(1, 4, figsize=(11, 3))
+axes[0].imshow(cv2.cvtColor(source_bgr, cv2.COLOR_BGR2RGB))
+axes[0].set_title("source")
+axes[1].imshow(edge_map, cmap="gray", vmin=0, vmax=255)
+axes[1].set_title("edge map")
+axes[2].imshow(mask, cmap="gray", vmin=0, vmax=255)
+axes[2].set_title("region mask")
+axes[3].imshow(cv2.cvtColor(result, cv2.COLOR_BGR2RGB))
+axes[3].set_title("contour result")
+for axis in axes:
+    axis.axis("off")
+plt.tight_layout()
+plt.show()
+```
+
+`result = source_bgr.copy()` 是绘制前的正式保护步骤。BGR source/result 转成 RGB 显示；edge map 与 mask 作为二维标量图显式使用灰度映射。图像只是证据的一部分，仍需 shape、values、known points 和测量断言。
+
+上述卡片与代码覆盖 signed dtype、Canny low/high 顺序、too-low、too-high、edge-map 语义、invalid contour input、任意 grayscale、polarity、coordinate、tiny contour、hole mode 与 drawing pollution。每张失败卡都写 `input → expected → actual → reason → correction`，不能只留 traceback。
+
+## 9. Active Recall
+
+1. edge、region mask 与 contour 分别表达什么？
+2. 为什么 Sobel 主路径使用 `CV_32F`？
+3. 暗→亮与亮→暗为什么符号不同？
+4. Canny low/high threshold 分别承担什么最低限度角色？
+5. 为什么 edge map 的 255 不能当成目标内部？
+6. findContours 主输入的 shape、dtype、values 与 polarity 是什么？
+7. contour `N×1×2` 的最后两个数按什么顺序？
+8. 为什么 `(x,y)` 访问图像时要写 `[y,x]`？
+9. 40 个 foreground pixels 与 contour area 28 为什么都正确？
+10. perimeter 与 bounding box 各回答什么问题？
+11. 为什么 isolated pixel 的 area 可以是 0？
+12. `RETR_EXTERNAL` 对 hole 做什么？
+13. 为什么不能固定在 Canny 前 blur、在 contour 前 morphology？
+14. 为什么 drawContours 必须画在 result copy 上？
+
+完成标准：不看正文解释每项，并能为 edge contract 与 contour measurement 各写一个已知几何、关键数值、source assertion 和失败诊断。只背 API 名称不算完成。
+
+## 10. Practice
+
+Practice 可与 Evidence 共用同一 notebook/report；下面共 10 个任务，按明确完成标准生成可复用证据，不需要重复做两套实验。
+
+### 理解检查
+
+1. **手判 step edge**：给定左 30、右 220 的阶跃，指出边界位置与暗→亮方向。完成标准：指出边界位于 columns 4/5 之间，不能把整块亮区域叫作 edge。
+
+2. **Sobel 正负方向**：预测暗→亮、亮→暗的 Sobel x 符号。完成标准：分别写出 `+760` 与 `-760`，说明 `CV_32F` 保留方向。
+
+3. **Flat region**：解释并验证平坦区和当前 Sobel y 为什么为 0。完成标准：报告 max abs=0，并把它连接到对应方向没有强度变化，而非“算子失效”。
+
+4. **三种对象分类**：把 `CV_32F Sobel response`、Canny output、region mask 与 `(4,1,2)` 点数组分类。完成标准：明确 Canny 255 是边界、mask 255 是内部、contour 点是 `(x,y)`。
+
+### 数值练习
+
+5. **Canny low/high failure**：运行 low/mid/high 三组参数。完成标准：记录 shape/dtype/values、known edge、main/off-edge count，并分别写 too-low 与 too-high 五字段失败卡。
+
+6. **Contour representation**：对 known rectangle 记录 contour count、`N×1×2` 和四个点。完成标准：得到 `(4,1,2)`，解释 N 与最后一维，不只打印数组。
+
+7. **坐标换序**：用 contour point `(3,2)` 核对 `image[2,3]`，再写 bbox ROI。完成标准：明确 `(x,y)` → `[y,x]`，写出 `image[y:y+h,x:x+w]`。
+
+8. **矩形测量**：先推导再验证 area、closed perimeter 与 bbox。完成标准：得到 `28.0`、`22.0`、`(3,2,8,5)`，说明三个指标回答不同问题。
+
+9. **Pixel count vs polygon area**：解释 foreground count 40 与 contour area 28。完成标准：分别写出 8×5 离散样本和 7×4 连续坐标跨度，不能归因于 OpenCV 错误。
+
+### 视觉小练习
+
+10. **Tiny contour 与综合失败卡**：加入 isolated pixel，比较筛选前后 area/bbox；再从 invalid input、polarity、hole mode 或 drawing pollution 任选一例。完成标准：记录 area 0、bbox 1×1、透明 minimum-area 规则、主目标保留、source assertion 和完整五字段诊断；不能写“轮廓越少越好”。
+
+视觉汇总必须把 Sobel display mapping、raw/smoothed Canny、region mask 与 BGR→RGB contour result 放在可比较的图中；图只作证据补充，以上 10 项数值与断言仍需保留。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Concept**：`opencv.edges-contours` 负责 edge evidence 契约、region-to-contour 转换与基础区域测量；
+- **Capability**：已知边界验证、外轮廓提取、area/perimeter/bbox 测量、透明 tiny-contour filtering 和失败诊断；
+- **Project**：ROADMAP 将 Stage 2 关联到 `project.pixel-lab` 与 draft `project.classical-inspection`，但当前 catalog 未把本 Concept 声明为正式 requirement/evidence；本轮不修改 Project metadata；
+- **Application**：受控前景区域的相对大小、位置和明显伪目标筛选，为批处理规则准备可追踪输入；不宣称绝对尺寸精度或通用检测能力。
+
+未来 Pixel Lab Stage 2 增量最适合映射为：task=已知 region mask 的 contour measurement；deliverable=edge/region/contour contract 表、测量表与失败卡；acceptance=known geometry、source protection 和筛选规则通过；evidence=两项本页 Mastery Evidence。正式映射留待 Project 增量整体设计。
+
+## 12. Mastery Evidence
+
+### Evidence 1：Edge contract 与诊断
+
+独立提交 validated grayscale shape/dtype/range、暗→亮与亮→暗 Sobel x、flat response、Canny low/high、edge-map shape/dtype/unique、known edge column/count、raw 与可选 smoothing 对照、source assertion，以及一个 signed dtype、low/high、noise 或 edge-map semantic failure card。
+
+通过标准：能用关键数值解释符号与 threshold trade-off；edge map 的 255 被明确称为 boundary evidence；failure card 含 input、expected、actual、reason、correction。无需推导 Sobel/Canny。
+
+### Evidence 2：Contour measurement 与筛选
+
+独立提交 H×W uint8 0/255 region mask、foreground polarity、findContours 参数、input snapshot、contour count/shape/known points、foreground count、area、perimeter、bbox、`image[y:y+h,x:x+w]`、tiny-contour 筛选前后记录、BGR→RGB 可信显示，以及一个 invalid input、polarity、coordinate、hole-mode 或 tiny-contour failure card。
+
+通过标准：正确解释 `N×1×2`、`(x,y)`、40 vs 28 与 external-only；筛选规则不伪装成通用定律；source 保持不变。无需 hierarchy、moments 或 shape matching。
+
+两项都达到才符合本页 `master`：能独立完成基础 edge/contour 操作、解释和诊断，不代表掌握完整 edge detection、segmentation 或 OpenCV contour API。
+
+## 13. 后续复用与复习
+
+- `pipeline.batch-images`：复用 input contract、参数、轮廓测量、筛选和失败卡；
+- `opencv.features-preview`：复用 validated grayscale、局部结构和可信显示；
+- `dip.edge-detection`：以后正式学习梯度、Sobel/Canny 原理与评价；
+- `dip.segmentation`：以后系统理解区域划分、误差与方法选择；
+- Stage 3/4 的测量与标定：先有相对像素测量，再结合几何与标定讨论物理单位。
+
+24 小时后不看正文复现 known rectangle 的四项测量；7 天后换一个矩形和一组 Canny 阈值重做两项 Evidence。当前不进入 batch pipeline、feature detector、hierarchy、Hough 或物理标定。
+
+## 14. 精选学习资源
+
+### OpenCV-Python Tutorials
+
+- **必看**：Image Gradients 中 Sobel 与 output depth；Canny Edge Detection 中 low/high threshold 与二值输出；Contours Getting Started 中 binary input、`findContours`、`RETR_EXTERNAL`、`CHAIN_APPROX_SIMPLE`；Contour Features 中 area、perimeter 与 bounding rectangle；
+- **选看**：`drawContours` 的最小显示用法、显式 3×3 Gaussian 前处理对照，以及 `RETR_EXTERNAL` 对 hole 只保留外边界的最低限度说明；
+- **跳过**：Scharr/Laplacian 深入、Canny 完整推导与 trackbar demo、contour hierarchy、moments/centroid、approxPolyDP、convex hull/defects、rotated rectangle、ellipse、shape matching、Hough、watershed、GrabCut、feature detection、camera/video 与实现算法细节；
+- **看到什么程度即可**：能把官方 API 放进本页 `input contract → known geometry → numeric checks → source assertion → failure diagnosis` 流程。外部文档只用于核对，正文仍是零基础主教材。

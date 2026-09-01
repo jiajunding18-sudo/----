@@ -37,6 +37,7 @@ const stageTwoConceptIds = [
   "opencv.geometric-transforms",
   "opencv.filtering-basics",
   "opencv.threshold-morphology",
+  "opencv.edges-contours",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -257,7 +258,7 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await stageTwoConceptSection.locator("summary").click();
   await expect(stageTwoConceptSection.locator("details")).toHaveAttribute("open", "");
   const stageTwoConcepts = stageTwoConceptSection.locator("[data-concept-id]");
-  await expect(stageTwoConcepts).toHaveCount(9);
+  await expect(stageTwoConcepts).toHaveCount(10);
   expect(
     await stageTwoConcepts.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-concept-id")),
@@ -265,11 +266,11 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   ).toEqual(stageTwoConceptIds);
   await expect(
     stageTwoConceptSection.locator('[data-dependency-kind="hard"]'),
-  ).toHaveCount(16);
+  ).toHaveCount(18);
   await expect(
     stageTwoConceptSection.locator('[data-dependency-kind="recommended"]'),
   ).toHaveCount(4);
-  await expect(stageTwoConceptSection.getByText("M · 必须掌握")).toHaveCount(9);
+  await expect(stageTwoConceptSection.getByText("M · 必须掌握")).toHaveCount(10);
   await expect(stageTwoConceptSection.getByText("U · 理解即可")).toHaveCount(0);
   await expect(stage.locator('[data-dependency-kind="hard"]')).toHaveCount(7);
   await expect(stage.locator('[data-dependency-kind="recommended"]')).toHaveCount(5);

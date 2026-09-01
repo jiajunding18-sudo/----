@@ -26,12 +26,12 @@ const stageTwoConceptIds = [
   "opencv.geometric-transforms",
   "opencv.filtering-basics",
   "opencv.threshold-morphology",
+  "opencv.edges-contours",
 ] as const;
 
 const stageTwoConceptIdSet = new Set<string>(stageTwoConceptIds);
 
 const unpublishedStageTwoConceptIds = [
-  "opencv.edges-contours",
   "pipeline.batch-images",
   "opencv.features-preview",
 ] as const;
@@ -57,6 +57,8 @@ const expectedDependencies = [
   ["opencv.io-color", "opencv.filtering-basics", "hard"],
   ["opencv.io-color", "opencv.threshold-morphology", "hard"],
   ["opencv.roi-masks", "opencv.threshold-morphology", "hard"],
+  ["opencv.filtering-basics", "opencv.edges-contours", "hard"],
+  ["opencv.threshold-morphology", "opencv.edges-contours", "hard"],
 ] as const;
 
 const requiredSectionHeadings = [
@@ -99,7 +101,7 @@ async function loadStageTwoConcepts() {
 }
 
 describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
-  it("只发布约定的九个 required/master Concept，并将 checkpoint 保持 available", () => {
+  it("只发布约定的十个 required/master Concept，并将 checkpoint 保持 available", () => {
     const concepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.image-computing")
       .toSorted((left, right) => left.order - right.order);
@@ -109,7 +111,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
 
     expect(concepts.map(({ id }) => id)).toEqual(stageTwoConceptIds);
     expect(concepts.map(({ order }) => order)).toEqual([
-      10, 20, 30, 40, 50, 60, 70, 80, 90,
+      10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
     ]);
     expect(
       concepts.every(
@@ -148,7 +150,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       ]),
     ).toEqual(expect.arrayContaining([...expectedDependencies]));
     expect(dependencies).toHaveLength(expectedDependencies.length);
-    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(16);
+    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(18);
     expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(4);
     const dependencyPairs = dependencies.map(
       ({ prerequisiteId, targetId }) => `${String(prerequisiteId)}->${String(targetId)}`,
@@ -643,6 +645,83 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).not.toContain("cv2.Canny");
   });
 
+  it("opencv.edges-contours 保持两条 hard dependency、master 边界与已知几何闭环", async () => {
+    const concepts = await loadStageTwoConcepts();
+    const concept = concepts.find(
+      ({ meta }) => meta.id === "opencv.edges-contours",
+    );
+
+    expect(concept?.meta).toMatchObject({
+      publicationStatus: "published",
+      requiredness: "required",
+      targetDepth: "master",
+      estimatedHours: { min: 7, max: 9 },
+      resourceIds: ["resource.opencv-python-tutorials"],
+    });
+    expect(concept?.meta.dependencies).toEqual([
+      expect.objectContaining({
+        conceptId: "opencv.filtering-basics",
+        kind: "hard",
+      }),
+      expect.objectContaining({
+        conceptId: "opencv.threshold-morphology",
+        kind: "hard",
+      }),
+    ]);
+    expect(concept?.meta.dependencies).toHaveLength(2);
+    expect(concept?.meta.dependencies.map(({ conceptId }) => conceptId)).not.toContain(
+      "dip.segmentation",
+    );
+
+    requiredSectionHeadings.forEach((heading) => {
+      expect(concept?.body, `opencv.edges-contours 缺少 ${heading}`).toContain(
+        heading,
+      );
+    });
+    expect(concept?.meta.masteryCriteria).toHaveLength(2);
+    expect(concept?.meta.masteryCriteria.every(({ required }) => required)).toBe(
+      true,
+    );
+    expect(concept?.body).toContain("edge map 的 255 是边界证据，不是目标区域内部");
+    expect(concept?.body).toContain("ROADMAP 把 `dip.segmentation` 列为 recommended");
+    expect(concept?.body).toContain("暂不建立正式 edge");
+    expect(concept?.body).toContain("cv2.CV_32F");
+    expect(concept?.body).toContain("760.0");
+    expect(concept?.body).toContain("-760.0");
+    expect(concept?.body).toContain(
+      '{"total": 403, "known main": 25, "off": 359}',
+    );
+    expect(concept?.body).toContain(
+      '{"total": 26, "known main": 25, "off": 0}',
+    );
+    expect(concept?.body).toContain(
+      '{"total": 25, "known main": 25, "off": 0}',
+    );
+    expect(concept?.body).toContain("cv2.RETR_EXTERNAL");
+    expect(concept?.body).toContain("cv2.CHAIN_APPROX_SIMPLE");
+    expect(concept?.body).toContain("contour.shape == (4, 1, 2)");
+    expect(concept?.body).toContain("foreground_pixels == 40");
+    expect(concept?.body).toContain("area == 28.0");
+    expect(concept?.body).toContain("perimeter == 22.0");
+    expect(concept?.body).toContain("(x, y, w, h) == (3, 2, 8, 5)");
+    expect(concept?.body).toContain("image[y:y+h,x:x+w]");
+    expect(concept?.body).toContain('(0.0, (14, 8, 1, 1))');
+    expect(concept?.body).toContain("result = source_bgr.copy()");
+    expect(concept?.body).toContain("### Checkpoint 1");
+    expect(concept?.body).toContain("### Checkpoint 2");
+    expect(concept?.body).toContain("### Checkpoint 3");
+    expect(concept?.body).toContain("### Checkpoint 4");
+    ["input:", "expected:", "actual:", "reason:", "correction:"].forEach(
+      (field) => expect(concept?.body).toContain(field),
+    );
+    expect(concept?.body?.match(/report_diagnosis\(/gu)).toHaveLength(13);
+    expect(concept?.body).toContain("下面共 10 个任务");
+    expect(concept?.body).toContain("Canny 完整推导与 trackbar demo");
+    expect(concept?.body).not.toContain("cv2.HoughLines");
+    expect(concept?.body).not.toContain("cv2.watershed");
+    expect(concept?.body).not.toContain("cv2.connectedComponents");
+  });
+
   it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {
     const fixture = await readFile(
       resolve(process.cwd(), "public/media/opencv-io-color-fixture.ppm"),
@@ -666,7 +745,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     ]);
   });
 
-  it("OpenCV 官方资源覆盖 I/O、ROI、基础 affine、filtering、threshold 与 morphology，并保持后续边界", () => {
+  it("OpenCV 官方资源覆盖 I/O、ROI、affine、filtering、threshold、morphology 与 edges/contours，并保持后续边界", () => {
     const resource = contentManifest.resources.find(
       ({ id }) => id === "resource.opencv-python-tutorials",
     );
@@ -694,6 +773,16 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(resource?.recommendedParts?.[0]).toContain(
       "Erosion、Dilation、Opening、Closing",
     );
+    expect(resource?.recommendedParts?.[0]).toContain("Sobel 与 output depth");
+    expect(resource?.recommendedParts?.[0]).toContain(
+      "Canny Edge Detection 中 low/high threshold",
+    );
+    expect(resource?.recommendedParts?.[0]).toContain(
+      "findContours、RETR_EXTERNAL、CHAIN_APPROX_SIMPLE",
+    );
+    expect(resource?.recommendedParts?.[0]).toContain(
+      "area、perimeter 与 bounding rectangle",
+    );
     expect(resource?.recommendedParts?.[1]).toContain("reverse sampling");
     expect(resource?.recommendedParts?.[1]).toContain("sharpening mask");
     expect(resource?.recommendedParts?.[1]).toContain("getStructuringElement");
@@ -701,15 +790,15 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(resource?.recommendedParts?.[2]).toContain("homography");
     expect(resource?.recommendedParts?.[2]).toContain("median");
     expect(resource?.recommendedParts?.[2]).toContain("bilateral");
-    expect(resource?.recommendedParts?.[2]).toContain("Canny");
+    expect(resource?.recommendedParts?.[2]).toContain("Canny 完整推导");
     expect(resource?.recommendedParts?.[2]).toContain("adaptive threshold");
     expect(resource?.recommendedParts?.[2]).toContain("Otsu");
     expect(resource?.recommendedParts?.[2]).toContain("top-hat");
   });
 
-  it("九篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
+  it("十篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
     const concepts = await loadStageTwoConcepts();
-    expect(concepts).toHaveLength(9);
+    expect(concepts).toHaveLength(10);
 
     concepts.forEach(({ body, meta }) => {
       requiredSectionHeadings.forEach((heading) => {
@@ -865,6 +954,9 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     const thresholdMorphology = contentManifest.concepts.find(
       ({ id }) => id === "opencv.threshold-morphology",
     );
+    const edgesContours = contentManifest.concepts.find(
+      ({ id }) => id === "opencv.edges-contours",
+    );
 
     stageTwoConceptIds.forEach((conceptId) => {
       expect(knowledge.concepts.some(({ concept }) => concept.id === conceptId)).toBe(
@@ -912,15 +1004,23 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       missingHard: ["opencv.io-color", "opencv.roi-masks"],
       missingRecommended: [],
     });
+    expect(
+      edgesContours &&
+        getConceptReadiness(edgesContours, initialState.conceptProgress),
+    ).toEqual({
+      ready: false,
+      missingHard: ["opencv.filtering-basics", "opencv.threshold-morphology"],
+      missingRecommended: [],
+    });
   });
 
-  it("ROADMAP 同步发布边界，并明确剩余三个节点未发布", async () => {
+  it("ROADMAP 同步发布边界，并明确剩余两个节点未发布", async () => {
     const roadmap = await readFile(resolve(process.cwd(), "ROADMAP.md"), "utf8");
     expect(roadmap).toContain(
       "`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`",
     );
     expect(roadmap).toContain(
-      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`、S2-U6 的 `opencv.filtering-basics`，以及 S2-U7 的 `opencv.threshold-morphology`，共九个正式 Concept；其余三个节点仍未发布",
+      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`、S2-U6 的 `opencv.filtering-basics`、S2-U7 的 `opencv.threshold-morphology`，以及 S2-U8 的 `opencv.edges-contours`，共十个正式 Concept；其余两个节点 `pipeline.batch-images` 与 `opencv.features-preview` 仍未发布",
     );
     expect(roadmap).toContain(
       "| `opencv.geometric-transforms` | 缩放、旋转与仿射变换（Geometric Transforms） | M |",
@@ -932,6 +1032,9 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     );
     expect(roadmap).toContain(
       "| `opencv.threshold-morphology` | 阈值与形态学（Thresholding & Morphology） | M | `opencv.io-color`, `opencv.roi-masks` | `dip.morphology` |",
+    );
+    expect(roadmap).toContain(
+      "| `opencv.edges-contours` | 边缘、轮廓与区域测量（Edges & Contours） | M | `opencv.filtering-basics`, `opencv.threshold-morphology` | `dip.segmentation` |",
     );
     expect(roadmap).toContain(
       "| `python.numpy-arrays` | NumPy 数组、轴、切片与广播（Arrays, Axes, Broadcasting） | M | `tooling.dev-environment`, `tooling.python-core`, `math.vectors-matrices` | `tooling.debugging` |",

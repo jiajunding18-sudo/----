@@ -630,6 +630,65 @@ test("阈值与形态学正文呈现 binary contract、结构变化与失败诊�
   expect(browserErrors).toEqual([]);
 });
 
+test("边缘与轮廓正文呈现有符号响应、数据契约、已知几何与失败诊断闭环", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-edges-contours/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /边缘、轮廓与区域测量/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(7);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("edge map 的 255 是边界证据");
+  await expect(document).toContainText("sobel_positive[3, 4]");
+  await expect(document).toContainText("-760.0");
+  await expect(document).toContainText('"total": 403, "known main": 25, "off": 359');
+  await expect(document).toContainText("contour.shape == (4, 1, 2)");
+  await expect(document).toContainText("foreground_pixels == 40");
+  await expect(document).toContainText("area == 28.0");
+  await expect(document).toContainText("perimeter == 22.0");
+  await expect(document).toContainText("(x, y, w, h) == (3, 2, 8, 5)");
+  await expect(document).toContainText("result = source_bgr.copy()");
+  for (const checkpoint of [1, 2, 3, 4]) {
+    await expect(
+      document.getByRole("heading", {
+        level: 3,
+        name: new RegExp(`Checkpoint ${checkpoint}`, "u"),
+      }),
+    ).toBeVisible();
+  }
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await workedExampleLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example");
+  await page.reload();
+  await expect(page.locator("#section-8-worked-example")).toBeVisible();
+
+  await expect(
+    page
+      .getByLabel("精选学习资源")
+      .getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

@@ -286,3 +286,42 @@ test("360px 下阈值与形态学的代码、表格、TOC、深链接与键盘�
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
 });
+
+test("360px 下边缘与轮廓的代码、表格、TOC、深链接与键盘保持可访问", async ({
+  page,
+}) => {
+  await page.goto("/knowledge/opencv-edges-contours/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(7);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("edge map 的 255 是边界证据");
+  await expect(document).toContainText("contour.shape == (4, 1, 2)");
+  await expect(document).toContainText("foreground_pixels == 40");
+  await expect(document).toContainText("result = source_bgr.copy()");
+
+  const mobileToc = page.locator('[data-concept-toc="mobile"]');
+  await expect(mobileToc).toBeVisible();
+  const summary = mobileToc.getByText("本页目录", { exact: true });
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  const masteryLink = mobileToc.getByRole("link", {
+    name: /12\. Mastery Evidence/u,
+  });
+  await masteryLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-12-mastery-evidence");
+
+  const resourceLink = page.getByRole("link", {
+    name: "OpenCV-Python Tutorials",
+    exact: true,
+  });
+  await resourceLink.focus();
+  await expect(resourceLink).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+});

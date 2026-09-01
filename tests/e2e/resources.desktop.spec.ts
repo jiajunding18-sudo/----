@@ -160,12 +160,19 @@ test("15 个 Resource 均有静态详情，正式外链只由详情主动打开"
   await expect(openCvDetail).toContainText("THRESH_BINARY、THRESH_BINARY_INV");
   await expect(openCvDetail).toContainText("Erosion、Dilation、Opening、Closing");
   await expect(openCvDetail).toContainText("adaptive threshold、Otsu");
+  await expect(openCvDetail).toContainText("Sobel 与 output depth");
+  await expect(openCvDetail).toContainText("Canny Edge Detection");
+  await expect(openCvDetail).toContainText("findContours、RETR_EXTERNAL");
+  await expect(openCvDetail).toContainText("area、perimeter 与 bounding rectangle");
   await expect(
     openCvDetail.getByRole("link", { name: "平滑、锐化与基础滤波" }),
   ).toHaveAttribute("href", "/knowledge/opencv-filtering-basics/");
   await expect(
     openCvDetail.getByRole("link", { name: "阈值与形态学" }),
   ).toHaveAttribute("href", "/knowledge/opencv-threshold-morphology/");
+  await expect(
+    openCvDetail.getByRole("link", { name: "边缘、轮廓与区域测量" }),
+  ).toHaveAttribute("href", "/knowledge/opencv-edges-contours/");
   await expectNoHorizontalOverflow(page);
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);

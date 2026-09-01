@@ -17,7 +17,7 @@ test("360px 下 Knowledge 筛选、诚实空状态与 Concept 关系均可读", 
   page,
 }) => {
   await page.goto("/knowledge/");
-  await expect(page.locator("[data-knowledge-concept-id]")).toHaveCount(26);
+  await expect(page.locator("[data-knowledge-concept-id]")).toHaveCount(27);
   await expectNoHorizontalOverflow(page);
 
   await page

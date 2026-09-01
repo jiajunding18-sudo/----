@@ -59,6 +59,7 @@ const stageTwoConceptIds = [
   "opencv.geometric-transforms",
   "opencv.filtering-basics",
   "opencv.threshold-morphology",
+  "opencv.edges-contours",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

@@ -328,6 +328,23 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   await thresholdMorphologyLink.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/knowledge\/opencv-threshold-morphology\/$/u);
+
+  await page.goto("/search/?q=findContours");
+  const edgesContours = page.locator(
+    '[data-search-result-id="opencv.edges-contours"]',
+  );
+  await expect(edgesContours).toBeVisible();
+  await expect(edgesContours).toContainText("available · 正式内容");
+  const edgesContoursLink = edgesContours.getByRole("link", {
+    name: "边缘、轮廓与区域测量",
+  });
+  await expect(edgesContoursLink).toHaveAttribute(
+    "href",
+    "/knowledge/opencv-edges-contours/",
+  );
+  await edgesContoursLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/knowledge\/opencv-edges-contours\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

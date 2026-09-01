@@ -447,7 +447,7 @@ test("几何变换正文呈现 H/W、防错、已知点、插值与 clipping 闭
       name: /缩放、旋转与仿射变换/u,
     }),
   ).toBeVisible();
-  await expect(document.locator('[data-code-language="python"]')).toHaveCount(9);
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(11);
   await expect(document.getByRole("table")).toHaveCount(2);
   await expect(document).toContainText("不是把像素颜色直接乘了一下");
   await expect(document).toContainText("(new_width, new_height)");
@@ -459,6 +459,9 @@ test("几何变换正文呈现 H/W、防错、已知点、插值与 clipping 闭
   await expect(document).toContainText("src_points.shape == dst_points.shape == (3, 2)");
   await expect(document).toContainText("same_canvas");
   await expect(document).toContainText("larger_canvas");
+  await expect(document).toContainText("negative_larger");
+  await expect(document).toContainText("rotation scale");
+  await expect(document).toContainText("不能共线");
   await expect(document).toContainText(
     "input → expected → actual → reason → correction",
   );

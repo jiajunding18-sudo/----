@@ -349,17 +349,53 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).toContain("image.shape[:2]");
     expect(concept?.body).toContain("(new_width, new_height)");
     expect(concept?.body).toContain("assert resized.shape[:2]");
+    expect(concept?.body).toContain("round(width * scale_x)");
+    expect(concept?.body).toContain("assert (new_width, new_height) == (12, 10)");
+    expect(concept?.body).toContain(
+      "assert explicit_probe.shape == implicit_probe.shape == (10, 12)",
+    );
     expect(concept?.body).toContain("INTER_NEAREST");
     expect(concept?.body).toContain("INTER_LINEAR");
     expect(concept?.body).toContain("INTER_AREA");
+    expect(concept?.body).toContain("nearest_probe[1, 1] == 0");
+    expect(concept?.body).toContain("linear_probe[1, 1] == 46");
+    expect(concept?.body).toContain(
+      "np.count_nonzero(nearest_probe != linear_probe) == 21",
+    );
+    expect(concept?.body).toContain(
+      "np.array_equal(area_probe, np.full((2, 2), 128",
+    );
     expect(concept?.body).toContain("cv2.getRotationMatrix2D");
     expect(concept?.body).toContain("rotation_matrix.shape == (2, 3)");
+    expect(concept?.body).toContain("scaled_rotation_matrix");
+    expect(concept?.body).toContain("cv2.getRotationMatrix2D(center, 90.0, 0.5)");
+    expect(concept?.body).toContain("scaled_rotated.shape == (height, width, 3)");
+    expect(concept?.body).toContain("resize scale");
+    expect(concept?.body).toContain("rotation scale");
     expect(concept?.body).toContain("cv2.warpAffine");
     expect(concept?.body).toContain("[1, 0, tx]");
     expect(concept?.body).toContain("assert np.allclose(translated_point, [7.0, 3.0])");
+    expect(concept?.body).toContain(
+      "assert same_canvas[3, 7].tolist() == [0, 0, 255]",
+    );
+    expect(concept?.body).toContain("negative_prediction");
+    expect(concept?.body).toContain("assert np.allclose(negative_prediction, [-2.0, 1.0])");
+    expect(concept?.body).toContain("negative_larger");
+    expect(concept?.body).toContain("visible_result[1, 0]");
+    expect(concept?.body).toContain("扩大画布**与**调整输出坐标位置");
+    expect(concept?.body).toContain("**clipping**");
+    expect(concept?.body).toContain("**border fill**");
+    expect(concept?.body).toContain("borderValue=(0,0,0)");
+    expect(concept?.body).toContain("不是原图自带黑像素");
     expect(concept?.body).toContain("src_points.shape == dst_points.shape == (3, 2)");
     expect(concept?.body).toContain("src_points.dtype == dst_points.dtype == np.float32");
     expect(concept?.body).toContain("cv2.getAffineTransform");
+    expect(concept?.body).toContain("collinear_points");
+    expect(concept?.body).toContain("valid_triangle");
+    expect(concept?.body).toContain("signed_twice_area");
+    expect(concept?.body).toContain("三个非共线点提供二维中的两个独立方向");
+    expect(concept?.body).toContain("一般 affine 保持直线与平行");
+    expect(concept?.body).toContain("$Av_1=(4,0)$、$Av_2=(8,0)$");
     expect(concept?.body).toContain(
       "forward point mapping 与 image reverse sampling",
     );
@@ -371,6 +407,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).toContain("### Checkpoint 2");
     expect(concept?.body).toContain("### Checkpoint 3");
     expect(concept?.body).toContain("### Checkpoint 4");
+    expect(concept?.body?.match(/report_diagnosis\(/gu)).toHaveLength(7);
     ["input:", "expected:", "actual:", "reason:", "correction:"].forEach(
       (field) => expect(concept?.body).toContain(field),
     );
@@ -382,6 +419,29 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     );
     expect(concept?.meta.masteryCriteria[1]?.description).not.toMatch(
       /perspective|homography/iu,
+    );
+    expect(concept?.meta.masteryCriteria[0]?.evidenceHint).toContain(
+      "非整数 resize scale",
+    );
+    expect(concept?.meta.masteryCriteria[0]?.evidenceHint).toContain(
+      "负坐标对照",
+    );
+    expect(concept?.meta.masteryCriteria[1]?.evidenceHint).toContain(
+      "非共线 float32",
+    );
+    expect(concept?.meta.masteryCriteria[1]?.evidenceHint).toContain(
+      "affine 保持性质判断",
+    );
+
+    const linearTransforms = await readFile(
+      resolve(process.cwd(), "content/concepts/math/linear-transforms.mdx"),
+      "utf8",
+    );
+    expect(linearTransforms).toContain(
+      "已发布的 `opencv.geometric-transforms` 也把它作为 hard 前置",
+    );
+    expect(linearTransforms).not.toContain(
+      "planned 的 `opencv.geometric-transforms`",
     );
   });
 

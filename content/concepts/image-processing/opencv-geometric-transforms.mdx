@@ -50,16 +50,16 @@ learningOutcomes:
 masteryCriteria:
   - id: criterion.opencv-geometric-transforms.resize-rotation
     description: 独立完成一次 resize 与一次绕指定中心的 rotation，解释宽高、缩放、插值、2×3 matrix 和 output canvas，并用已知点与 clipping 对照验证结果。
-    evidenceHint: 提交 input contract、原始/输出 shape、resize dsize、scale_x/scale_y、interpolation 选择、center/angle/scale、rotation matrix、已知点预测、两种 output size 对照，以及一次 width/height 写反的 input/expected/actual/reason/correction 诊断。
+    evidenceHint: 提交 input contract、原始/输出 shape、非整数 resize scale 的明确取整规则与 dsize、interpolation 数值对照、center/angle/rotation scale、rotation matrix、已知点预测、output size 与负坐标对照，以及一次 width/height 写反的 input/expected/actual/reason/correction 诊断。
     required: true
   - id: criterion.opencv-geometric-transforms.translation-affine
     description: 独立构造 translation matrix，并从三对 float32 对应点得到 affine matrix；对至少三个点比较预测与实际位置，同时证明 source 未被意外修改。
-    evidenceHint: 提交 translation 与 affine 的 2×3 matrix、三对 point shape/dtype、输入和预测输出坐标、误差/容差、BGR/RGB 可信显示、source 相等性断言，以及一个 point contract 或 mapping direction 失败诊断。
+    evidenceHint: 提交 translation marker 的直接像素断言、affine 的 2×3 matrix、三对非共线 float32 point contract、输入和预测输出坐标、误差/容差、affine 保持性质判断、BGR/RGB 可信显示、source 相等性断言，以及一个 point contract、退化三点或 mapping direction 失败诊断。
     required: true
 resourceIds:
   - resource.opencv-python-tutorials
 publicationStatus: published
-contentVersion: 2026.08.31
+contentVersion: 2026.09.01
 ---
 
 # 缩放、旋转与仿射变换（Geometric Transforms）
@@ -160,6 +160,19 @@ $$\mathrm{scale}_x=\frac{\mathrm{new\ width}}{\mathrm{width}}.$$
 
 $$\mathrm{scale}_y=\frac{\mathrm{new\ height}}{\mathrm{height}}.$$
 
+像素宽高最终必须是整数。为了让实验可重复，本页在从 factor 自行计算 `dsize` 时固定使用 Python `round`，再显式把整数 `(new_width, new_height)` 传给 OpenCV：
+
+```python
+width, height = 10, 7
+scale_x, scale_y = 1.25, 1.5
+
+new_width = round(width * scale_x)   # round(12.5) == 12
+new_height = round(height * scale_y) # round(10.5) == 10
+assert (new_width, new_height) == (12, 10)
+```
+
+Python 的 `round` 在恰好位于两个整数中间时取最近的偶数，所以这里是 12 和 10，不是含糊的“差不多取整”。在当前 OpenCV 行为实验中，省略 `dsize` 而使用 `fx=1.25, fy=1.5` 也得到 shape `(10,12)`；正式证据仍优先显式计算并传入 `dsize=(12,10)`，使取整契约由代码清楚表达。
+
 把 `(new_width, new_height)` 写反通常不会报错，却会得到错误的 output shape 和 aspect ratio。因此本页固定同时记录 input shape、dsize 和 actual output shape。
 
 ### 4.2 坐标变化之后为什么需要 interpolation
@@ -211,6 +224,13 @@ assert rotation_matrix.shape == (2, 3)
 
 `center` 按 `(x,y)` 书写；`angle` 使用度；`scale=1` 表示不额外缩放。matrix 左侧 $2\times2$ 是带 scale 的旋转部分，最后一列补偿中心，使 center 变换后仍保持原坐标。
 
+这里必须区分两个同名但职责不同的量：
+
+- **resize scale**：`scale_x = new_width / width`、`scale_y = new_height / height`，直接决定 resize 的输出宽高；
+- **rotation scale**：`getRotationMatrix2D(center, angle, scale)` 中围绕同一 center 施加的各向同性几何缩放，是 rotation affine matrix 的一部分。
+
+例如 `scale=0.5` 会让 marker 到 center 的距离缩短为一半，但 `warpAffine` 返回的数组 shape 仍由单独传入的 `dsize` 决定，不会自动减半。它不等于“直接指定 `cv2.resize` 的输出尺寸”。
+
 OpenCV 当前约定正角度为逆时针，但图像的 y 轴通常向下，初学者容易把数学草图和屏幕视觉混淆。本页不只背方向口号：用一个不在中心上的已知 marker 预测并核对实际输出。
 
 ### 4.5 Translation：为什么是 2×3
@@ -254,13 +274,29 @@ affine_matrix = cv2.getAffineTransform(src_points, dst_points)
 assert affine_matrix.shape == (2, 3)
 ```
 
-当前只要求理解这三对点建立 source→destination 的 affine 关系；不要求手工解六个参数。Affine 会保持直线和平行关系，但一般不保证长度、角度或面积保持。
+source 三个点还必须形成一个有效三角形，也就是**不能共线（non-collinear）**。三个非共线点提供二维中的两个独立方向；若三个点都落在同一直线上，就缺少另一个方向的信息，无法唯一确定一般 affine transform。
+
+```python
+collinear_points = np.array([[0, 0], [1, 1], [2, 2]], dtype=np.float32)
+valid_triangle = np.array([[0, 0], [2, 0], [0, 2]], dtype=np.float32)
+```
+
+当前 OpenCV 行为实验对上面的退化共线输入返回了全零 `2×3` matrix，并没有抛异常；这不是“变换有效”的证明，也不应依赖该返回行为。应在调用前先检查输入几何是否构成非退化三角形。当前只要求理解三对点建立 source→destination 的 affine 关系，不要求手工解六个参数或证明秩条件。
+
+Affine 会保持直线与平行关系：同一直线上的点变换后仍共线，两条平行线的方向变换后仍平行。它一般不保证长度、角度或面积保持；只有当具体 affine 属于更特殊的变换类别时，这些量才可能保持。
 
 ### 4.7 Output canvas 与 clipping
 
 `cv2.warpAffine(source, matrix, dsize)` 只生成指定大小的输出画布。落在画布外的内容不会自动让画布无限扩张；采样落到输入边界外时，则由 border 规则决定输出值。
 
-因此内容消失可能有至少三种原因：matrix 方向错、已被移到画布外、或输出画布太小。本页使用同一 translation matrix 配合原尺寸和较大尺寸输出，隔离并观察 clipping；border 只使用最低限度的 `BORDER_CONSTANT`，不展开全部边界模式。
+扩大 `dsize` 只增加正方向上的输出范围，不会自动移动输出坐标原点 `(0,0)`。若 marker 经变换落在负 x 或负 y，仅增大 width / height 仍可能完全看不到；此时还要调整 affine matrix 的 translation，把负坐标内容移回可见范围。**扩大画布**与**调整输出坐标位置**是两个不同操作。
+
+还要区分两个边界现象：
+
+- **clipping**：有效内容的输出坐标落在 canvas 外，因此不显示；
+- **border fill**：某个输出位置存在，但 reverse sampling 找不到有效输入位置，因此使用指定填充值。
+
+本页示例使用 `BORDER_CONSTANT` 和 `borderValue=(0,0,0)`；输出黑边是人工指定的 border fill，不是原图自带黑像素、clipping 产生的颜色，也不是 interpolation 自动生成的黑色。本页不展开其他 BorderTypes。
 
 ## 5. 初学者直觉解释
 
@@ -351,7 +387,46 @@ assert nearest.shape == (14, 22, 3)
 assert linear.shape == (14, 22, 3)
 assert area_small.shape == (4, 6, 3)
 assert scale_x == 2.0 and scale_y == 2.0
-assert np.any(nearest != linear)
+
+# 非整数 scale：本页显式使用 Python round，再传入整数 dsize。
+scale_probe = np.zeros((7, 10), dtype=np.uint8)
+probe_scale_x, probe_scale_y = 1.25, 1.5
+probe_width = round(scale_probe.shape[1] * probe_scale_x)
+probe_height = round(scale_probe.shape[0] * probe_scale_y)
+explicit_probe = cv2.resize(
+    scale_probe,
+    (probe_width, probe_height),
+    interpolation=cv2.INTER_NEAREST,
+)
+implicit_probe = cv2.resize(
+    scale_probe,
+    None,
+    fx=probe_scale_x,
+    fy=probe_scale_y,
+    interpolation=cv2.INTER_NEAREST,
+)
+assert (probe_width, probe_height) == (12, 10)
+assert explicit_probe.shape == implicit_probe.shape == (10, 12)
+
+# 用已知标量模式记录三种 interpolation 的代表数值。
+two_by_two = np.array([[0, 255], [255, 0]], dtype=np.uint8)
+nearest_probe = cv2.resize(two_by_two, (5, 5), interpolation=cv2.INTER_NEAREST)
+linear_probe = cv2.resize(two_by_two, (5, 5), interpolation=cv2.INTER_LINEAR)
+assert nearest_probe[1, 1] == 0
+assert linear_probe[1, 1] == 46
+assert np.count_nonzero(nearest_probe != linear_probe) == 21
+
+checkerboard = np.array(
+    [
+        [0, 255, 0, 255],
+        [255, 0, 255, 0],
+        [0, 255, 0, 255],
+        [255, 0, 255, 0],
+    ],
+    dtype=np.uint8,
+)
+area_probe = cv2.resize(checkerboard, (2, 2), interpolation=cv2.INTER_AREA)
+assert np.array_equal(area_probe, np.full((2, 2), 128, dtype=np.uint8))
 
 # 故意错误：把 OpenCV dsize 写成 (height, width)。
 swapped = cv2.resize(source, (new_height, new_width))
@@ -367,7 +442,7 @@ assert swapped.shape == (22, 14, 3)
 assert np.array_equal(source, original)
 ```
 
-预期：正确 dsize `(22,14)` 产生 shape `(14,22,3)`；故意传入 `(14,22)` 则产生 `(22,14,3)`。代码都能运行，但只有前者符合目标契约。
+预期：正确 dsize `(22,14)` 产生 shape `(14,22,3)`；故意传入 `(14,22)` 则产生 `(22,14,3)`。非整数 scale 探针按本页规则把理论尺寸 `12.5×10.5` 固定为整数 `12×10`。在同一个 `(1,1)` 输出位置，nearest 为 0、linear 为 46，说明 linear 会产生输入离散值之间的加权中间值；棋盘格缩小后的 area 代表值为 128，反映覆盖区域的平均/面积关系。代码能运行不代表 shape 与数值契约正确，因此这些结果都用断言固定。
 
 ### Checkpoint 2：Rotation、已知点与 canvas
 
@@ -401,6 +476,23 @@ rotated = cv2.warpAffine(
 assert rotated.shape == source.shape
 assert 0 <= red_x < width and 0 <= red_y < height
 assert rotated[red_y, red_x].tolist() == [0, 0, 255]
+assert rotated[0, 0].tolist() == [0, 0, 0]
+
+# rotation scale=0.5：marker 到 center 的距离减半，但 output shape 仍由 dsize 决定。
+scaled_rotation_source = np.zeros((height, width, 3), dtype=np.uint8)
+scaled_rotation_source[3, 3] = [0, 0, 255]
+scaled_rotation_matrix = cv2.getRotationMatrix2D(center, 90.0, 0.5)
+scaled_prediction = transform_point(scaled_rotation_matrix, (3.0, 3.0))
+assert np.allclose(scaled_prediction, [5.0, 4.0])
+
+scaled_rotated = cv2.warpAffine(
+    scaled_rotation_source,
+    scaled_rotation_matrix,
+    (width, height),
+    flags=cv2.INTER_NEAREST,
+)
+assert scaled_rotated.shape == (height, width, 3)
+assert scaled_rotated[4, 5].tolist() == [0, 0, 255]
 
 source_rgb = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)
 rotated_rgb = cv2.cvtColor(rotated, cv2.COLOR_BGR2RGB)
@@ -418,7 +510,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-这里先由 matrix 得到 marker 的预测位置，再检查输出。`INTER_NEAREST` 让单像素 marker 便于精确核对；换成 linear 后颜色可能扩散，但不能因此放弃坐标验证。
+这里先由 matrix 得到 marker 的预测位置，再检查输出。`INTER_NEAREST` 让单像素 marker 便于精确核对；换成 linear 后颜色可能扩散，但不能因此放弃坐标验证。`scale=0.5` 的第二个 marker 从 `(3,3)` 到 center `(5,3)` 的距离由 2 缩到 1，并转到 `(5,4)`，但数组仍是 `(7,11,3)`，因为 `dsize=(width,height)` 没有改变。`rotated[0,0]` 的黑色来自本例显式指定的 `BORDER_CONSTANT` / `borderValue`，不是 clipping 或 interpolation 自动产生。
 
 ### Checkpoint 3：Translation、clipping 与三点 affine
 
@@ -450,7 +542,43 @@ larger_canvas = cv2.warpAffine(
 # green marker (8,5) 平移到 (12,6)：原画布 width=11 看不到，较大画布可见。
 assert same_canvas.shape == (7, 11, 3)
 assert larger_canvas.shape == (8, 15, 3)
+assert same_canvas[3, 7].tolist() == [0, 0, 255]  # red (3,2) → (7,3)
 assert larger_canvas[6, 12].tolist() == [0, 255, 0]
+
+# 负坐标边界：只增大 dsize 不会移动原点，(1,1) → (-2,1) 仍不可见。
+negative_source = np.zeros((height, width, 3), dtype=np.uint8)
+negative_source[1, 1] = [255, 255, 255]
+negative_matrix = np.float32([[1, 0, -3], [0, 1, 0]])
+negative_prediction = transform_point(negative_matrix, (1.0, 1.0))
+assert np.allclose(negative_prediction, [-2.0, 1.0])
+
+negative_same = cv2.warpAffine(
+    negative_source,
+    negative_matrix,
+    (width, height),
+    flags=cv2.INTER_NEAREST,
+)
+negative_larger = cv2.warpAffine(
+    negative_source,
+    negative_matrix,
+    (width + 10, height + 5),
+    flags=cv2.INTER_NEAREST,
+)
+assert not np.any(np.all(negative_same == [255, 255, 255], axis=2))
+assert not np.any(np.all(negative_larger == [255, 255, 255], axis=2))
+
+# 给输出坐标增加 +2 的 offset：translation 从 -3 调整为 -1，预测点回到 (0,1)。
+visible_matrix = negative_matrix.copy()
+visible_matrix[0, 2] += 2
+visible_prediction = transform_point(visible_matrix, (1.0, 1.0))
+visible_result = cv2.warpAffine(
+    negative_source,
+    visible_matrix,
+    (width, height),
+    flags=cv2.INTER_NEAREST,
+)
+assert np.allclose(visible_prediction, [0.0, 1.0])
+assert visible_result[1, 0].tolist() == [255, 255, 255]
 
 src_points = np.array(
     [[1, 1], [9, 1], [1, 5]],
@@ -462,6 +590,24 @@ dst_points = np.array(
 )
 assert src_points.shape == dst_points.shape == (3, 2)
 assert src_points.dtype == dst_points.dtype == np.float32
+
+
+def signed_twice_area(points):
+    p0, p1, p2 = points.astype(np.float64)
+    edge_1 = p1 - p0
+    edge_2 = p2 - p0
+    return edge_1[0] * edge_2[1] - edge_1[1] * edge_2[0]
+
+
+collinear_points = np.array([[0, 0], [1, 1], [2, 2]], dtype=np.float32)
+valid_triangle = np.array([[0, 0], [2, 0], [0, 2]], dtype=np.float32)
+assert np.isclose(signed_twice_area(collinear_points), 0.0)
+assert not np.isclose(signed_twice_area(valid_triangle), 0.0)
+assert not np.isclose(signed_twice_area(src_points), 0.0)
+
+# 当前 OpenCV 对退化输入返回全零 matrix 而不抛错；不能把“API 返回了”当作输入有效。
+degenerate_matrix = cv2.getAffineTransform(collinear_points, valid_triangle)
+assert np.allclose(degenerate_matrix, 0.0)
 
 affine_matrix = cv2.getAffineTransform(src_points, dst_points)
 assert affine_matrix.shape == (2, 3)
@@ -489,7 +635,7 @@ for src_point, dst_point in zip(src_points, dst_points):
 assert np.array_equal(source, original)
 ```
 
-同一个 translation matrix 在两种 output size 下产生不同可见范围，说明 clipping 不能只靠观察 matrix 判断。三点 affine 则把输入点的 forward prediction 与 OpenCV 图像结果放进同一份证据。
+同一个正向 translation matrix 在两种 output size 下产生不同可见范围，说明较大画布能找回落在正方向外的内容；红色 marker 的 `(3,2)→(7,3)` 还通过 `same_canvas[3,7]` 直接验证。负坐标例子进一步说明：即使画布更大，原点仍是 `(0,0)`，`(-2,1)` 仍不可见；必须调整 matrix 的 translation，让内容回到非负输出坐标。扩大 canvas 与调整输出位置不是同一操作。三点 affine 则先拒绝共线 source triplet，再把 forward prediction 与 OpenCV 图像结果放进同一份证据。
 
 ### Checkpoint 4：Sanity checks 与失败诊断
 
@@ -521,6 +667,15 @@ report_diagnosis(
     "根据任务扩大 output canvas，或调整 transform 的平移部分。",
 )
 
+report_diagnosis(
+    "negative-coordinate canvas misconception",
+    {"point": (1, 1), "translation": (-3, 0), "larger dsize": (width + 10, height + 5)},
+    {"visible coordinate condition": "x>=0 and y>=0"},
+    {"predicted point": tuple(negative_prediction), "marker visible": False},
+    "扩大 dsize 只增加正方向范围，输出原点仍为 (0,0)，所以 x=-2 仍被 clipping。",
+    "给 affine matrix 的 translation 增加输出 offset，使预测坐标进入 x>=0、y>=0。",
+)
+
 wrong_points = np.array([[1, 1, 1], [9, 1, 1], [1, 5, 1]], dtype=np.int32)
 report_diagnosis(
     "affine point contract 错误",
@@ -532,6 +687,15 @@ report_diagnosis(
 )
 assert wrong_points.shape != (3, 2)
 assert wrong_points.dtype != np.float32
+
+report_diagnosis(
+    "affine source points 共线",
+    {"src_points": collinear_points.tolist(), "shape": collinear_points.shape},
+    {"source geometry": "non-collinear triangle"},
+    {"signed twice area": float(signed_twice_area(collinear_points)), "matrix": degenerate_matrix.tolist()},
+    "三个 source points 只提供同一直线方向，无法唯一约束一般二维 affine transform。",
+    "改用三个非共线 source points，并在调用前检查三角形面积不接近 0。",
+)
 
 wrong_direction_prediction = transform_point(
     cv2.invertAffineTransform(translation_matrix),
@@ -549,20 +713,22 @@ report_diagnosis(
 assert np.array_equal(source, original)
 ```
 
-这四类报告都按 **input → expected → actual → reason → correction** 回答。失败诊断不能只保留 traceback，也不能因为图像“还能显示”就跳过 shape、坐标和画布检查。
+这六类报告都按 **input → expected → actual → reason → correction** 回答。失败诊断不能只保留 traceback，也不能因为图像“还能显示”就跳过 shape、坐标、输入几何和画布检查。
 
 ## 9. Active Recall
 
 1. 为什么 `image.shape[:2]` 不能直接当作 OpenCV `dsize`？
-2. `scale_x` 与 `scale_y` 怎样从输入/输出宽高得到？
+2. 非整数 resize scale 怎样按本页规则落到确定的整数 output size？
 3. 为什么几何 matrix 不是在改变像素颜色？
 4. 为什么完整 warp 需要反向采样与 interpolation？
-5. nearest、linear、area 在本页分别解决什么最低限度问题？
-6. `getRotationMatrix2D` 的 center、angle、scale 和最后一列各有什么作用？
+5. nearest、linear、area 为什么会给出不同像素值，但这不等于几何位置一定错了？
+6. resize scale 与 `getRotationMatrix2D` 的 rotation scale 有什么区别？rotation scale 会自动改变 output shape 吗？
 7. 为什么 translation 需要 $2\times3$，普通 $2\times2$ 为什么不够？
-8. 内容消失时，怎样区分 matrix 错误与 output canvas clipping？
-9. 三点 affine 的 point shape/dtype contract 是什么？
-10. 为什么要用已知点，而不能只说“看起来变换了”？
+8. 为什么扩大 canvas 不一定能找回落到负坐标的内容？
+9. clipping 与 border fill 各指什么，黑色 border 来自哪里？
+10. 三点 affine 的 point shape/dtype contract 是什么，为什么三个 source points 不能共线？
+11. Affine 保持什么几何性质，一般不保证什么性质？
+12. 为什么要用已知点，而不能只说“看起来变换了”？
 
 完成标准：不看正文写出 resize、translation 和 point prediction 的最小检查，并能说明 forward point mapping 与 image reverse sampling 的区别。
 
@@ -570,27 +736,34 @@ assert np.array_equal(source, original)
 
 ### 理解检查
 
-给定 `image.shape == (120, 200, 3)`，目标宽 80、高 60，写出正确 `dsize`、预期 output shape、`scale_x` 与 `scale_y`。
+完成两组尺寸推理：
 
-完成标准：`dsize=(80,60)`，shape 为 `(60,80,3)`，`scale_x=0.4`、`scale_y=0.5`；能解释两个顺序为何相反。
+1. 给定 `image.shape == (120, 200, 3)`，目标宽 80、高 60，写出正确 `dsize`、预期 output shape、`scale_x` 与 `scale_y`；
+2. 给定 `width=10, height=7, scale_x=1.25, scale_y=1.5`，按本页 `round` 规则计算整数 `dsize` 和 output shape。
+
+完成标准：第一组 `dsize=(80,60)`、shape 为 `(60,80,3)`、`scale_x=0.4`、`scale_y=0.5`；第二组 `dsize=(12,10)`、shape 为 `(10,12,...)`；能解释两个顺序为何相反以及像素尺寸为何必须落到整数。
 
 ### 数值练习
 
-写出 `tx=-2, ty=3` 的 translation matrix，并预测点 `(5,4)` 与 `(0,0)` 的输出坐标。再判断在 `dsize=(6,6)` 中哪些点仍可见。
+完成三组数值判断：
 
-完成标准：matrix shape 为 `(2,3)`；预测分别为 `(3,7)` 与 `(-2,3)`；结合 `0 <= x < width`、`0 <= y < height` 判断可见性，而不是只看符号。
+1. 写出 `tx=-2, ty=3` 的 translation matrix，并预测点 `(5,4)` 与 `(0,0)` 的输出坐标；再判断在 `dsize=(6,6)` 中哪些点仍可见；
+2. 对 `center=(5,3)`、`angle=90°`、rotation `scale=0.5`，预测点 `(3,3)`；说明为何输出数组 shape 仍由另给的 `dsize=(11,7)` 决定；
+3. 将 `[[0,255],[255,0]]` resize 到 `5×5`，记录同一位置的 nearest/linear 值；将 `4×4` 棋盘格用 area 缩到 `2×2`，记录一个代表值。
+
+完成标准：translation matrix shape 为 `(2,3)`，预测分别为 `(3,7)` 与 `(-2,3)`，并按 bounds 判断可见性；rotation 预测为 `(5,4)`、output shape 为 `(7,11,...)`；interpolation 使用实际输出数值说明 nearest/linear/area 的区别，而不是只写 API 名称。
 
 ### 视觉小练习
 
-用一张非方形 BGR 图像完成：缩小的 `INTER_AREA`、放大的 nearest/linear 对照、绕非默认中心旋转、一次平移与一次三点 affine；把 BGR 正确显示为 RGB。
+用一张非方形 BGR 图像完成：缩小的 `INTER_AREA`、放大的 nearest/linear 对照、绕非默认中心且 `rotation scale != 1.0` 的旋转、一次平移与一次三点 affine；把 BGR 正确显示为 RGB。另给两条平行方向向量 $v_1=(2,0)$、$v_2=(4,0)$ 和 affine 线性部分 $A=\begin{bmatrix}2&1\\0&1\end{bmatrix}$，计算 $Av_1,Av_2$，判断平行是否保持，并判断长度、角度、面积是否由一般 affine 保证保持。
 
-完成标准：每个结果保存 input/output shape、matrix 或 interpolation、一个已知点预测和实际核对；source 与 original 相等；对 nearest/linear 差异和一次 clipping 给出可验证解释。
+完成标准：每个图像结果保存 input/output shape、matrix 或 interpolation、一个已知点预测和实际核对；source 与 original 相等；对 nearest/linear 数值差异和一次 clipping 给出可验证解释。向量结果为 $Av_1=(4,0)$、$Av_2=(8,0)$，仍平行；能明确回答一般 affine 保持直线与平行，但不保证长度、角度或面积。
 
 ### 错误诊断
 
-独立制造并修复：swapped width/height、过小 canvas、`(3,3)` 整数 affine point array，以及将 inverse matrix 错当作 forward prediction。
+独立制造并修复：swapped width/height、过小 canvas、marker 落在负坐标但只扩大 canvas、`(3,3)` 整数 affine point array、三个共线 source points，以及将 inverse matrix 错当作 forward prediction。
 
-完成标准：四个案例各有 input、expected、actual、reason、correction；修复后 shape、point contract 和最大坐标误差断言通过。
+完成标准：六个案例各有 input、expected、actual、reason、correction；负坐标案例调整 translation 后 marker 进入非负坐标；共线案例改成非退化三角形；修复后 shape、point contract 和最大坐标误差断言通过。
 
 ## 11. 实际使用：Project / Capability / Application 映射
 
@@ -603,13 +776,13 @@ assert np.array_equal(source, original)
 
 ### Evidence 1：Resize + Rotation 诊断卡
 
-选择一张经过 I/O 检查的非方形图像，提交 input contract、width/height、目标 dsize、scale、output shape、interpolation 选择与理由；再提交 center、angle、scale、$2\times3$ rotation matrix、一个已知点的预测/实际位置、原/较大 output canvas 对照，以及一次 width/height 写反诊断。
+选择一张经过 I/O 检查的非方形图像，提交 input contract、width/height、非整数 resize scale 的明确取整规则、目标 dsize、output shape，以及 nearest/linear/area 的代表数值与选择理由；再提交 center、angle、`rotation scale != 1.0`、$2\times3$ rotation matrix、一个已知点的预测/实际位置、output dsize 不随 rotation scale 自动改变的断言、原/较大 output canvas 对照、负坐标 marker 的 translation 修正，以及一次 width/height 写反诊断。
 
-通过标准：shape 与坐标断言均通过；clipping 能由 point 与 canvas bounds 解释；失败记录包含 input、expected、actual、reason、correction。只给前后截图不构成掌握。
+通过标准：shape、插值代表值与坐标断言均通过；能区分 resize scale 与 rotation scale；能解释正方向 canvas 扩大和负坐标 translation 修正的不同；clipping 与 border fill 不混淆；失败记录包含 input、expected、actual、reason、correction。只给前后截图不构成掌握。
 
 ### Evidence 2：Translation + Affine 坐标核对
 
-提交一个 translation matrix、三对 `(3,2)` float32 affine points、得到的 $2\times3$ matrix，以及至少三个输入点的预测输出、实际检查、坐标误差和容差；附 BGR→RGB 可信显示、`np.array_equal(source, original)` 和一个 point contract 或 mapping direction 失败诊断。
+提交一个 translation matrix 与 known marker direct assertion、三对非共线 `(3,2)` float32 affine points、得到的 $2\times3$ matrix，以及至少三个输入点的预测输出、实际检查、坐标误差和容差；用一组明确向量判断 affine 的直线/平行保持及长度/角度/面积边界；附 BGR→RGB 可信显示、`np.array_equal(source, original)` 和一个 point contract、退化三点或 mapping direction 失败诊断。
 
 通过标准：三对点最大误差满足预先声明的容差；能解释 forward point mapping 与 warp 的反向采样职责；source 没有被意外修改。无需实现 perspective、homography、配准或插值算法。
 

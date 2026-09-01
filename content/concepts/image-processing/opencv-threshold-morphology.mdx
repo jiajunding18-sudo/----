@@ -1,0 +1,680 @@
+---
+schemaVersion: 1
+id: opencv.threshold-morphology
+slug: opencv-threshold-morphology
+title: 阈值与形态学
+englishTitle: Thresholding & Morphology
+aliases:
+  - OpenCV 阈值与形态学
+  - Binary threshold and morphology
+  - 二值掩膜清理
+searchKeywords:
+  - cv2.threshold
+  - THRESH_BINARY
+  - THRESH_BINARY_INV
+  - binary mask
+  - erosion
+  - dilation
+  - opening
+  - closing
+  - structuring element
+  - foreground polarity
+summary: 从经过验证的灰度图产生可检查的二值 mask，并用明确的结构元素完成受控 erosion、dilation、opening 与 closing，以计数、已知像素和失败卡证明目标是否被保留。
+why: 阈值和形态学 API 很短，但输入尺度、前景极性、mask dtype、结构元素或边界假设任一项错误，都可能得到看似干净、实际已删除目标的结果。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 90
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 7
+  max: 9
+dependencies:
+  - conceptId: opencv.io-color
+    kind: hard
+    reason: 需要先能可靠读取和检查单通道灰度图的 shape、dtype 与实际范围，才能判断阈值失败来自数据契约还是参数。
+  - conceptId: opencv.roi-masks
+    kind: hard
+    reason: 需要先理解 H×W mask、source/result 分离和 shape 检查，才能安全解释二值输出与后续局部修改。
+tags:
+  - OpenCV
+  - Thresholding
+  - Morphology
+  - Binary Mask
+learningOutcomes:
+  - 能从 grayscale、dtype、range 与 foreground polarity 建立固定阈值契约，解释 ret、0/255 输出和 bool/u8 转换，并诊断三种照明条件下的失败。
+  - 能用 3×3 structuring element 手算并验证 erosion、dilation、最小 opening/closing，以计数和已知像素解释结构变化。
+  - 能区分 filtering kernel 与 morphology structuring element，诊断过大 kernel、bool dtype、border 和显示映射造成的错误，并证明 source 未被污染。
+masteryCriteria:
+  - id: criterion.opencv-threshold-morphology.threshold-mask
+    description: 独立从经过验证的 grayscale 输入产生固定阈值 mask，解释 ret、前景极性和 bool/u8 契约，并比较 dark、nominal、bright 三种受控照明条件。
+    evidenceHint: 提交输入 shape/ndim/dtype/range、T/maxval/type/ret、输出 shape/dtype/unique、foreground count、已知像素、bool/u8 往返、三种照明结果，以及一次 too-high/too-low 或 polarity 的 input/expected/actual/reason/correction 失败卡。
+    required: true
+  - id: criterion.opencv-threshold-morphology.morphology-structure
+    description: 独立用 3×3 结构元素完成 erosion、dilation、opening 与 closing 的受控结构实验，解释目标、噪点和小缺口为何变化，并识别一次过度 morphology。
+    evidenceHint: 提交 input mask contract、结构元素、erosion/dilation 预测与实测、opening/closing 前后计数、target ROI/noise/hole 已知检查、source 断言、5×5 aggressive failure 与 border 假设；不要求 connected components 或轮廓 API。
+    required: true
+resourceIds:
+  - resource.opencv-python-tutorials
+publicationStatus: published
+contentVersion: 2026.09.01
+---
+
+# 阈值与形态学（Thresholding & Morphology）
+
+本页只解决一个工程问题：**怎样从已经验证的灰度图得到可信的区域 mask，再在明确假设下修改它的局部结构，并证明真正目标没有被误删。**
+
+```text
+validated grayscale image
+→ inspect dtype / range
+→ choose threshold rule
+→ produce binary mask
+→ inspect shape / dtype / values / foreground polarity
+→ choose structuring element
+→ apply controlled morphology
+→ compare structure before / after
+→ verify desired target retained
+→ diagnose failures
+```
+
+## 1. 这是什么
+
+**阈值（thresholding）**按像素值条件把每个位置分类为 foreground（前景）或 background（背景）。本页主线把白色 `255` 定义为 foreground，把黑色 `0` 定义为 background。
+
+**形态学（morphology）**不再比较原灰度值，而是在 binary foreground 上使用 **structuring element（结构元素）**检查局部结构关系。它会改变区域形状，因此不能因为结果“更干净”就自动认为更正确。
+
+三类操作回答不同问题：
+
+| 操作 | 当前问题 | 主要数据 |
+| --- | --- | --- |
+| Filtering | 邻域怎样重新计算连续像素值？ | 灰度或彩色像素值 |
+| Thresholding | 哪些像素满足 foreground 条件？ | 单通道数值 → binary mask |
+| Morphology | binary foreground 的局部结构怎样改变？ | binary mask + structuring element |
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+`opencv.io-color` 已经让你能可靠获得 grayscale 数组，`opencv.roi-masks` 已经建立 H×W mask 与 source protection。本页把两者连接为第一次可验证的区域提取：不仅会调用 API，还能说明 mask 为什么是这个 shape、这些值，以及参数是否破坏了目标。
+
+`opencv.filtering-basics` 可能在某些任务中作为 threshold 前的可选降噪步骤，但不是本页 hard prerequisite。主实验不依赖 blur；若以后加入 preprocessing，必须重新检查处理后的 dtype、range 和阈值单位。
+
+### 在机器视觉中会在哪里使用
+
+- 为 planned `opencv.edges-contours` 产生和清理区域 mask；
+- 在 planned `pipeline.batch-images` 中记录 threshold、kernel、计数和失败条件；
+- 为 ROADMAP 中 draft `project.classical-inspection` 的前景分割与形态学清理准备基础能力；
+- 在受控零件、瓶盖、硬币或打印图形实验中检查目标区域是否保留。
+
+这里不表示已经会自动分割真实工业图像，也不建立新的 Project requirement。
+
+## 3. 前置知识
+
+正式 hard dependency 只有：
+
+- `opencv.io-color`：复用安全读取、grayscale、shape、dtype 与 actual range；
+- `opencv.roi-masks`：复用 H×W mask、已知 ROI 计数与 source/result 分离。
+
+ROADMAP 把 `dip.morphology` 列为 recommended，但该 Concept 尚未发布，因此本页 frontmatter 暂不建立正式 edge。未来学习它后，再深入二值/灰度形态学与目标尺度理论。
+
+## 4. 核心概念
+
+### 4.1 固定阈值：先声明比较规则
+
+本页主线使用 `THRESH_BINARY`：
+
+```text
+pixel > T  → maxval
+pixel <= T → 0
+```
+
+注意严格大于号：像素恰好等于 `T` 时输出 0。
+
+```python
+ret, mask_u8 = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+```
+
+- `T=127` 是本次比较阈值；
+- `maxval=255` 是满足条件时的输出值；
+- `ret` 是实际使用的 threshold，固定阈值实验中为 `127.0`；
+- `mask_u8` 才是 binary output。
+
+`THRESH_BINARY_INV` 只反转当前比较方向：较暗值变成白色 foreground。它用于解释 dark target 与 foreground polarity，不扩展其他 threshold type。
+
+### 4.2 Grayscale、range 与 threshold 必须使用同一契约
+
+threshold 前至少检查：
+
+```python
+assert gray.ndim == 2
+print("shape:", gray.shape)
+print("dtype:", gray.dtype)
+print("actual range:", gray.min().item(), gray.max().item())
+```
+
+`T=127` 对 `uint8` 0–255 灰度可能合理，对 float32 0–1 数据则完全不在同一尺度。代码不报错也不表示比较条件有意义。
+
+OpenCV 在当前宿主上也能对 H×W×3 BGR 数组逐通道 threshold，得到 H×W×3 输出；这不是本页要求的 H×W spatial mask。因此 **API 成功不等于数据契约正确**。
+
+### 4.3 Boolean mask 与 OpenCV 0/255 binary image
+
+```text
+NumPy boolean mask          OpenCV binary image
+shape: H×W                 shape: H×W
+dtype: bool                dtype: uint8
+values: False / True       values: 0 / 255
+```
+
+正式转换：
+
+```python
+mask_u8 = mask_bool.astype(np.uint8) * 255
+
+values = set(np.unique(mask_u8).tolist())
+assert values.issubset({0, 255})
+mask_bool_again = mask_u8 > 0
+```
+
+必须先检查 binary values，再使用 `>0`。任意普通 `uint8` 灰度图也可以含非零值；直接 `>0` 会把它们全部选为 True。
+
+### 4.4 Structuring element 不是 averaging kernel
+
+主路径使用：
+
+```python
+kernel_3 = np.ones((3, 3), dtype=np.uint8)
+```
+
+- shape 是 3×3；
+- 非零位置定义参与结构判断的邻域；
+- 当前使用默认中心 anchor；
+- `iterations=1` 表示应用一次。
+
+Filtering kernel 通常把邻域数值乘权重后相加；morphology structuring element 主要决定哪些邻域位置参与 min/max 式结构判断。这里的九个 1 **不是** mean filter 的九个 `1/9`。
+
+`cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))` 是选看等价接口。本页不比较 ellipse 或 cross。
+
+### 4.5 Erosion 与 dilation
+
+在当前白色 `255` foreground 契约下：
+
+- **erosion（腐蚀）**：只有 structuring element 覆盖的局部邻域都支持 foreground 时，中心 foreground 才保留，因此前景通常缩小；
+- **dilation（膨胀）**：局部邻域存在 foreground 时，输出位置更容易成为 foreground，因此前景通常扩大。
+
+这些是条件化结论。实际效果还依赖 foreground polarity、structuring element、iterations、border，以及目标是否接触图像边缘。
+
+### 4.6 Opening 与 closing
+
+- **opening（开运算）** = erosion → dilation。对当前白色 foreground，它常用于删除比 structuring element 更小的孤立 foreground，再尝试恢复剩余主体的大致尺寸；
+- **closing（闭运算）** = dilation → erosion。它常用于填补比 structuring element 更小的背景缺口或狭窄断裂。
+
+它们都不是万能清理。每次使用后仍要检查 desired target coverage、已知像素和 foreground count。
+
+### 4.7 Border 是任务假设
+
+主实验显式使用：
+
+```python
+borderType=cv2.BORDER_CONSTANT,
+borderValue=0,
+```
+
+这里主动假设图像外是 background，并把目标放在距离边界至少一个像素的位置。OpenCV morphology 的默认 constant border 使用专用中性值，并不等价于“默认外部全是 0”；所以不能把隐藏默认值当作无意义细节。
+
+`iterations=2` 表示同一个 operation 连续应用两次，不是 “kernel size=2”。本页主线始终固定 `iterations=1`。
+
+## 5. 初学者直觉解释
+
+threshold 像先给每个格子发一张“前景/背景”标签；morphology 像拿一个小模板在标签图上逐格检查邻居。模板越大，要求或影响的局部范围越大，因此既可能清掉小噪点，也可能把真正目标一起删掉。
+
+所以正式问题不是“结果更白还是更黑”，而是：
+
+1. foreground 代表谁？
+2. 哪些像素因为什么规则改变？
+3. desired target 是否仍满足已知位置和面积检查？
+
+## 6. 必须掌握到什么程度
+
+- 能独立完成 fixed `THRESH_BINARY`，解释 `ret`、严格比较方向和 polarity；
+- 能验证 H×W、uint8、0/255 binary contract，并与 bool mask 安全往返；
+- 能手算并验证 3×3 erosion 与 dilation；
+- 能用最小 opening/closing 处理受控噪点和小缺口；
+- 能用 count、target ROI 与 known pixels 判断 cleanup 是否保留目标；
+- 能诊断照明、range、BGR、bool、kernel size、border 和 display failure。
+
+当前不学习 adaptive threshold、Otsu、灰度形态学、connected components、contours、Canny、完整 segmentation 或 morphology 集合论证明。
+
+## 7. 常见误区
+
+- 用 `_` 隐藏 `ret`，却不知道 threshold 实际用了什么值；
+- 忘记 `pixel == T` 在 `THRESH_BINARY` 下输出 0；
+- 对 BGR 三通道数组 threshold，看到代码成功就当作 H×W mask；
+- 对 0–1 float 使用 `T=127`；
+- 看到 `uint8` 就断定 values 一定是 0/255；
+- 把 bool mask 直接交给 OpenCV morphology；
+- 把 3×3 ones structuring element 当成 averaging kernel；
+- threshold 后固定套 morphology，不检查目标是否被删；
+- 只看 auto-scaled 显示，不检查 unique values 与 foreground count；
+- 忽略 border 假设，或把 iterations 和 kernel size 当成同一个参数。
+
+## 8. Worked Example
+
+下面四个 checkpoint 可逐段运行。所有数值来自同一个固定 synthetic fixture，不需要下载数据集。
+
+### Checkpoint 1 — Threshold contract 与三种 illumination
+
+```python
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+def make_threshold_fixture():
+    image = np.full((9, 13), 30, dtype=np.uint8)
+    image[2:7, 3:10] = 180       # 5×7 bright target
+    image[4, 6] = 30             # one background hole inside target
+    image[1:3, 10:12] = 90       # darker distractor
+    image[1, 1] = 220            # isolated bright noise
+    image[7, 11] = 220           # isolated bright noise
+    return image
+
+
+def inspect_binary(label, mask, expected_shape):
+    values = set(np.unique(mask).tolist())
+    foreground_count = int(np.count_nonzero(mask))
+    print(label)
+    print("  shape:", mask.shape)
+    print("  dtype:", mask.dtype)
+    print("  unique:", sorted(values))
+    print("  foreground:", foreground_count)
+    assert mask.shape == expected_shape
+    assert mask.dtype == np.uint8
+    assert values.issubset({0, 255})
+    return foreground_count
+
+
+small_gray = np.array(
+    [
+        [30, 90, 127, 128, 180],
+        [220, 30, 90, 180, 255],
+    ],
+    dtype=np.uint8,
+)
+expected_small = np.array(
+    [
+        [0, 0, 0, 255, 255],
+        [255, 0, 0, 255, 255],
+    ],
+    dtype=np.uint8,
+)
+
+ret, small_mask = cv2.threshold(
+    small_gray,
+    127,
+    255,
+    cv2.THRESH_BINARY,
+)
+assert ret == 127.0
+assert np.array_equal(small_mask, expected_small)
+assert small_mask[0, 2] == 0  # pixel == T
+
+ret_inv, small_mask_inv = cv2.threshold(
+    small_gray,
+    127,
+    255,
+    cv2.THRESH_BINARY_INV,
+)
+assert ret_inv == 127.0
+assert np.array_equal(small_mask_inv, 255 - expected_small)
+
+source = make_threshold_fixture()
+original = source.copy()
+assert source.shape == (9, 13)
+assert source.dtype == np.uint8
+assert (source.min().item(), source.max().item()) == (30, 220)
+assert source[2, 3] == 180
+assert source[4, 6] == 30
+assert source[1, 1] == source[7, 11] == 220
+
+ret, raw_mask = cv2.threshold(source, 127, 255, cv2.THRESH_BINARY)
+assert ret == 127.0
+assert inspect_binary("nominal", raw_mask, source.shape) == 36
+assert np.count_nonzero(raw_mask[2:7, 3:10]) == 34
+
+raw_bool = raw_mask > 0
+raw_u8_again = raw_bool.astype(np.uint8) * 255
+assert raw_bool.dtype == np.bool_
+assert np.array_equal(raw_u8_again, raw_mask)
+
+
+def shift_intensity_safely(image, delta):
+    working = image.astype(np.int16) + delta
+    return np.clip(working, 0, 255).astype(np.uint8)
+
+
+illumination_results = {}
+for label, delta in [("dark", -70), ("nominal", 0), ("bright", 110)]:
+    shifted = shift_intensity_safely(source, delta)
+    used_threshold, shifted_mask = cv2.threshold(
+        shifted,
+        127,
+        255,
+        cv2.THRESH_BINARY,
+    )
+    illumination_results[label] = {
+        "ret": used_threshold,
+        "foreground": int(np.count_nonzero(shifted_mask)),
+        "target": int(np.count_nonzero(shifted_mask[2:7, 3:10])),
+    }
+
+assert illumination_results == {
+    "dark": {"ret": 127.0, "foreground": 2, "target": 0},
+    "nominal": {"ret": 127.0, "foreground": 36, "target": 34},
+    "bright": {"ret": 127.0, "foreground": 117, "target": 35},
+}
+
+too_low = cv2.threshold(source, 20, 255, cv2.THRESH_BINARY)[1]
+too_high = cv2.threshold(source, 200, 255, cv2.THRESH_BINARY)[1]
+assert np.count_nonzero(too_low) == 117
+assert np.count_nonzero(too_high) == 2
+assert np.array_equal(source, original)
+```
+
+预期：同一 `T=127` 在 dark 条件下丢失整个 target，在 nominal 条件下保留 34/35 个 target pixels，在 bright 条件下把全部 117 个位置都判为 foreground。这是 fixed threshold 的边界，不是引入 Otsu 或 adaptive threshold 的理由。
+
+### Checkpoint 2 — Erosion / Dilation 手算与 bool 边界
+
+```python
+kernel_3 = np.ones((3, 3), dtype=np.uint8)
+assert np.array_equal(
+    kernel_3,
+    cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+)
+
+erosion_input = np.zeros((5, 5), dtype=np.uint8)
+erosion_input[1:4, 1:4] = 255
+erosion_original = erosion_input.copy()
+eroded = cv2.erode(
+    erosion_input,
+    kernel_3,
+    iterations=1,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=0,
+)
+assert eroded.shape == erosion_input.shape
+assert eroded.dtype == np.uint8
+assert set(np.unique(eroded).tolist()) == {0, 255}
+assert np.count_nonzero(eroded) == 1
+assert eroded[2, 2] == 255
+assert eroded[1, 1] == 0
+assert np.array_equal(erosion_input, erosion_original)
+
+dilation_input = np.zeros((5, 5), dtype=np.uint8)
+dilation_input[2, 2] = 255
+dilation_original = dilation_input.copy()
+dilated = cv2.dilate(
+    dilation_input,
+    kernel_3,
+    iterations=1,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=0,
+)
+assert dilated.shape == dilation_input.shape
+assert dilated.dtype == np.uint8
+assert set(np.unique(dilated).tolist()) == {0, 255}
+assert np.count_nonzero(dilated) == 9
+assert np.all(dilated[1:4, 1:4] == 255)
+assert dilated[0, 0] == 0
+assert np.array_equal(dilation_input, dilation_original)
+
+bool_rejected = False
+try:
+    cv2.erode(erosion_input > 0, kernel_3)
+except cv2.error:
+    bool_rejected = True
+
+assert bool_rejected
+```
+
+预测与实测一致：3×3 foreground block 被 erosion 留下一个中心点；单个 foreground point 被 dilation 扩为 3×3 block。这里验证的是结构关系，不是加权平均。
+
+### Checkpoint 3 — Opening / Closing cleanup 与过激参数
+
+```python
+opened = cv2.morphologyEx(
+    raw_mask,
+    cv2.MORPH_OPEN,
+    kernel_3,
+    iterations=1,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=0,
+)
+cleaned = cv2.morphologyEx(
+    opened,
+    cv2.MORPH_CLOSE,
+    kernel_3,
+    iterations=1,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=0,
+)
+
+assert inspect_binary("raw", raw_mask, source.shape) == 36
+assert inspect_binary("opened", opened, source.shape) == 30
+assert inspect_binary("cleaned", cleaned, source.shape) == 35
+
+assert [
+    np.count_nonzero(mask[2:7, 3:10])
+    for mask in (raw_mask, opened, cleaned)
+] == [34, 30, 35]
+
+assert raw_mask[1, 1] == raw_mask[7, 11] == 255
+assert opened[1, 1] == opened[7, 11] == 0
+assert cleaned[1, 1] == cleaned[7, 11] == 0
+assert raw_mask[4, 6] == opened[4, 6] == 0
+assert cleaned[4, 6] == 255
+
+kernel_5 = np.ones((5, 5), dtype=np.uint8)
+aggressive_open = cv2.morphologyEx(
+    raw_mask,
+    cv2.MORPH_OPEN,
+    kernel_5,
+    iterations=1,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=0,
+)
+assert np.count_nonzero(aggressive_open) == 0
+assert np.count_nonzero(aggressive_open[2:7, 3:10]) == 0
+assert np.array_equal(source, original)
+
+figure, axes = plt.subplots(1, 4, figsize=(11, 3))
+for axis, image, title in zip(
+    axes,
+    [source, raw_mask, opened, cleaned],
+    ["grayscale source", "raw threshold", "3×3 opening", "then 3×3 closing"],
+):
+    axis.imshow(image, cmap="gray", vmin=0, vmax=255)
+    axis.set_title(title)
+    axis.axis("off")
+plt.tight_layout()
+plt.show()
+```
+
+opening 删除了两个孤立 noise pixels，但也暂时损失了 target 中的四个 foreground pixels；closing 随后填回小缺口，使 target ROI 达到 35。计数变化本身不是“更好”的证明，已知 target/noise/hole 检查才说明当前变化是否符合任务。
+
+5×5 opening 把 foreground 降为 0：输入目标相对 structuring element 太小，主体被完全删除。修正应是减小 kernel，或重新判断 morphology 是否适合，而不是继续增加 iterations。
+
+### Checkpoint 4 — Border 与统一 failure diagnosis
+
+```python
+def report_diagnosis(name, input_fact, expected, actual, reason, correction):
+    print(f"[{name}]")
+    print("input:", input_fact)
+    print("expected:", expected)
+    print("actual:", actual)
+    print("reason:", reason)
+    print("correction:", correction)
+
+
+full_foreground = np.full((3, 3), 255, dtype=np.uint8)
+erode_default = cv2.erode(full_foreground, kernel_3)
+erode_outside_background = cv2.erode(
+    full_foreground,
+    kernel_3,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=0,
+)
+assert np.count_nonzero(erode_default) == 9
+assert np.count_nonzero(erode_outside_background) == 1
+
+corner_point = np.zeros((3, 3), dtype=np.uint8)
+corner_point[0, 0] = 255
+dilate_default = cv2.dilate(corner_point, kernel_3)
+dilate_outside_foreground = cv2.dilate(
+    corner_point,
+    kernel_3,
+    borderType=cv2.BORDER_CONSTANT,
+    borderValue=255,
+)
+assert np.count_nonzero(dilate_default) == 4
+assert np.count_nonzero(dilate_outside_foreground) == 9
+
+bgr_probe = np.array([[[10, 200, 30], [250, 20, 220]]], dtype=np.uint8)
+_, bgr_threshold = cv2.threshold(
+    bgr_probe,
+    127,
+    255,
+    cv2.THRESH_BINARY,
+)
+report_diagnosis(
+    "BGR threshold contract",
+    {"input shape": bgr_probe.shape, "dtype": bgr_probe.dtype},
+    "H×W single-channel binary mask",
+    {"output shape": bgr_threshold.shape, "unique": np.unique(bgr_threshold)},
+    "OpenCV 对三个通道分别比较，API 成功但输出不是 spatial mask contract。",
+    "先明确转换或读取 grayscale，再 threshold。",
+)
+
+float_probe = np.array([[0.1, 0.4, 0.9]], dtype=np.float32)
+_, wrong_scale_mask = cv2.threshold(
+    float_probe,
+    127,
+    255,
+    cv2.THRESH_BINARY,
+)
+assert np.count_nonzero(wrong_scale_mask) == 0
+report_diagnosis(
+    "threshold / range mismatch",
+    {"dtype": float_probe.dtype, "range": (0.1, 0.9), "T": 127},
+    "threshold 与输入使用同一数值尺度",
+    {"foreground": 0, "output dtype": wrong_scale_mask.dtype},
+    "0–1 数据中的所有值都小于 127，代码运行但比较无意义。",
+    "改用同尺度 threshold，例如 T=0.5，并按任务选择 maxval。",
+)
+
+report_diagnosis(
+    "aggressive morphology",
+    {"target ROI": (5, 7), "kernel": (5, 5), "iterations": 1},
+    "删除孤立噪点并保留 target 主体",
+    {"foreground": np.count_nonzero(aggressive_open), "target": 0},
+    "structuring element 相对目标结构过大。",
+    "减小 kernel，或重新评估 morphology 是否适合。",
+)
+```
+
+wrong polarity、bool input、threshold too low/high 也按同一五字段格式记录。显示 mask 时固定 `cmap="gray", vmin=0, vmax=255`；auto scaling 可能让错误范围仍显得黑白分明，不能替代 dtype、unique values 与 count。
+
+## 9. Active Recall
+
+1. `THRESH_BINARY` 比较的是什么？`pixel == T` 时输出什么？
+2. `ret` 与第二个返回值分别是什么？
+3. 为什么 threshold 前必须检查 grayscale、dtype、actual range？
+4. bool mask 与 uint8 0/255 binary image 有什么不同？
+5. 为什么 BGR threshold 运行成功仍可能违反本页 contract？
+6. foreground polarity 改变后，erosion/dilation 的视觉直觉为什么可能反转？
+7. morphology structuring element 与 filtering kernel 的用途有何不同？
+8. opening 和 closing 各是什么操作顺序？
+9. 为什么 morphology 不能成为 threshold 后的固定步骤？
+10. kernel 变大为什么可能把 desired target 一起删除？
+11. borderValue 表达了什么任务假设？
+12. 如何用计数和已知像素证明 cleanup 留下的是目标，而不只是“看起来更干净”？
+
+完成标准：不背 API 列表，能从数据契约、比较规则、局部结构和验证证据解释每一步。
+
+## 10. Practice
+
+Practice 可以沿用 Worked Example 的同一 notebook / report，完成计算与诊断后直接整理为 Mastery Evidence，不需要为相同结论重复运行第二套实验。
+
+### 理解检查
+
+先独立回答 Active Recall 中关于 `ret`、严格大于、foreground polarity、binary contract，以及 filtering kernel / structuring element 分工的问题。完成标准：每个回答都能引用一个正文数组、像素或计数作为依据，不只背 API 名称。
+
+### 数值练习
+
+1. 对正文 2×5 数组手算 `T=127` 的 binary output，并圈出等于 T 的位置。完成标准：逐元素结果与正文 expected array 相同。
+2. 改用 `THRESH_BINARY_INV`，预测并验证输出。完成标准：当前 0/255 契约下与 `255 - expected` 相同。
+3. 对 fixture 使用 T=20、127、200，记录总 foreground 与 target ROI count。完成标准：分别得到 `(117,35)`、`(36,34)`、`(2,0)`，并解释 too low / nominal / too high。
+4. 完成 dark、nominal、bright 三条件表。完成标准：报告输入 range、ret、总 foreground 与 target count，不能只贴三张图。
+
+### Binary contract
+
+5. 构造 H×W bool mask，转成 uint8 0/255，再转回 bool。完成标准：先验证 unique values，并用 `np.array_equal` 证明 round-trip。
+6. 构造含值 `{0,32,255}` 的 uint8 数组，解释为什么它还不能直接宣称是本页 binary mask。
+
+### 视觉小练习
+
+7. 手算 5×5 中央 3×3 block 的 erosion。完成标准：预测并验证仅中心一个 foreground。
+8. 手算 5×5 中心单点的 dilation。完成标准：预测并验证中心 3×3 共 9 个 foreground。
+9. 比较 raw/opened/cleaned 的 foreground、target、noise 与 hole。完成标准：每个变化都由 count 或已知像素支持。
+10. 把 opening kernel 改成 5×5。完成标准：诊断 target count 变为 0，并给出 correction。
+
+### Failure diagnosis
+
+11. 分别诊断 BGR input、float range mismatch、wrong polarity、bool morphology、border assumption 与 aggressive kernel。每张卡必须包含 input、expected、actual、reason、correction。
+12. 用一句话区分 averaging kernel 与 3×3 morphology structuring element，并说明为何九个 1 不代表九个 `1/9`。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+| 类型 | 当前正式边界 |
+| --- | --- |
+| 后续 Concept | planned `opencv.edges-contours` 将消费清理后的 H×W binary mask；边界与轮廓 API 留到下一页 |
+| Capability | 从 validated grayscale 产生并诊断 binary mask；以明确参数完成结构清理并证明 target retained |
+| Planned Project | ROADMAP 中 draft `project.classical-inspection` 会使用前景分割与形态学清理，但当前 Project metadata 未建立正式 requirement/evidence edge |
+| Application | 受控背景下的简单存在性、区域和规则检查；不宣称已具备真实工业系统能力 |
+
+Pixel Lab 的未来 Stage 2 增量可使用 threshold mask card 与 morphology structure card；本轮不修改 Project metadata、readiness 或 completion。
+
+## 12. Mastery Evidence
+
+### Evidence 1 — Threshold mask
+
+独立提交 grayscale input contract、dtype/actual range、T、maxval、threshold type、ret、输出 shape/dtype/unique、foreground count、known pixels、bool/u8 mapping，以及 dark/nominal/bright 三条件结果；另提交一次 too-high/too-low 或 polarity failure card。
+
+通过标准：能解释 `pixel == T`、ret、foreground polarity 与 threshold/range 单位；三条件不能只靠图片判断，failure card 包含 input、expected、actual、reason、correction。
+
+### Evidence 2 — Morphology structure experiment
+
+独立提交 input mask contract、3×3 structuring element、erosion/dilation 预测与实测、opening/closing before/after counts、target ROI、isolated noise、hole、source unchanged、5×5 aggressive failure 与 border assumption。
+
+通过标准：解释每项结构变化为何发生，证明 desired target 在正式结果中保留，并能说明为什么更大的 kernel 或更多 foreground 不自动等于更好。不要求 connected components、contours 或完整 morphology 理论。
+
+两项 Evidence 可以直接复用 Practice 的计算、图、计数和 failure cards。当前 `master` 仅表示能独立完成这一基础 mask 生成、结构修改和诊断闭环。
+
+## 13. 后续复用与复习
+
+- `opencv.edges-contours`：复用 H×W 0/255 mask、target retention 与参数诊断，正式学习边界、轮廓和测量；
+- `pipeline.batch-images`：把 T、polarity、kernel、border、counts 和 failures 保存为可追踪配置；
+- `dip.segmentation`：以后比较更完整的分割方法与评价；
+- `dip.morphology`：以后系统解释结构元素与目标尺度，并扩展灰度形态学。
+
+本页不提前使用 `findContours`、contour area/perimeter、Sobel、Laplacian 或 Canny。
+
+## 14. 精选学习资源
+
+### OpenCV-Python Tutorials
+
+- **为什么推荐**：官方教程可核对 `cv.threshold` 的两个返回值，以及 `erode`、`dilate`、`morphologyEx` 和 rectangular structuring element 的接口契约；本页正文仍是零基础主教材。
+- **必看**：Image Thresholding 的 Simple Thresholding，只看 `THRESH_BINARY`、`THRESH_BINARY_INV`、ret 与 output；Morphological Transformations 的 Erosion、Dilation、Opening、Closing 和 rectangular structuring element。
+- **选看**：`getStructuringElement` 的 rectangular form，以及 API 中最低限度 `borderType` / `borderValue` 参数。
+- **明确跳过**：adaptive threshold、Otsu、morphology gradient、top-hat、black-hat、contours、Canny、watershed 和 advanced segmentation。

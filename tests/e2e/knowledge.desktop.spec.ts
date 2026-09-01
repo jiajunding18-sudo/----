@@ -27,6 +27,7 @@ const conceptIds = [
   "opencv.roi-masks",
   "opencv.geometric-transforms",
   "opencv.filtering-basics",
+  "opencv.threshold-morphology",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -59,7 +60,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   await page.goto("/knowledge/");
 
   const results = page.locator("[data-knowledge-concept-id]");
-  await expect(results).toHaveCount(25);
+  await expect(results).toHaveCount(26);
   expect(
     await results.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-knowledge-concept-id")),
@@ -72,8 +73,8 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   const trackFilter = page.getByLabel("按 Track 浏览");
   await expect(stageFilter.locator("option")).toHaveCount(18);
   await expect(trackFilter.locator("option")).toHaveText([
-    "全部 Track（25）",
-    "公共主干（25）",
+    "全部 Track（26）",
+    "公共主干（26）",
     "3D 工业视觉高级分支（0）",
     "计算成像高级分支（0）",
   ]);
@@ -91,7 +92,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     page.locator('[data-knowledge-concept-id="math.coordinate-frames"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.image-computing");
-  await expect(results).toHaveCount(8);
+  await expect(results).toHaveCount(9);
   await expect(
     page.locator('[data-knowledge-concept-id="python.numpy-arrays"]'),
   ).toBeVisible();
@@ -107,6 +108,9 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   await expect(
     page.locator('[data-knowledge-concept-id="opencv.filtering-basics"]'),
   ).toBeVisible();
+  await expect(
+    page.locator('[data-knowledge-concept-id="opencv.threshold-morphology"]'),
+  ).toBeVisible();
   await stageFilter.selectOption("stage.digital-image-processing");
   await expect(results).toHaveCount(0);
   await expect(page.locator("[data-knowledge-empty-state]")).toContainText(
@@ -120,7 +124,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     "目前没有已发布 Concept",
   );
   await page.getByRole("button", { name: "全部知识", exact: true }).click();
-  await expect(results).toHaveCount(25);
+  await expect(results).toHaveCount(26);
 
   const developmentEnvironment = page.locator(
     '[data-knowledge-concept-id="tooling.dev-environment"]',

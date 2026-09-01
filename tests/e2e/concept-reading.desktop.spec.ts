@@ -567,6 +567,69 @@ test("基础滤波正文呈现 kernel、数值安全、边界与定量诊断闭�
   expect(browserErrors).toEqual([]);
 });
 
+test("阈值与形态学正文呈现 binary contract、结构变化与失败诊断闭环", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-threshold-morphology/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /阈值与形态学/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(9);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("pixel > T");
+  await expect(document).toContainText("pixel == T");
+  await expect(document).toContainText("ret == 127.0");
+  await expect(document).toContainText("THRESH_BINARY_INV");
+  await expect(document).toContainText("mask_bool.astype(np.uint8) * 255");
+  await expect(document).toContainText("Structuring element 不是 averaging kernel");
+  await expect(document).toContainText("erosion（腐蚀）");
+  await expect(document).toContainText("opening（开运算）");
+  await expect(document).toContainText("foreground\": 2, \"target\": 0");
+  await expect(document).toContainText("foreground\": 117, \"target\": 35");
+  await expect(document).toContainText("inspect_binary(\"opened\", opened, source.shape) == 30");
+  await expect(document).toContainText("inspect_binary(\"cleaned\", cleaned, source.shape) == 35");
+  await expect(document).toContainText("np.count_nonzero(aggressive_open) == 0");
+  await expect(document).toContainText("并不等价于“默认外部全是 0”");
+  for (const checkpoint of [1, 2, 3, 4]) {
+    await expect(
+      document.getByRole("heading", {
+        level: 3,
+        name: new RegExp(`Checkpoint ${checkpoint}`, "u"),
+      }),
+    ).toBeVisible();
+  }
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await workedExampleLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example");
+  await page.reload();
+  await expect(page.locator("#section-8-worked-example")).toBeVisible();
+
+  await expect(
+    page
+      .getByLabel("精选学习资源")
+      .getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

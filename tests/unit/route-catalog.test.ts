@@ -58,6 +58,7 @@ const stageTwoConceptIds = [
   "opencv.roi-masks",
   "opencv.geometric-transforms",
   "opencv.filtering-basics",
+  "opencv.threshold-morphology",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

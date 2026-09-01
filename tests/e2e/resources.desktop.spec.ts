@@ -157,9 +157,15 @@ test("15 个 Resource 均有静态详情，正式外链只由详情主动打开"
   await expect(openCvDetail).toContainText("filter2D");
   await expect(openCvDetail).toContainText("sharpening mask");
   await expect(openCvDetail).toContainText("median、bilateral");
+  await expect(openCvDetail).toContainText("THRESH_BINARY、THRESH_BINARY_INV");
+  await expect(openCvDetail).toContainText("Erosion、Dilation、Opening、Closing");
+  await expect(openCvDetail).toContainText("adaptive threshold、Otsu");
   await expect(
     openCvDetail.getByRole("link", { name: "平滑、锐化与基础滤波" }),
   ).toHaveAttribute("href", "/knowledge/opencv-filtering-basics/");
+  await expect(
+    openCvDetail.getByRole("link", { name: "阈值与形态学" }),
+  ).toHaveAttribute("href", "/knowledge/opencv-threshold-morphology/");
   await expectNoHorizontalOverflow(page);
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);

@@ -36,6 +36,9 @@ describe("网站只读内容接口", () => {
     expect(getPublishedConceptBySlug("opencv-filtering-basics")?.id).toBe(
       "opencv.filtering-basics",
     );
+    expect(
+      getPublishedConceptBySlug("opencv-threshold-morphology")?.id,
+    ).toBe("opencv.threshold-morphology");
     expect(getPublishedProjectBySlug("pixel-lab")?.id).toBe(
       "project.pixel-lab",
     );
@@ -48,7 +51,7 @@ describe("网站只读内容接口", () => {
       throw new Error("测试需要已发布的 Pixel Lab");
     }
 
-    expect(getPublishedConceptSlugs()).toHaveLength(25);
+    expect(getPublishedConceptSlugs()).toHaveLength(26);
     expect(getConceptsForProject(slice.project)).toHaveLength(8);
   });
 });

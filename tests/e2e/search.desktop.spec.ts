@@ -311,6 +311,23 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   await filteringBasicsLink.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/knowledge\/opencv-filtering-basics\/$/u);
+
+  await page.goto("/search/?q=THRESH_BINARY");
+  const thresholdMorphology = page.locator(
+    '[data-search-result-id="opencv.threshold-morphology"]',
+  );
+  await expect(thresholdMorphology).toBeVisible();
+  await expect(thresholdMorphology).toContainText("available · 正式内容");
+  const thresholdMorphologyLink = thresholdMorphology.getByRole("link", {
+    name: "阈值与形态学",
+  });
+  await expect(thresholdMorphologyLink).toHaveAttribute(
+    "href",
+    "/knowledge/opencv-threshold-morphology/",
+  );
+  await thresholdMorphologyLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/knowledge\/opencv-threshold-morphology\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

@@ -116,7 +116,7 @@ describe("Roadmap manifest 派生视图", () => {
     );
     expect(stageTwo).toMatchObject({
       contentStatus: "available",
-      conceptCount: 8,
+      conceptCount: 9,
     });
   });
 

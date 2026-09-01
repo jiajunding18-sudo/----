@@ -74,17 +74,17 @@ export const resources: readonly Resource[] = [
     priority: "recommended",
     language: "en",
     reason:
-      "OpenCV 官方 Python 教程用于核对图像读写、最低限度颜色转换、图像属性与 ROI、基础几何变换，以及 mean、Gaussian 与自定义 kernel filtering 的接口契约；正文仍是零基础主教材，不要求顺序学习整套教程。",
+      "OpenCV 官方 Python 教程用于核对图像读写、最低限度颜色转换、图像属性与 ROI、基础几何变换、mean/Gaussian/自定义 kernel filtering，以及固定阈值与基础 morphology 的接口契约；正文仍是零基础主教材，不要求顺序学习整套教程。",
     recommendedParts: [
-      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI；Geometric Transformations of Images 中 Scaling、Translation、Rotation 与 Affine Transformation；Smoothing Images 中 2D filtering 最低限度说明、Averaging、Gaussian Blurring，以及 blur、GaussianBlur、filter2D、ddepth 与 borderType",
-      "选看：IMREAD_UNCHANGED、最低限度 codec/channel inspection；Geometric Image Transformations API 中 interpolation、reverse sampling、mapping direction、border 与 output canvas；官方最小 sharpening mask 示例与最低限度 filtering border reference",
-      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、Perspective Transformation、warpPerspective、homography、remap、polar transform、camera geometry、median、bilateral、morphology、threshold、gradients、Canny、pyramids、Fourier、features、实现算法细节与 advanced color processing",
+      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI；Geometric Transformations of Images 中 Scaling、Translation、Rotation 与 Affine Transformation；Smoothing Images 中 2D filtering 最低限度说明、Averaging、Gaussian Blurring，以及 blur、GaussianBlur、filter2D、ddepth 与 borderType；Image Thresholding 中 Simple Thresholding 的 THRESH_BINARY、THRESH_BINARY_INV、ret/output；Morphological Transformations 中 Erosion、Dilation、Opening、Closing 与 rectangular structuring element",
+      "选看：IMREAD_UNCHANGED、最低限度 codec/channel inspection；Geometric Image Transformations API 中 interpolation、reverse sampling、mapping direction、border 与 output canvas；官方最小 sharpening mask 示例与最低限度 filtering border reference；getStructuringElement 的 rectangular form 与 morphology borderType/borderValue 最低限度说明",
+      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、Perspective Transformation、warpPerspective、homography、remap、polar transform、camera geometry、median、bilateral、adaptive threshold、Otsu、morphology gradient、top-hat、black-hat、contours、gradients、Canny、pyramids、Fourier、features、实现算法细节与 advanced color processing",
     ],
     aliases: ["OpenCV Python 官方教程"],
     verification: "verified",
     url: "https://docs.opencv.org/4.x/d6/d00/tutorial_py_root.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-31",
+    lastCheckedAt: "2026-09-01",
   },
   {
     id: "resource.pro-git",

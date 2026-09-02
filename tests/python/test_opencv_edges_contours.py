@@ -27,6 +27,7 @@ class OpenCvEdgesContoursBehaviorTest(unittest.TestCase):
         self.assertEqual((float(negative[3, 4]), float(negative[3, 5])), (-760.0, -760.0))
         self.assertEqual(float(np.max(np.abs(positive[:, :4]))), 0.0)
         self.assertEqual(float(np.max(np.abs(vertical))), 0.0)
+        self.assertEqual(4 * (220 - 30), 760)
 
     def test_unsigned_sobel_loses_negative_direction_information(self) -> None:
         source = make_step(220, 30)
@@ -102,6 +103,13 @@ class OpenCvEdgesContoursBehaviorTest(unittest.TestCase):
         self.assertEqual(cv2.boundingRect(contour), (3, 2, 8, 5))
         x, y, width, height = cv2.boundingRect(contour)
         self.assertEqual(mask[y : y + height, x : x + width].shape, (5, 8))
+        raster_boundary = np.zeros_like(mask, dtype=bool)
+        raster_boundary[2, 3:11] = True
+        raster_boundary[6, 3:11] = True
+        raster_boundary[3:6, 3] = True
+        raster_boundary[3:6, 10] = True
+        self.assertEqual(contour.shape[0], 4)
+        self.assertEqual(int(np.count_nonzero(raster_boundary)), 22)
         np.testing.assert_array_equal(mask, snapshot)
 
     def test_contour_xy_maps_to_image_yx(self) -> None:
@@ -148,17 +156,21 @@ class OpenCvEdgesContoursBehaviorTest(unittest.TestCase):
         )
 
         self.assertEqual(records, [(0.0, (14, 8, 1, 1)), (28.0, (3, 2, 8, 5))])
+        self.assertEqual(int(np.count_nonzero(mask[8:9, 14:15])), 1)
         self.assertEqual([record for record in records if record[0] >= 1.0], [(28.0, (3, 2, 8, 5))])
         np.testing.assert_array_equal(mask, snapshot)
 
     def test_retr_external_ignores_internal_hole_boundary(self) -> None:
         mask = make_rectangle_mask()
         mask[4, 6] = 0
+        snapshot = mask.copy()
         external, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         tree, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         self.assertEqual(len(external), 1)
         self.assertEqual(len(tree), 2)
+        self.assertEqual(int(mask[4, 6]), 0)
+        np.testing.assert_array_equal(mask, snapshot)
 
     def test_edge_map_is_not_equivalent_to_region_interior(self) -> None:
         mask = make_rectangle_mask()

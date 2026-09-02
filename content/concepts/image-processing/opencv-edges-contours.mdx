@@ -130,6 +130,8 @@ sobel_y = cv2.Sobel(gray, cv2.CV_32F, dx=0, dy=1, ksize=3)
 
 使用 `CV_32F` 是为了保留正值和负值：暗→亮是正响应，亮→暗是负响应。若直接写入 `uint8`，负值无法表达，方向信息会丢失。平坦区域应接近 0；这比只看一张 auto-scaled 图更可信。
 
+对本页左侧 30、右侧 220 的固定阶跃，强度差是 `220-30=190`。当前 3×3 Sobel x 在这个局部阶跃位置的有效权重贡献合计为 4，所以运行后会看到 `4×190=760`：暗→亮为 `+760`，亮→暗为 `-760`。学习时先根据方向预测正负和 flat≈0，再用这条最小数值关系解释实际幅值；当前不需要推导完整 Sobel kernel。
+
 ### 4.2 Canny：两个阈值控制连接与保留
 
 ```python
@@ -177,7 +179,9 @@ assert np.array_equal(mask, snapshot)
 
 因此轮廓点 `(3,2)` 对应图像位置 `[2,3]`。不能把 contour `(x,y)` 的顺序机械抄成 NumPy `[row,column]`。
 
-本页只用 `RETR_EXTERNAL` 获取最外层边界，只用 `CHAIN_APPROX_SIMPLE` 压缩水平/竖直直线上的冗余点。带孔区域可能有内部边界，但 `RETR_EXTERNAL` 不返回它；hierarchy 细节留到后续，不在这里展开。
+本页只用 `RETR_EXTERNAL` 获取最外层边界，只用 `CHAIN_APPROX_SIMPLE` 压缩 contour representation 中水平/竖直直线上的冗余点。矩形可能只保存 4 个 corner points，但这不表示图像边界只有 4 个 raster boundary pixels，也不表示原 binary region 被修改：stored contour points 是压缩后的边界表示，raster boundary pixels 仍属于输入栅格。
+
+带孔区域可能有内部边界；`RETR_EXTERNAL` 只决定“返回哪些 contours”，不会修改输入 binary mask。hole 仍保留在输入数组中，只是当前模式不把 inner boundary 作为独立 contour 返回。hierarchy 细节留到后续，不在这里展开。
 
 ### 4.5 Area、perimeter 与 bounding box 回答不同问题
 
@@ -187,17 +191,29 @@ assert np.array_equal(mask, snapshot)
 
 外接 ROI 写成 `image[y:y+h, x:x+w]`。这再次体现 contour/bbox 用 `(x,y)`，NumPy slice 用 `[y,x]`。
 
-对 `mask[2:7, 3:11] = 255`：前景像素数是 `5×8=40`；轮廓角点坐标跨度却是 `(10-3)×(6-2)=7×4=28`，所以 `contourArea=28`。40 在数离散像素样本，28 在测边界点围成的连续多边形；两者不是同一个定义，不能互相替代。
+对 `mask[2:7, 3:11] = 255`，把五个结果放在同一套几何中看：
+
+1. **Raster foreground pixel count**：columns `3,4,5,6,7,8,9,10` 共 8 列，rows `2,3,4,5,6` 共 5 行，所以有 `8×5=40` 个 foreground samples。
+2. **Contour polygon coordinate span**：角点从 `x=3` 到 `x=10`，跨度为 7；从 `y=2` 到 `y=6`，跨度为 4，所以 `contourArea=7×4=28`。
+3. **Closed perimeter**：同一多边形的闭合周长是 `2×(7+4)=22`。
+4. **Bounding rectangle**：它覆盖离散像素坐标 `x=3...10` 和 `y=2...6`，因此是 `(x,y,w,h)=(3,2,8,5)`。
+5. **ROI slice**：`image[2:2+5, 3:3+8]`，也就是 `image[2:7, 3:11]`，spatial shape 为 `(5,8)`。
+
+因此 polygon coordinate span `7×4` 不等于 raster coverage `8×5`。二者都正确，只是在描述不同对象：前者测连续多边形，后者数离散像素位置。
 
 ### 4.6 Tiny contour filtering 必须公开规则
 
-一个孤立 foreground pixel 也可能形成 contour，常见 `area=0`、`bbox=1×1`。本页可用 `area >= 1` 删除这个**已知合成实验**中的伪目标，但这不是通用阈值：真实小目标也可能被删。正式记录必须包含 threshold、筛选前后 contour count，以及被删除对象的 area/bbox。
+一个孤立 foreground pixel 是一个离散 foreground sample，所以它确实占据一个 pixel location，`bbox=1×1`。但 `contourArea` 测量的是 contour points 围成的连续二维 polygon area；单个 contour point 无法围成二维区域，因此 `area=0`。三者并不矛盾。
+
+本页可用 `area >= 1` 删除这个**已知合成实验**中的伪目标，但这不是通用阈值：`area=0` 不一定是噪声，小 contour 也不一定是伪目标，真实小目标同样可能被删。正式记录必须包含任务假设、threshold、筛选前后 contour count，以及被删除对象的 area/bbox。
 
 ### 4.7 Filtering 与 morphology 都是条件化选择
 
 - 有噪声使 Canny 产生大量 off-edge 响应时，可比较 3×3 Gaussian 前后；
 - binary mask 有已知小缺口或孤立点、且结构元素与目标尺度匹配时，可选择 morphology；
 - 输入已干净时，不应为了流程整齐固定 blur 或 morphology。
+
+Morphology 会改变 binary region geometry，因此还可能改变 contour count、`contourArea`、perimeter 与 `boundingRect`。它不是“无代价 cleanup”；是否使用必须由任务目标和前后数值证据决定。
 
 ## 5. 初学者直觉解释
 
@@ -266,7 +282,7 @@ assert sobel_magnitude_for_display.max() == 760.0
 assert sobel_positive[3, 4] == 760.0
 ```
 
-相同绝对变化 `220-30=190` 因方向相反得到 `+760` 与 `-760`。`sobel_y=0` 是因为这个 fixture 沿 row 方向不变。这里关注符号、flat response 和已知位置，不要求手算 Sobel kernel。
+运行前只需预测暗→亮为正、亮→暗为负、flat≈0。运行后再解释数值：本例差值为 `190`，当前局部阶跃的有效权重贡献合计为 4，所以 `4×190=760`，方向相反便得到 `+760` 与 `-760`。`sobel_y=0` 是因为这个 fixture 沿 row 方向不变。这里不要求手算完整 Sobel kernel。
 
 ### Checkpoint 2 — Canny edge-map contract
 
@@ -343,9 +359,11 @@ assert roi.shape == (5, 8)
 assert np.count_nonzero(roi) == 40
 ```
 
-`CHAIN_APPROX_SIMPLE` 把当前轴对齐矩形压缩成四个角点。foreground count 40 与 polygon area 28 同时正确：前者数 8×5 个像素样本，后者按角点跨度 7×4 计算几何多边形面积。
+`CHAIN_APPROX_SIMPLE` 把当前轴对齐矩形的 contour representation 压缩成四个角点；这四个 stored points 不等于四个 raster boundary pixels，也没有修改原 mask。统一核对结果为：foreground count `8×5=40`，polygon area `7×4=28`，closed perimeter `2×(7+4)=22`，bounding rectangle `(3,2,8,5)`，对应 ROI `mask[2:7,3:11]` 的 spatial shape `(5,8)`。
 
 ### Checkpoint 4 — Tiny target、holes 与统一失败诊断
+
+这是一个 **cumulative checkpoint**：应先运行 Checkpoint 1–3。它直接复用已有的 grayscale/edge outputs、`mask`、`contour`、source snapshot、known rectangle 与 tiny-noise fixture；本段不重复复制前文初始化，以免把失败诊断淹没在样板代码中。
 
 ```python
 def report_diagnosis(case, input_contract, expected, actual, reason, correction):
@@ -389,12 +407,15 @@ assert np.array_equal(mask_with_noise, noisy_snapshot)
 
 mask_with_hole = mask.copy()
 mask_with_hole[4, 6] = 0
+hole_snapshot = mask_with_hole.copy()
 external, _ = cv2.findContours(
     mask_with_hole,
     cv2.RETR_EXTERNAL,
     cv2.CHAIN_APPROX_SIMPLE,
 )
 assert len(external) == 1  # RETR_EXTERNAL only reports the outer boundary
+assert mask_with_hole[4, 6] == 0  # hole remains in the input array
+assert np.array_equal(mask_with_hole, hole_snapshot)
 
 edge_map = cv2.Canny(mask, 50, 150)
 wrong_signed = cv2.Sobel(bright_to_dark, cv2.CV_8U, 1, 0, ksize=3)
@@ -569,7 +590,7 @@ Practice 可与 Evidence 共用同一 notebook/report；下面共 10 个任务�
 
 1. **手判 step edge**：给定左 30、右 220 的阶跃，指出边界位置与暗→亮方向。完成标准：指出边界位于 columns 4/5 之间，不能把整块亮区域叫作 edge。
 
-2. **Sobel 正负方向**：预测暗→亮、亮→暗的 Sobel x 符号。完成标准：分别写出 `+760` 与 `-760`，说明 `CV_32F` 保留方向。
+2. **Sobel 正负方向**：运行前预测暗→亮、亮→暗的 Sobel x 符号和 flat≈0；运行后记录实际响应。完成标准：先写出正、负、零的方向判断，再用 `4×(220-30)=760` 解释为何本例得到 `+760` 与 `-760`，并说明 `CV_32F` 保留方向。
 
 3. **Flat region**：解释并验证平坦区和当前 Sobel y 为什么为 0。完成标准：报告 max abs=0，并把它连接到对应方向没有强度变化，而非“算子失效”。
 
@@ -583,13 +604,13 @@ Practice 可与 Evidence 共用同一 notebook/report；下面共 10 个任务�
 
 7. **坐标换序**：用 contour point `(3,2)` 核对 `image[2,3]`，再写 bbox ROI。完成标准：明确 `(x,y)` → `[y,x]`，写出 `image[y:y+h,x:x+w]`。
 
-8. **矩形测量**：先推导再验证 area、closed perimeter 与 bbox。完成标准：得到 `28.0`、`22.0`、`(3,2,8,5)`，说明三个指标回答不同问题。
+8. **矩形测量**：先推导再验证 area、closed perimeter、bbox 与 ROI shape。完成标准：写出 polygon span `7×4`、`2×(7+4)=22`、离散 coverage `8×5`、`(3,2,8,5)` 与 `image[2:7,3:11] → (5,8)`，说明它们回答不同问题。
 
 9. **Pixel count vs polygon area**：解释 foreground count 40 与 contour area 28。完成标准：分别写出 8×5 离散样本和 7×4 连续坐标跨度，不能归因于 OpenCV 错误。
 
 ### 视觉小练习
 
-10. **Tiny contour 与综合失败卡**：加入 isolated pixel，比较筛选前后 area/bbox；再从 invalid input、polarity、hole mode 或 drawing pollution 任选一例。完成标准：记录 area 0、bbox 1×1、透明 minimum-area 规则、主目标保留、source assertion 和完整五字段诊断；不能写“轮廓越少越好”。
+10. **Tiny contour 与综合失败卡**：加入 isolated pixel，比较筛选前后 area/bbox；再从 invalid input、polarity、hole mode 或 drawing pollution 任选一例。完成标准：记录一个 foreground sample、area 0、bbox 1×1，并解释单点不能围成二维 polygon；同时提交透明 minimum-area 规则、主目标保留、source assertion 和完整五字段诊断。不能写“轮廓越少越好”或“area=0 一定是噪声”。
 
 视觉汇总必须把 Sobel display mapping、raw/smoothed Canny、region mask 与 BGR→RGB contour result 放在可比较的图中；图只作证据补充，以上 10 项数值与断言仍需保留。
 
@@ -608,13 +629,13 @@ Practice 可与 Evidence 共用同一 notebook/report；下面共 10 个任务�
 
 独立提交 validated grayscale shape/dtype/range、暗→亮与亮→暗 Sobel x、flat response、Canny low/high、edge-map shape/dtype/unique、known edge column/count、raw 与可选 smoothing 对照、source assertion，以及一个 signed dtype、low/high、noise 或 edge-map semantic failure card。
 
-通过标准：能用关键数值解释符号与 threshold trade-off；edge map 的 255 被明确称为 boundary evidence；failure card 含 input、expected、actual、reason、correction。无需推导 Sobel/Canny。
+通过标准：运行前能预测 Sobel 符号与 flat≈0，运行后能用本页最小数值关系解释实际 signed magnitude；能用关键数值解释 threshold trade-off；edge map 的 255 被明确称为 boundary evidence；failure card 含 input、expected、actual、reason、correction。无需推导完整 Sobel/Canny。
 
 ### Evidence 2：Contour measurement 与筛选
 
 独立提交 H×W uint8 0/255 region mask、foreground polarity、findContours 参数、input snapshot、contour count/shape/known points、foreground count、area、perimeter、bbox、`image[y:y+h,x:x+w]`、tiny-contour 筛选前后记录、BGR→RGB 可信显示，以及一个 invalid input、polarity、coordinate、hole-mode 或 tiny-contour failure card。
 
-通过标准：正确解释 `N×1×2`、`(x,y)`、40 vs 28 与 external-only；筛选规则不伪装成通用定律；source 保持不变。无需 hierarchy、moments 或 shape matching。
+通过标准：正确解释 `N×1×2`、`(x,y)`、40/28/22/8×5 的统一几何、单像素 area=0 与 bbox=1×1、stored contour points 与 raster boundary pixels，以及 external-only 不修改 hole；筛选规则不伪装成通用定律；source 保持不变。无需 hierarchy、moments 或 shape matching。
 
 两项都达到才符合本页 `master`：能独立完成基础 edge/contour 操作、解释和诊断，不代表掌握完整 edge detection、segmentation 或 OpenCV contour API。
 

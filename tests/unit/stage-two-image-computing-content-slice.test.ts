@@ -688,6 +688,8 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).toContain("cv2.CV_32F");
     expect(concept?.body).toContain("760.0");
     expect(concept?.body).toContain("-760.0");
+    expect(concept?.body).toContain("4×190=760");
+    expect(concept?.body).toContain("运行前只需预测");
     expect(concept?.body).toContain(
       '{"total": 403, "known main": 25, "off": 359}',
     );
@@ -704,8 +706,19 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).toContain("area == 28.0");
     expect(concept?.body).toContain("perimeter == 22.0");
     expect(concept?.body).toContain("(x, y, w, h) == (3, 2, 8, 5)");
+    expect(concept?.body).toContain("2×(7+4)=22");
+    expect(concept?.body).toContain("polygon coordinate span `7×4` 不等于 raster coverage `8×5`");
+    expect(concept?.body).toContain("image[2:7, 3:11]");
     expect(concept?.body).toContain("image[y:y+h,x:x+w]");
     expect(concept?.body).toContain('(0.0, (14, 8, 1, 1))');
+    expect(concept?.body).toContain("单个 contour point 无法围成二维区域");
+    expect(concept?.body).toContain("area=0` 不一定是噪声");
+    expect(concept?.body).toContain("stored contour points");
+    expect(concept?.body).toContain("raster boundary pixels");
+    expect(concept?.body).toContain("不会修改输入 binary mask");
+    expect(concept?.body).toContain("assert mask_with_hole[4, 6] == 0");
+    expect(concept?.body).toContain("Morphology 会改变 binary region geometry");
+    expect(concept?.body).toContain("cumulative checkpoint");
     expect(concept?.body).toContain("result = source_bgr.copy()");
     expect(concept?.body).toContain("### Checkpoint 1");
     expect(concept?.body).toContain("### Checkpoint 2");

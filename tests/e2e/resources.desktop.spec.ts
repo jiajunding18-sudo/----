@@ -173,6 +173,18 @@ test("15 个 Resource 均有静态详情，正式外链只由详情主动打开"
   await expect(
     openCvDetail.getByRole("link", { name: "边缘、轮廓与区域测量" }),
   ).toHaveAttribute("href", "/knowledge/opencv-edges-contours/");
+  await expect(
+    openCvDetail.getByRole("link", { name: "批处理、配置、结果保存与日志" }),
+  ).toHaveAttribute("href", "/knowledge/pipeline-batch-images/");
+
+  await page.goto("/resources/python-pathlib/");
+  const pathlibDetail = page.locator('[data-resource-detail="true"]');
+  await expect(pathlibDetail).toContainText("Path.iterdir");
+  await expect(pathlibDetail).toContainText("Path.stem");
+  await expect(pathlibDetail).toContainText("Path.rglob");
+  await expect(
+    pathlibDetail.getByRole("link", { name: "批处理、配置、结果保存与日志" }),
+  ).toHaveAttribute("href", "/knowledge/pipeline-batch-images/");
   await expectNoHorizontalOverflow(page);
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);

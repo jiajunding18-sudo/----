@@ -325,3 +325,43 @@ test("360px 下边缘与轮廓的代码、表格、TOC、深链接与键盘保�
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScan.violations).toEqual([]);
 });
+
+test("360px 下批处理的代码、TOC、深链接、键盘与资源保持可访问", async ({
+  page,
+}) => {
+  await page.goto("/knowledge/pipeline-batch-images/");
+
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(11);
+  await expect(document.locator('[data-code-language="json"]')).toHaveCount(1);
+  await expect(document).toContainText("Path.iterdir()");
+  await expect(document).toContainText("error-on-existing");
+  await expect(document).toContainText("discovered == processed + skipped");
+  await expect(document).toContainText("counts consistent ≠ records complete");
+  await expect(document).toContainText("assert before_rerun == after_rerun");
+
+  const mobileToc = page.locator('[data-concept-toc="mobile"]');
+  await expect(mobileToc).toBeVisible();
+  const summary = mobileToc.getByText("本页目录", { exact: true });
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  const masteryLink = mobileToc.getByRole("link", {
+    name: /12\. Mastery Evidence/u,
+  });
+  await masteryLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-12-mastery-evidence");
+
+  const resourceLink = page.getByRole("link", {
+    name: "pathlib — Object-oriented filesystem paths",
+    exact: true,
+  });
+  await resourceLink.focus();
+  await expect(resourceLink).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+});

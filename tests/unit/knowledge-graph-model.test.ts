@@ -65,6 +65,12 @@ describe("Knowledge Graph 一跳邻域模型", () => {
         "tooling.debugging",
         "python.numpy-arrays",
       ],
+      [
+        "pipeline.batch-images",
+        "recommended",
+        "tooling.debugging",
+        "pipeline.batch-images",
+      ],
     ]);
   });
 
@@ -177,12 +183,12 @@ describe("Knowledge Graph 全局 scope 与密度模型", () => {
     expect(stageView.edges).toHaveLength(12);
     expect(stageOneAView.nodes).toHaveLength(4);
     expect(stageOneAView.edges).toHaveLength(2);
-    expect(commonTrackView.nodes).toHaveLength(27);
+    expect(commonTrackView.nodes).toHaveLength(28);
     expect(advancedTrackView.nodes).toEqual([]);
-    expect(stageTwoView.nodes).toHaveLength(10);
-    expect(stageTwoView.edges).toHaveLength(14);
-    expect(publishedView.nodes).toHaveLength(27);
-    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(27);
+    expect(stageTwoView.nodes).toHaveLength(11);
+    expect(stageTwoView.edges).toHaveLength(15);
+    expect(publishedView.nodes).toHaveLength(28);
+    expect(new Set(publishedView.nodes.map(({ id }) => id)).size).toBe(28);
   });
 
   it("dependency kind 与 Progress 筛选只改变视图，不修改正式依赖", () => {

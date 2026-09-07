@@ -9,6 +9,7 @@ import { buildKnowledgeView } from "@/features/knowledge/knowledge-model";
 import {
   getConceptReadiness,
   getConceptStatus,
+  startConcept,
 } from "@/features/progress/progress-domain";
 import { getNextStep } from "@/features/recommendations/next-step";
 import { buildRoadmapView } from "@/features/roadmap/roadmap-model";
@@ -27,12 +28,12 @@ const stageTwoConceptIds = [
   "opencv.filtering-basics",
   "opencv.threshold-morphology",
   "opencv.edges-contours",
+  "pipeline.batch-images",
 ] as const;
 
 const stageTwoConceptIdSet = new Set<string>(stageTwoConceptIds);
 
 const unpublishedStageTwoConceptIds = [
-  "pipeline.batch-images",
   "opencv.features-preview",
 ] as const;
 
@@ -59,6 +60,9 @@ const expectedDependencies = [
   ["opencv.roi-masks", "opencv.threshold-morphology", "hard"],
   ["opencv.filtering-basics", "opencv.edges-contours", "hard"],
   ["opencv.threshold-morphology", "opencv.edges-contours", "hard"],
+  ["tooling.reproducibility", "pipeline.batch-images", "hard"],
+  ["opencv.edges-contours", "pipeline.batch-images", "hard"],
+  ["tooling.debugging", "pipeline.batch-images", "recommended"],
 ] as const;
 
 const requiredSectionHeadings = [
@@ -101,7 +105,7 @@ async function loadStageTwoConcepts() {
 }
 
 describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
-  it("只发布约定的十个 required/master Concept，并将 checkpoint 保持 available", () => {
+  it("只发布约定的十一个 required/master Concept，并将 checkpoint 保持 available", () => {
     const concepts = contentManifest.concepts
       .filter(({ stageId }) => stageId === "stage.image-computing")
       .toSorted((left, right) => left.order - right.order);
@@ -111,7 +115,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
 
     expect(concepts.map(({ id }) => id)).toEqual(stageTwoConceptIds);
     expect(concepts.map(({ order }) => order)).toEqual([
-      10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+      10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110,
     ]);
     expect(
       concepts.every(
@@ -150,8 +154,8 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       ]),
     ).toEqual(expect.arrayContaining([...expectedDependencies]));
     expect(dependencies).toHaveLength(expectedDependencies.length);
-    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(18);
-    expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(4);
+    expect(dependencies.filter(({ kind }) => kind === "hard")).toHaveLength(20);
+    expect(dependencies.filter(({ kind }) => kind === "recommended")).toHaveLength(5);
     const dependencyPairs = dependencies.map(
       ({ prerequisiteId, targetId }) => `${String(prerequisiteId)}->${String(targetId)}`,
     );
@@ -735,6 +739,109 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(concept?.body).not.toContain("cv2.connectedComponents");
   });
 
+  it("pipeline.batch-images 保持正式 dependency、master 边界与可靠 batch 闭环", async () => {
+    const concepts = await loadStageTwoConcepts();
+    const concept = concepts.find(
+      ({ meta }) => meta.id === "pipeline.batch-images",
+    );
+
+    expect(concept?.meta).toMatchObject({
+      publicationStatus: "published",
+      requiredness: "required",
+      targetDepth: "master",
+      estimatedHours: { min: 7, max: 9 },
+      resourceIds: [
+        "resource.python-pathlib",
+        "resource.opencv-python-tutorials",
+      ],
+    });
+    expect(concept?.meta.dependencies).toEqual([
+      expect.objectContaining({
+        conceptId: "tooling.reproducibility",
+        kind: "hard",
+      }),
+      expect.objectContaining({
+        conceptId: "opencv.edges-contours",
+        kind: "hard",
+      }),
+      expect.objectContaining({
+        conceptId: "tooling.debugging",
+        kind: "recommended",
+      }),
+    ]);
+    expect(concept?.meta.dependencies).toHaveLength(3);
+    expect(concept?.meta.masteryCriteria).toHaveLength(2);
+    expect(concept?.meta.masteryCriteria.every(({ required }) => required)).toBe(
+      true,
+    );
+
+    requiredSectionHeadings.forEach((heading) => {
+      expect(concept?.body, `pipeline.batch-images 缺少 ${heading}`).toContain(
+        heading,
+      );
+    });
+    expect(concept?.body).toContain(
+      "discover → sort → preflight → process one → record → summarize → verify",
+    );
+    expect(concept?.body).toContain("Path.iterdir()");
+    expect(concept?.body).toContain(
+      "key=lambda path: (path.name.casefold(), path.name)",
+    );
+    expect(concept?.body).toContain("process_one(input_path, output_path, config)");
+    expect(concept?.body).toContain("continue-on-item-error");
+    expect(concept?.body).toContain("error-on-existing");
+    expect(concept?.body).toContain("processed == succeeded + failed");
+    expect(concept?.body).toContain("discovered == processed + skipped");
+    expect(concept?.body).toContain('"schema_version": 1');
+    expect(concept?.body).toContain("sample__jpg.png");
+    expect(concept?.body).toContain("sample__png.png");
+    expect(concept?.body).toContain("### Checkpoint 1");
+    expect(concept?.body).toContain("### Checkpoint 2");
+    expect(concept?.body).toContain("### Checkpoint 3");
+    expect(concept?.body).toContain("### Checkpoint 4");
+    expect(concept?.body).toContain("### Checkpoint 5");
+    expect(concept?.body).toContain("discovered = 7");
+    expect(concept?.body).toContain("succeeded = 4");
+    expect(concept?.body).toContain("failed = 2");
+    expect(concept?.body).toContain("skipped = 1");
+    expect(concept?.body).toContain("下面五个 checkpoint");
+    expect(concept?.body).toContain("当前不学习：multiprocessing");
+    expect(concept?.body).not.toContain("concurrent.futures");
+    expect(concept?.body).not.toContain("import multiprocessing");
+  });
+
+  it("batch R1 区分计数与身份，并用真实输出支撑两种 rerun 证据", async () => {
+    const concept = (await loadStageTwoConcepts()).find(
+      ({ meta }) => meta.id === "pipeline.batch-images",
+    );
+    const body = concept?.body ?? "";
+    for (const text of [
+      "counts consistent ≠ records complete",
+      "len(set(record_names)) == len(record_names)",
+      "set(record_names) == set(discovered_names)",
+      "validate_record_identities(discovered_names, item_records)",
+      "validate_record_identities(discovered_names, manifest_a",
+      "counts alone must not accept duplicate/missing records",
+      "np.array_equal(pixels_a, pixels_b)",
+      "assert before_rerun == after_rerun",
+      "不是要求所有 JPEG",
+      "不落盘的候选名称",
+      "稳定的第二层排序",
+      "它不是算法、Python、OpenCV 或模型版本",
+      "JSON encode（编码）",
+      "不要求独立设计 class inheritance",
+      "不会读取 output 子目录里的文件",
+    ]) expect(body).toContain(text);
+    const practice = body.split("## 10. Practice")[1]?.split("## 11.")[0];
+    expect(practice).toContain("a.png 重复／b.png 漏记");
+    expect(practice).toContain("pixel arrays");
+    expect(practice).toContain("bytes 快照一致");
+    expect(concept?.meta.masteryCriteria).toHaveLength(2);
+    expect(concept?.meta.masteryCriteria[0].evidenceHint).toContain("input_path 完整性");
+    expect(concept?.meta.masteryCriteria[1].evidenceHint).toContain("PNG 像素");
+    expect(concept?.meta.masteryCriteria[1].evidenceHint).toContain("bytes 快照");
+  });
+
   it("稳定 fixture 的像素、尺寸与正文数值契约一致", async () => {
     const fixture = await readFile(
       resolve(process.cwd(), "public/media/opencv-io-color-fixture.ppm"),
@@ -809,9 +916,9 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(resource?.recommendedParts?.[2]).toContain("top-hat");
   });
 
-  it("十篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
+  it("十一篇正文形成完整学习闭环，且教学支架覆盖 masteryCriteria", async () => {
     const concepts = await loadStageTwoConcepts();
-    expect(concepts).toHaveLength(10);
+    expect(concepts).toHaveLength(11);
 
     concepts.forEach(({ body, meta }) => {
       requiredSectionHeadings.forEach((heading) => {
@@ -919,6 +1026,22 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     });
   });
 
+  it("pathlib 资源最小覆盖 batch discovery，并保持非递归边界", () => {
+    const resource = contentManifest.resources.find(
+      ({ id }) => id === "resource.python-pathlib",
+    );
+
+    expect(resource?.recommendedParts).toEqual([
+      expect.stringContaining("必看："),
+      expect.stringContaining("选看："),
+      expect.stringContaining("跳过："),
+    ]);
+    expect(resource?.recommendedParts?.[0]).toContain("Path.iterdir");
+    expect(resource?.recommendedParts?.[0]).toContain("Path.stem");
+    expect(resource?.recommendedParts?.[1]).toContain("非递归");
+    expect(resource?.recommendedParts?.[2]).toContain("Path.rglob");
+  });
+
   it("不扩展 Pixel Lab 或后续 draft Project", () => {
     const pixelLab = contentManifest.projects.find(
       ({ id }) => id === "project.pixel-lab",
@@ -969,6 +1092,9 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     );
     const edgesContours = contentManifest.concepts.find(
       ({ id }) => id === "opencv.edges-contours",
+    );
+    const batchImages = contentManifest.concepts.find(
+      ({ id }) => id === "pipeline.batch-images",
     );
 
     stageTwoConceptIds.forEach((conceptId) => {
@@ -1025,15 +1151,39 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       missingHard: ["opencv.filtering-basics", "opencv.threshold-morphology"],
       missingRecommended: [],
     });
+    expect(
+      batchImages &&
+        getConceptReadiness(batchImages, initialState.conceptProgress),
+    ).toEqual({
+      ready: false,
+      missingHard: ["tooling.reproducibility", "opencv.edges-contours"],
+      missingRecommended: ["tooling.debugging"],
+    });
   });
 
-  it("ROADMAP 同步发布边界，并明确剩余两个节点未发布", async () => {
+  it("batch 只由两个 hard 解锁，debugging 推荐知识不阻塞", () => {
+    const batch = contentManifest.concepts.find(({ id }) => id === "pipeline.batch-images");
+    if (!batch) throw new Error("missing batch concept");
+    const started = startConcept(undefined, "2026-09-07T00:00:00.000Z");
+    if (!started.ok) throw new Error(started.message);
+    const understood = { ...started.progress, status: "understood" as const };
+    const hardIds = ["tooling.reproducibility", "opencv.edges-contours"];
+    for (const id of hardIds) {
+      expect(getConceptReadiness(batch, { [id]: understood }).ready).toBe(false);
+    }
+    expect(getConceptReadiness(batch, {
+      "tooling.reproducibility": understood,
+      "opencv.edges-contours": understood,
+    })).toEqual({ ready: true, missingHard: [], missingRecommended: ["tooling.debugging"] });
+  });
+
+  it("ROADMAP 同步发布边界，并明确仅剩 feature preview 未发布", async () => {
     const roadmap = await readFile(resolve(process.cwd(), "ROADMAP.md"), "utf8");
     expect(roadmap).toContain(
       "`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`",
     );
     expect(roadmap).toContain(
-      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`、S2-U6 的 `opencv.filtering-basics`、S2-U7 的 `opencv.threshold-morphology`，以及 S2-U8 的 `opencv.edges-contours`，共十个正式 Concept；其余两个节点 `pipeline.batch-images` 与 `opencv.features-preview` 仍未发布",
+      "Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`、S2-U6 的 `opencv.filtering-basics`、S2-U7 的 `opencv.threshold-morphology`、S2-U8 的 `opencv.edges-contours`，以及 S2-U9 的 `pipeline.batch-images`，共十一个正式 Concept；唯一剩余节点 `opencv.features-preview` 仍未发布",
     );
     expect(roadmap).toContain(
       "| `opencv.geometric-transforms` | 缩放、旋转与仿射变换（Geometric Transforms） | M |",

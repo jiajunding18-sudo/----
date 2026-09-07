@@ -1,0 +1,901 @@
+---
+schemaVersion: 1
+id: pipeline.batch-images
+slug: pipeline-batch-images
+title: 批处理、配置、结果保存与日志
+englishTitle: Batch Pipeline
+aliases:
+  - 图像批处理
+  - Batch Image Processing
+  - Batch Manifest
+searchKeywords:
+  - sequential batch
+  - deterministic input order
+  - process_one
+  - batch manifest
+  - failure record
+  - error-on-existing
+  - reproducible image pipeline
+summary: 把已经验证的单图步骤整理为确定性顺序批处理，安全发现输入、检查每项状态、保存参数与结果，并用 manifest、失败清单和明确 rerun 策略证明整批运行可诊断、可复现。
+why: 单张图片运行成功不能证明一组图片都被处理；可靠批处理必须发现漏图、坏图、输出覆盖、顺序漂移和静默失败，并让每项结果都能回到对应输入与参数。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 110
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours:
+  min: 7
+  max: 9
+dependencies:
+  - conceptId: tooling.reproducibility
+    kind: hard
+    reason: 批次必须记录输入、参数、输出、环境边界和复现方法，不能只保留一次偶然运行结果。
+  - conceptId: opencv.edges-contours
+    kind: hard
+    reason: 需要先有一个经过验证、能返回明确指标的单图处理步骤，才能把学习重点放在跨文件编排而不是重新学习算法。
+  - conceptId: tooling.debugging
+    kind: recommended
+    reason: 系统化失败卡有助于解释单项错误与后续动作，但缺少它不阻塞本篇的顺序批处理练习。
+tags:
+  - Python
+  - OpenCV
+  - Batch Pipeline
+  - Reproducibility
+  - Failure Handling
+learningOutcomes:
+  - 能用 pathlib 非递归发现输入、按明确 allowlist 分类，并以稳定顺序和无碰撞输出名建立 run-level preflight。
+  - 能把已验证的单图步骤封装为 process_one，在顺序 batch 中记录逐项成功、跳过和失败，不静默吞掉异常或覆盖 source。
+  - 能保存稳定 JSON manifest，核对 summary 不变量，并解释干净输出目录复现与同目录 error-on-existing 重跑的不同契约。
+masteryCriteria:
+  - id: criterion.pipeline-batch-images.reliable-batch-run
+    description: 独立完成一次确定性顺序图像批处理，显式保存输入、配置、逐项状态、安全输出、最小指标、summary、manifest 与 source protection 证据。
+    evidenceHint: 提交稳定排序后的输入清单、preflight 输出、process_one 契约、逐项 records、输出读回检查、summary 数量与相对 input_path 完整性核对、JSON manifest，以及运行前后 source bytes 或 hash 一致的断言。
+    required: true
+  - id: criterion.pipeline-batch-images.failure-reproducibility
+    description: 在同一批次中保留至少一个真实失败输入，执行明确的 continue-on-item-error 策略，并验证干净目录复现和同目录 error-on-existing 重跑行为。
+    evidenceHint: 提交包含 input、expected、actual、reason、correction、exceptionType、message、policyAction 的失败记录、失败后继续处理的证据、两个干净输出目录的语义 manifest 与受控 PNG 像素对照，以及同目录重跑失败前后既有输出和 manifest 的 bytes 快照一致证据。
+    required: true
+resourceIds:
+  - resource.python-pathlib
+  - resource.opencv-python-tutorials
+publicationStatus: published
+contentVersion: 2026.09.02
+---
+
+# 批处理、配置、结果保存与日志（Batch Pipeline）
+
+本页不是“给单图代码套一层 `for` 循环”。目标是把已经验证的单图步骤变成一条每项状态可查、失败不丢失、输出不污染 source、第二次运行仍可解释的顺序批处理：
+
+```text
+single-image operation
+→ reusable process_one
+→ deterministic input discovery
+→ run-level preflight
+→ validate each input
+→ process independently
+→ write output safely
+→ record per-item status
+→ apply explicit failure policy
+→ summarize batch
+→ reproduce and verify run
+```
+
+以后可以反复使用的短版本是：
+
+```text
+discover → sort → preflight → process one → record → summarize → verify
+```
+
+## 1. 这是什么
+
+**批处理（batch processing）**是在一次 run 中按明确规则处理一组输入。这里的 **run** 指输入集合、配置、程序版本和输出位置都确定的一次执行。
+
+本页只做 **sequential batch（顺序批处理）**：一张完成后再处理下一张。**Parallel processing（并行处理）**是多个任务同时执行，解决的是速度与资源调度问题；batch 并不自动意味着 parallel。
+
+可靠 batch 至少要回答：发现了哪些文件、顺序是什么、哪些被尝试、每项成功还是失败、用了什么参数、写到了哪里、是否改动 source、汇总数量是否一致，以及 rerun 会发生什么。
+
+## 2. 为什么机器视觉需要它
+
+一张示例图成功可能只证明“这个输入碰巧可用”。真实图片目录会混入大小写不同的扩展名、非图像文件、损坏文件、灰度或四通道数据、同名输出和旧结果。如果代码静默跳过失败，最后几张输出图不能证明整批数据已被检查。
+
+### 为什么现在学
+
+你已经会可靠读取单图、保护 ROI/source、执行基础变换、滤波、阈值和轮廓测量。现在需要把这些单图能力组成跨文件执行契约，而不是继续增加算法名词。
+
+### 在机器视觉中会在哪里使用
+
+- `project.pixel-lab` 的未来 Stage 2 增量会需要批量 I/O、坏文件显式失败和可复现结果，但当前 Project catalog 尚未建立正式 requirement，本页不修改它；
+- ROADMAP 中 draft `project.classical-inspection` 未来需要对冻结的未见图片批量运行，保存参数、规则结果、指标与失败分组；
+- planned `opencv.features-preview` 未来可以复用这条 batch shell 批量运行特征预览，但两者没有正式 dependency；
+- 后续工业视觉、训练数据检查与部署节点会继续复用“逐项状态 + run summary + rerun policy”，本页不提前教授这些系统。
+
+## 3. 前置知识
+
+硬前置：
+
+- `tooling.reproducibility`：记录输入、参数、环境、命令与结果；
+- `opencv.edges-contours`：提供已验证的单图处理和可解释指标。
+
+推荐 `tooling.debugging`，因为本页沿用 `input / expected / actual / reason / correction` 失败卡。`opencv.io-color`、ROI、滤波、阈值与轮廓能力已经通过 hard 依赖链提供；它们不会被添加成重复的直接 dependency。
+
+## 4. 核心概念
+
+### 4.1 Input discovery：先定义“本批输入是什么”
+
+主路径只使用 `pathlib.Path` 与非递归 `Path.iterdir()`：
+
+```python
+from pathlib import Path
+
+ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp"}
+
+
+def stable_regular_files(input_dir: Path) -> list[Path]:
+    files = [path for path in input_dir.iterdir() if path.is_file()]
+    return sorted(files, key=lambda path: (path.name.casefold(), path.name))
+```
+
+- `discovered`：输入目录直接子层发现的普通文件；子目录不计入；
+- `eligible`：suffix 转为小写后在 allowlist 中，需要真正尝试；
+- `skipped`：是普通文件，但扩展名不在 allowlist；
+- `failed`：eligible 且已尝试，但 decode、contract、processing 或 write 失败。
+
+`Path.iterdir()` 的原始顺序不属于可靠实验契约。显式排序让 item record、failure 顺序和 manifest 更容易比较。空目录或没有 eligible input 不能被报告成成功的空 run。
+
+这里的 `lambda` 只是一个给排序提供 key 的短函数：`casefold()` 把名称折叠为便于忽略大小写比较的形式；先比较折叠后的名称，相同再比较原始 `name`，作为稳定的第二层排序（tie-break）。不需要学习完整 lambda 或 Unicode 规则。
+
+本页不使用递归 `rglob`，也不假定当前工作目录，更不写死盘符、用户名或 `"\\"` 字符串拼接。
+
+### 4.2 Config：一个小字典足够
+
+```python
+config = {
+    "allowed_suffixes": [".png", ".jpg", ".jpeg", ".bmp"],
+    "threshold": 127,
+    "output_extension": ".png",
+    "continue_on_error": True,
+    "output_policy": "error-on-existing",
+}
+```
+
+参数集中保存，避免 `127` 等 magic number 分散在循环中。示例没有随机过程，因此不机械增加 seed；若未来步骤确实随机，seed 才应成为 config 与 manifest 的一部分。
+
+### 4.3 `process_one` 与 batch 外层各负其责
+
+```python
+process_one(input_path, output_path, config)
+```
+
+`process_one` 负责单项的 read、validate、process、write、reload、contract verification 和 metrics；失败时抛出带原因的异常。它不吞掉异常，也不决定整个 batch 是否继续。
+
+batch 外层负责把异常变成统一 record，并按显式 policy 继续或停止。这样“处理算法”和“跨文件编排”不会混成一个巨大函数。
+
+### 4.4 Preflight：在写第一张图之前发现 run-level 风险
+
+以下情况阻止 batch 正式开始：
+
+- input 不存在或不是目录；
+- output 无法建立；
+- input 与 output 相同；
+- output 位于 input discovery 范围内；
+- config 无效；
+- 预计算 output name 发生碰撞；
+- `error-on-existing` 发现既有目标文件或 manifest。
+
+输出名必须稳定并区分同 stem 的不同输入格式：
+
+```python
+def output_name_for(input_path: Path) -> str:
+    suffix_token = input_path.suffix.removeprefix(".").lower()
+    return f"{input_path.stem}__{suffix_token}.png"
+```
+
+因此 `sample.jpg` 与 `sample.png` 分别得到 `sample__jpg.png` 与 `sample__png.png`。仍要用 `casefold()` 检查预计算目标路径，防止在大小写不敏感文件系统上发生碰撞。
+
+Windows 常见默认文件系统配置可能大小写不敏感，因此不能依赖在同一目录真实创建 `part.jpg` 和 `PART.JPG`。这里要验证的是输出命名规划逻辑：可以使用不落盘的候选名称列表推演碰撞，不是假定这两个真实输入一定能够共存。
+
+### 4.5 Run-level 与 item-level failure
+
+Run-level fatal failure 表示整次 run 的前提不成立，例如输出冲突或 manifest 不能保存。Item-level failure 表示某个 eligible 文件失败，但其他输入仍可能独立处理。
+
+本页主策略是 **continue-on-item-error**：记录 decode、数据契约、处理异常、`imwrite=False`、reload 或输出契约失败，再继续下一项。`fail-fast` 是合理的另一种策略，但不在本篇建立复杂策略系统。
+
+统一 error record 至少包含：
+
+```text
+input / expected / actual / reason / correction
+exceptionType / message / policyAction
+```
+
+`except: pass` 会同时丢掉失败输入、异常类型和处理策略，因此被明确禁止。
+
+### 4.6 Output safety：主策略只有 `error-on-existing`
+
+- source 路径永不作为输出路径；
+- input/output 使用分离的 sibling directory；
+- output 不在 input discovery 范围内；
+- 正式输出统一使用 PNG；
+- 所有 output name 在处理前计算并检查；
+- existing output 在写入前阻止 run；
+- 检查 `cv2.imwrite` 的 bool；
+- 写出后重新读取并验证 shape、dtype 与灰度输出契约。
+
+本页不同时实现 overwrite、skip-existing 和自动追加 `_2`。明确失败比悄悄混入旧结果更容易诊断。
+
+当前 `iterdir()` 加 `is_file()` 只扫描直接普通文件，不会读取 output 子目录里的文件。仍禁止 output 位于 input 内，是更保守的路径隔离契约：未来扫描改成递归或扩展选择规则时，内部输出可能被再次摄入；不是说本篇代码已经递归扫描。
+
+### 4.7 JSON manifest 与 summary 不变量
+
+持久化格式只使用 JSON。Python `list`/`dict` 是构造 JSON 的内存结构，不是第二种交付格式。
+
+JSON encode（编码）把 Python dict/list 变成可保存的 JSON 文本，decode（解码）把读回的 JSON 文本还原为 dict/list；本例分别使用 `json.dumps` 与 `json.loads`。`schema_version` 只表示这份 manifest 记录结构的版本，让以后能识别旧字段格式；它不是算法、Python、OpenCV 或模型版本，本篇不学习 JSON Schema 或迁移。
+
+```json
+{
+  "schema_version": 1,
+  "config": {},
+  "input_dir": "input",
+  "output_dir": "output",
+  "items": [],
+  "summary": {
+    "discovered": 0,
+    "eligible": 0,
+    "processed": 0,
+    "succeeded": 0,
+    "failed": 0,
+    "skipped": 0
+  }
+}
+```
+
+每个 item 记录相对 input/output path、status、input contract、parameters、metrics 与 error。绝对用户目录不进入正式 manifest。
+
+计数必须满足：
+
+```python
+assert processed == succeeded + failed
+assert eligible == processed
+assert discovered == processed + skipped
+```
+
+这是第一层 **count invariants（数量不变量）**：核对分类数量与 discovery 总量。这里 `processed` 本来就由 succeeded + failed 计算，第一条主要说明定义；后两条才把 records 的数量与独立发现的文件数对照。例如漏掉坏图记录，会得到 processed=5、eligible=6，后两条检查失败。
+
+第二层是 **identity completeness（逐项身份完整性）**：counts consistent ≠ records complete。只用当前稳定相对 `input_path` 识别文件，不增加 ID 系统。例如发现 `["a.png", "b.png"]`，却生成 `[{"input_path": "a.png"}, {"input_path": "a.png"}]`，两条记录数量仍对，但 b.png 漏记、a.png 重复。
+
+因此还要核对：record 数量等于发现数量、record 名称无重复、两边名称集合相同。success、failed、skipped 全部纳入，目标是每个 discovered ordinary file 恰好一条 record。集合只检查有哪些名称；数量和去重检查防止集合隐藏重复。它不证明记录里的算法指标本身正确。
+
+本页不加入 wall-clock duration；时间会让测试变脆弱，ROADMAP 也没有性能要求。
+
+Manifest 保存失败是 run-level failure。只有 manifest 成功写入后，run 才能报告正式成功。可以自然地先写同目录临时文件再 `replace`，但不扩展 filesystem transaction 理论。
+
+### 4.8 Rerun：重复运行必须有明确行为
+
+两种 rerun 回答不同问题：
+
+1. **第二个干净 output directory**：同一 inputs、config 和稳定顺序应产生相同 filenames、output contracts、受控 fixture 结果与去除根目录差异后的 semantic manifest；
+2. **同一 output directory**：`error-on-existing` 应在真正处理前给出明确 preflight failure，不覆盖、不跳过，也不自动改名。
+
+这建立的是最低限度可解释 rerun，不是 transaction、distributed idempotency 或 workflow orchestration。
+
+## 5. 初学者直觉解释
+
+把单图处理想成一台已经校准的检验工位。批处理不是“把零件不停塞进去”，而是先登记待检清单与顺序，为每个零件准备不会重名的结果位置；每检一个就记录通过、失败或跳过；最后核对总数。坏零件不会让记录消失，旧结果也不会被新 run 悄悄覆盖。
+
+## 6. 必须掌握到什么程度
+
+你必须能独立：
+
+- 定义输入目录、allowlist、稳定顺序和输出命名；
+- 在写入前完成路径、配置、碰撞与 existing-output preflight；
+- 把单图步骤放进 `process_one`，让 batch 外层统一记录失败；
+- 解释 skipped、failed 与 run-level fatal 的区别；
+- 保存 JSON manifest，核对 summary 不变量；
+- 证明 source 未变、output 未被重新摄入；
+- 解释干净目录复现与同目录重跑的不同结果。
+
+当前不学习：multiprocessing、threading、async、GPU batching、job queue、distributed system、database、Airflow/Prefect、MLOps、完整 CLI/config/logging framework、性能 benchmark 或 image dataset theory。
+
+## 7. 常见误区
+
+- “循环结束就代表全部成功”：必须查看逐项 status 与 summary；
+- 把不允许扩展名记成 failed：它没有进入处理，应是 skipped；
+- 依赖 `iterdir()` 原始顺序：相同目录的 record 顺序可能漂移；
+- `except: pass`：程序继续了，但失败证据消失；
+- 只调用 `imwrite`：返回 `False` 或读回契约不符仍是失败；
+- 输出放在 input 子目录：违反本篇保守隔离约定；当前非递归扫描不会直接摄入子目录，但以后扩展扫描规则可能造成反馈输入；
+- `sample.jpg` 与 `sample.png` 都写成 `sample.png`：第二项会覆盖第一项；
+- 自动加 `_2`：rerun 看似成功，却无法说明哪份输出对应哪次配置；
+- 把 batch 当 parallel：本篇的可靠性不依赖并行。
+
+## 8. Worked Example
+
+下面五个 checkpoint 是**累积运行契约**：放在同一个脚本中按顺序执行。fixture 只用于稳定验证 batch 行为，不是新的图像算法或文件格式课程。
+
+### Checkpoint 1：fixture、config、discovery 与 preflight
+
+先创建临时 input，以及独立的两个 clean output directory：
+
+```python
+from __future__ import annotations
+
+import json
+import tempfile
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+
+def make_fixture(input_dir: Path) -> None:
+    input_dir.mkdir(parents=True)
+    for name, offset in [
+        ("01-part.png", 0),
+        ("03-part.png", 10),
+        ("05-part.PNG", 20),
+        ("06-part.bmp", 30),
+    ]:
+        image = np.full((12, 16, 3), 30 + offset, dtype=np.uint8)
+        image[3:9, 5:12] = (220, 220, 220)
+        assert cv2.imwrite(str(input_dir / name), image)
+
+    gray = np.full((12, 16), 120, dtype=np.uint8)
+    assert cv2.imwrite(str(input_dir / "04-gray.png"), gray)
+    (input_dir / "02-broken.png").write_bytes(b"not a valid image")
+    (input_dir / "07-notes.txt").write_text("not an image", encoding="utf-8")
+
+
+config = {
+    "allowed_suffixes": [".png", ".jpg", ".jpeg", ".bmp"],
+    "threshold": 127,
+    "output_extension": ".png",
+    "continue_on_error": True,
+    "output_policy": "error-on-existing",
+}
+
+
+
+def stable_regular_files(input_dir: Path) -> list[Path]:
+    return sorted(
+        [path for path in input_dir.iterdir() if path.is_file()],
+        key=lambda path: (path.name.casefold(), path.name),
+    )
+
+
+def output_name_for(input_path: Path) -> str:
+    suffix_token = input_path.suffix.removeprefix(".").lower()
+    return f"{input_path.stem}__{suffix_token}.png"
+
+
+def preflight(
+    input_dir: Path,
+    output_dir: Path,
+    config: dict[str, object],
+) -> dict[str, object]:
+    input_root = input_dir.resolve()
+    output_root = output_dir.resolve()
+    threshold = config.get("threshold")
+    if type(threshold) is not int or not 0 <= threshold <= 255:
+        raise RuntimeError("threshold must be an integer from 0 to 255")
+    if config.get("output_extension") != ".png":
+        raise RuntimeError("this example writes lossless PNG only")
+    if config.get("continue_on_error") is not True:
+        raise RuntimeError("this runnable example uses continue-on-item-error")
+    suffixes = config.get("allowed_suffixes")
+    if not isinstance(suffixes, list) or not suffixes or not all(
+        isinstance(suffix, str) and suffix in (".png", ".jpg", ".jpeg", ".bmp")
+        for suffix in suffixes
+    ):
+        raise RuntimeError("allowed_suffixes must be a nonempty supported suffix list")
+    if not input_root.exists() or not input_root.is_dir():
+        raise RuntimeError(f"invalid input directory: {input_root}")
+    if output_root == input_root or output_root.is_relative_to(input_root):
+        raise RuntimeError("output must stay outside input discovery")
+    if config["output_policy"] != "error-on-existing":
+        raise RuntimeError("this example only implements error-on-existing")
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    files = stable_regular_files(input_root)
+    allowed = {str(item).lower() for item in config["allowed_suffixes"]}
+    eligible = [path for path in files if path.suffix.lower() in allowed]
+    skipped = [path for path in files if path.suffix.lower() not in allowed]
+    if not eligible:
+        raise RuntimeError(
+            f"no eligible input: discovered={len(files)}, allowed={sorted(allowed)}"
+        )
+
+    output_plan: dict[Path, Path] = {}
+    names_by_casefold: dict[str, Path] = {}
+    for input_path in eligible:
+        output_path = output_root / output_name_for(input_path)
+        collision_key = output_path.name.casefold()
+        if collision_key in names_by_casefold:
+            previous = names_by_casefold[collision_key]
+            raise RuntimeError(
+                f"output-name collision: {previous.name}, {input_path.name}"
+            )
+        names_by_casefold[collision_key] = input_path
+        output_plan[input_path] = output_path
+
+    manifest_path = output_root / "batch-manifest.json"
+    existing = [path for path in output_plan.values() if path.exists()]
+    if manifest_path.exists():
+        existing.append(manifest_path)
+    if existing:
+        raise RuntimeError(
+            "error-on-existing: "
+            + ", ".join(sorted(path.name for path in existing))
+        )
+
+    return {
+        "input_root": input_root,
+        "output_root": output_root,
+        "files": files,
+        "eligible": eligible,
+        "skipped": skipped,
+        "output_plan": output_plan,
+        "manifest_path": manifest_path,
+    }
+
+temporary_root = tempfile.TemporaryDirectory()
+root = Path(temporary_root.name)
+input_dir = root / "input"
+output_a = root / "output-a"
+output_b = root / "output-b"
+make_fixture(input_dir)
+
+files = stable_regular_files(input_dir)
+eligible = [
+    path
+    for path in files
+    if path.suffix.lower() in set(config["allowed_suffixes"])
+]
+skipped = [path for path in files if path not in eligible]
+
+print([path.name for path in files])
+print("eligible", len(eligible), "skipped", len(skipped))
+
+plan_a = preflight(input_dir, output_a, config)
+```
+
+预期：
+
+```text
+discovered = 7
+eligible = 6
+skipped = 1
+```
+
+`02-broken.png` 和 `04-gray.png` 都是 eligible：它们必须被尝试后分别形成 decode 与 contract failure，不能在 discovery 阶段假装不存在。
+
+Preflight 还要解析 input/output、创建 output、确认 output 不等于或位于 input 内，预计算全部 output name，并用大小写不敏感 key 检查 collision 和 existing output。若 eligible 为 0，也在这里给出 run-level 诊断。
+
+### Checkpoint 2：`process_one` 只负责一个 eligible item
+
+本例正式要求 H×W×3、uint8、BGR 输入。使用 `IMREAD_UNCHANGED` 是为了让灰度 fixture 保留 H×W，从而真实触发 contract failure。
+
+下面提供好的 `ItemFailure` 是携带 expected、actual、reason、correction 的轻量异常类型；学习目标是理解这些诊断字段如何交给外层记录，不要求独立设计 class inheritance 或异常框架。
+
+```python
+class ItemFailure(RuntimeError):
+    def __init__(
+        self,
+        expected: str,
+        actual: str,
+        reason: str,
+        correction: str,
+    ) -> None:
+        super().__init__(reason)
+        self.expected = expected
+        self.actual = actual
+        self.reason = reason
+        self.correction = correction
+
+
+def inspect_array(image: np.ndarray) -> dict[str, object]:
+    return {
+        "shape": list(image.shape),
+        "dtype": str(image.dtype),
+        "range": [image.min().item(), image.max().item()],
+        "channels": int(image.shape[2]) if image.ndim == 3 else 1,
+    }
+
+
+def process_one(
+    input_path: Path,
+    output_path: Path,
+    config: dict[str, object],
+) -> dict[str, object]:
+    source_bytes = input_path.read_bytes()
+    image = cv2.imread(str(input_path), cv2.IMREAD_UNCHANGED)
+    if image is None:
+        raise ItemFailure(
+            "decodable image",
+            "imread returned None",
+            "decode failure",
+            "verify file contents and codec support",
+        )
+
+    input_contract = inspect_array(image)
+    if image.ndim != 3 or image.shape[2] != 3 or image.dtype != np.uint8:
+        raise ItemFailure(
+            "H×W×3 uint8 BGR",
+            f"shape={image.shape}, dtype={image.dtype}",
+            "unexpected input contract",
+            "route this input to a compatible process or convert it explicitly",
+        )
+
+    source_snapshot = image.copy()
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(
+        gray,
+        int(config["threshold"]),
+        255,
+        cv2.THRESH_BINARY,
+    )
+    contours, _ = cv2.findContours(
+        binary,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    areas = [float(cv2.contourArea(contour)) for contour in contours]
+
+    write_ok = cv2.imwrite(str(output_path), binary)
+    if not write_ok:
+        raise ItemFailure(
+            "imwrite returns True",
+            "False",
+            "output write failed",
+            "check output path, extension and directory",
+        )
+
+    reloaded = cv2.imread(str(output_path), cv2.IMREAD_UNCHANGED)
+    if reloaded is None or reloaded.shape != binary.shape or reloaded.dtype != binary.dtype:
+        raise ItemFailure(
+            f"shape={binary.shape}, dtype={binary.dtype}",
+            "reload failed or output contract changed",
+            "output verification failed",
+            "inspect the written file before accepting this item",
+        )
+
+    assert np.array_equal(image, source_snapshot)
+    assert input_path.read_bytes() == source_bytes
+    return {
+        "input_contract": input_contract,
+        "output_contract": inspect_array(reloaded),
+        "metrics": {
+            "foreground_count": int(np.count_nonzero(binary)),
+            "contour_count": len(contours),
+            "largest_contour_area": max(areas, default=0.0),
+        },
+    }
+```
+
+先对 `01-part.png` 单独运行时，使用另建的 `root / "probe"` 目录，不向 `output_a` 提前写文件；否则后续 batch 会正确触发 error-on-existing。预期：输出为 H×W、uint8、0/255 PNG；返回三个最小 metrics；输入数组和 input file bytes 均不改变。若只需完整运行五个 checkpoint，此处先定义函数，Checkpoint 4 会实际调用它。
+
+### Checkpoint 3：顺序 batch、failure record 与 continue policy
+
+batch 外层按 Checkpoint 1 的稳定 `files` 顺序遍历。非 allowlist 文件直接记录 `status="skipped"`；eligible 文件调用 `process_one`：
+
+```python
+def validate_record_identities(
+    discovered_names: list[str], items: list[dict[str, object]]
+) -> None:
+    record_names = [item["input_path"] for item in items]
+    assert len(record_names) == len(discovered_names), "record count mismatch"
+    assert len(set(record_names)) == len(record_names), "duplicate input_path"
+    assert set(record_names) == set(discovered_names), "missing or unexpected input_path"
+
+
+def failure_record(input_name: str, error: Exception) -> dict[str, object]:
+    if isinstance(error, ItemFailure):
+        expected = error.expected
+        actual = error.actual
+        reason = error.reason
+        correction = error.correction
+    else:
+        expected = "process_one completes with a verified output"
+        actual = f"{type(error).__name__}: {error}"
+        reason = "processing exception"
+        correction = "reproduce this input independently and inspect the traceback"
+
+    return {
+        "input": input_name,
+        "expected": expected,
+        "actual": actual,
+        "reason": reason,
+        "correction": correction,
+        "exceptionType": type(error).__name__,
+        "message": str(error),
+        "policyAction": "record-and-continue",
+    }
+
+
+def write_manifest(
+    manifest_path: Path,
+    manifest: dict[str, object],
+) -> None:
+    temporary_path = manifest_path.with_suffix(".json.tmp")
+    try:
+        temporary_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        temporary_path.replace(manifest_path)
+    except OSError as error:
+        raise RuntimeError("manifest could not be saved reliably") from error
+
+
+def run_batch(
+    input_dir: Path,
+    output_dir: Path,
+    config: dict[str, object],
+) -> dict[str, object]:
+    plan = preflight(input_dir, output_dir, config)
+    input_root = plan["input_root"]
+    output_root = plan["output_root"]
+    output_plan = plan["output_plan"]
+    allowed = {str(item).lower() for item in config["allowed_suffixes"]}
+    item_records: list[dict[str, object]] = []
+
+    for input_path in plan["files"]:
+        input_name = input_path.relative_to(input_root).as_posix()
+        parameters = {"threshold": int(config["threshold"])}
+        if input_path.suffix.lower() not in allowed:
+            item_records.append({
+                "input_path": input_name,
+                "output_path": None,
+                "status": "skipped",
+                "input_contract": None,
+                "parameters": parameters,
+                "metrics": None,
+                "error": {
+                    "input": input_name,
+                    "expected": f"suffix in {sorted(allowed)}",
+                    "actual": input_path.suffix.lower(),
+                    "reason": "extension not allowed",
+                    "correction": "update the allowlist only if this format is intended",
+                    "exceptionType": None,
+                    "message": "not attempted",
+                    "policyAction": "record-as-skipped",
+                },
+            })
+            continue
+
+        output_path = output_plan[input_path]
+        try:
+            result = process_one(input_path, output_path, config)
+            item_records.append({
+                "input_path": input_name,
+                "output_path": output_path.relative_to(output_root).as_posix(),
+                "status": "succeeded",
+                "input_contract": result["input_contract"],
+                "output_contract": result["output_contract"],
+                "parameters": parameters,
+                "metrics": result["metrics"],
+                "error": None,
+            })
+        except Exception as error:
+            item_records.append({
+                "input_path": input_name,
+                "output_path": None,
+                "status": "failed",
+                "input_contract": None,
+                "parameters": parameters,
+                "metrics": None,
+                "error": failure_record(input_name, error),
+            })
+            if not bool(config["continue_on_error"]):
+                raise RuntimeError(f"fail-fast stopped at {input_name}") from error
+
+    succeeded = sum(item["status"] == "succeeded" for item in item_records)
+    failed = sum(item["status"] == "failed" for item in item_records)
+    skipped_count = sum(item["status"] == "skipped" for item in item_records)
+    summary = {
+        "discovered": len(plan["files"]),
+        "eligible": len(plan["eligible"]),
+        "processed": succeeded + failed,
+        "succeeded": succeeded,
+        "failed": failed,
+        "skipped": skipped_count,
+    }
+    assert summary["processed"] == summary["succeeded"] + summary["failed"]
+    assert summary["eligible"] == summary["processed"]
+    assert summary["discovered"] == summary["processed"] + summary["skipped"]
+
+    # 包括 skipped：每个发现的普通文件都必须有且只有一个记录。
+    discovered_names = [path.relative_to(input_root).as_posix() for path in plan["files"]]
+    validate_record_identities(discovered_names, item_records)
+
+    manifest = {
+        "schema_version": 1,
+        "config": config,
+        "input_dir": "input",
+        "output_dir": "output",
+        "items": item_records,
+        "summary": summary,
+    }
+    write_manifest(plan["manifest_path"], manifest)
+    return manifest
+```
+
+每个 success record 保存 input/output 相对路径、contracts、parameters、metrics 与 `error=None`；failure record 保存 `output_path=None`、已知 input contract 或 `None`，以及完整 error。`continue_on_error=True` 时，`02-broken.png` 失败后，`03-part.png` 必须仍被处理。这里的 broad `except Exception` 只位于 item boundary，并且把异常完整转成 record；它不是静默吞错。
+
+可运行正文在 preflight 固定使用 continue-on-item-error；fail-fast 只是策略对照，不将中途停止伪装成完整 summary。灰度 contract failure 的实际 shape/dtype 已写在 error.actual 中；input_contract=None 表示没有形成被接受的输入契约，而不是读取失败的同义词。
+
+### Checkpoint 4：保存 manifest 并核对 summary
+
+本 fixture 的正式预期是：
+
+```text
+discovered = 7
+eligible = 6
+processed = 6
+succeeded = 4
+failed = 2
+skipped = 1
+```
+
+其中两个 failure 分别是损坏 PNG 的 decode failure 和灰度 PNG 的 contract failure。
+
+```python
+manifest_a = run_batch(input_dir, output_a, config)
+summary = manifest_a["summary"]
+
+assert summary["processed"] == summary["succeeded"] + summary["failed"]
+assert summary["eligible"] == summary["processed"]
+assert summary["discovered"] == summary["processed"] + summary["skipped"]
+
+discovered_names = [path.relative_to(input_dir).as_posix() for path in files]
+validate_record_identities(discovered_names, manifest_a["items"])
+
+# 两项成功的错误记录：counts 都能成立，identity 检查仍须拒绝。
+bad_records = [
+    {"input_path": "a.png", "status": "succeeded"},
+    {"input_path": "a.png", "status": "succeeded"},
+]
+assert len(bad_records) == len(["a.png", "b.png"]) == 2
+try:
+    validate_record_identities(["a.png", "b.png"], bad_records)
+except AssertionError as error:
+    print("identity failure:", error)  # duplicate input_path；同时漏了 b.png
+else:
+    raise AssertionError("counts alone must not accept duplicate/missing records")
+
+manifest_path = output_a / "batch-manifest.json"
+assert json.loads(manifest_path.read_text(encoding="utf-8")) == manifest_a
+```
+
+路径只保存相对于 input/output root 的稳定名字；不把 `temporary_root` 的机器相关绝对路径写入 manifest。只有临时 manifest 成功 `replace` 为正式文件后，run 才报告 success。
+
+### Checkpoint 5：两种 rerun
+
+在 `output_b` 使用同一 input、config 和代码运行第二次。预期：
+
+- output filenames 相同；
+- output contracts 与 metrics 相同；
+- synthetic fixture 的 PNG 输出逐元素相同；
+- 把 manifest 中逻辑 output root 都表示为 `"output"` 后，两个 manifest 相同。
+
+随后再次以 `output_a` 为目标。Preflight 必须在调用任何 `process_one` 前报告 existing outputs 或 existing manifest；`output_a` 内容保持不变。它不自动覆盖、不静默 skip，也不生成随机 `_2` 文件。
+
+```python
+manifest_b = run_batch(input_dir, output_b, config)
+assert manifest_a == manifest_b
+
+# 比较记录之后，实际读回每个成功输出；当前受控无损 PNG 应像素一致。
+verified_outputs = []
+for item in manifest_a["items"]:
+    if item["status"] != "succeeded":
+        continue
+    relative_output = item["output_path"]
+    pixels_a = cv2.imread(str(output_a / relative_output), cv2.IMREAD_UNCHANGED)
+    pixels_b = cv2.imread(str(output_b / relative_output), cv2.IMREAD_UNCHANGED)
+    assert pixels_a is not None and pixels_b is not None
+    assert pixels_a.shape == pixels_b.shape and pixels_a.dtype == pixels_b.dtype
+    assert np.array_equal(pixels_a, pixels_b)
+    verified_outputs.append(relative_output)
+assert len(verified_outputs) == manifest_a["summary"]["succeeded"] == 4
+
+# 快照包含四个已有 PNG 和 manifest；异常本身不能证明文件未变。
+before_rerun = {
+    path.name: path.read_bytes() for path in output_a.iterdir() if path.is_file()
+}
+try:
+    run_batch(input_dir, output_a, config)
+except RuntimeError as error:
+    assert "error-on-existing" in str(error)
+else:
+    raise AssertionError("same-output rerun must fail during preflight")
+
+after_rerun = {
+    path.name: path.read_bytes() for path in output_a.iterdir() if path.is_file()
+}
+assert before_rerun == after_rerun
+```
+
+预期：四份受控 PNG 通过像素比较，same-output 重跑失败，五个既有文件的名称和 bytes 全部不变。Manifest semantic equality 证明记录一致；pixel-array equality 证明当前输出内容一致，两者不能互相替代。这不是要求所有 JPEG、codec 或真实图像输出都逐像素／逐字节相同。
+
+完成证据记录后释放临时目录；`TemporaryDirectory` 在对象释放时也会清理，测试另用 finally 保证异常时清理。若要提交输出，先复制到自己选定的独立证据目录，再执行 cleanup；不要保留无用临时文件：
+
+```python
+temporary_root.cleanup()
+```
+
+## 9. Active Recall
+
+1. 单图函数能运行，为什么仍不能证明整批输入已经可靠处理？
+2. Batch 与 parallel processing 有什么区别？
+3. 为什么 `Path.iterdir()` 的原始顺序不能成为实验契约？
+4. `skipped` 与 `failed` 分别表示什么？
+5. 为什么损坏图像应成为 failure record，而不是被 discovery 静默过滤？
+6. 为什么禁止 `except: pass`？
+7. 为什么 `cv2.imwrite(...)` 调用结束仍不等于 item 成功？
+8. 为什么 output directory 不能位于 input discovery 范围内？
+9. 数量不变量与逐项 identity 检查分别证明什么？为什么 a.png、b.png 被误记成 a.png、a.png 时数量仍可能通过？哪条数量等式在当前代码中主要表达定义？
+10. Manifest 如何把某张失败图连接回输入、参数、异常和处理动作？
+11. 为什么同目录 rerun 必须有明确 existing-output policy？为什么还要检查失败前后的文件快照？Manifest 相同与受控 PNG 像素相同分别证明什么？
+
+## 10. Practice
+
+### 理解检查
+
+1. 给定包含 5 张允许扩展图、2 个 `.txt` 与 1 个子目录的 input，写出 discovered、eligible、skipped 的定义和预期计数。完成标准：子目录不计入 discovered，两个 `.txt` 计入 skipped。
+2. 解释 sequential batch 与 multiprocessing 的差异，并写出本篇为什么只需要前者。完成标准：答案涉及任务集合与并发执行是两个独立问题。
+
+### 数值练习
+
+3. 用不落盘的候选名称 `part.jpg`、`part.png` 与 `PART.JPG` 计算计划输出名，再用大小写不敏感 key 检查碰撞。完成标准：不同 suffix 不互相覆盖，识别潜在大小写碰撞；不依赖 Windows 同目录保存仅大小写不同的真实文件。
+4. 从 7 个 discovered、6 个 eligible、4 个 success 和 2 个 failure 推出 processed 与 skipped，并验证数量不变量。再运行 Checkpoint 4 的 a.png 重复／b.png 漏记反例。完成标准：解释为什么数量仍对而 identity 检查失败；换成未知的 c.png，也应被名称集合检查拒绝。
+
+### 视觉小练习
+
+5. 用正文 fixture 独立完成 `process_one`。完成标准：输出可重新读取，返回 input/output contract 与三个 metrics，source array 和 input file bytes 均不变。
+6. 执行完整 batch。完成标准：`02-broken.png` 失败后 `03-part.png` 仍成功；用数量、无重复和名称集合三个检查，证明每个 ordinary file 都恰好有一个 success、failed 或 skipped record。
+7. 保存并重新读取 JSON manifest。完成标准：item 顺序稳定、路径不含用户目录、summary 与 records 一致，manifest 写入成功前不报告 run success。
+
+### 错误诊断
+
+8. 在第二个干净 output directory 复现，再对第一个 output directory 重跑。完成标准：clean rerun 的 filenames/contracts/semantic manifest 一致，并实际读回比较四个受控 PNG 的 pixel arrays；same-output rerun 在处理前给出 error-on-existing 诊断，输出与 manifest 的前后 bytes 快照一致，source 保护断言仍成立。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+- **Capability**：把可靠单图操作升级为可追踪的顺序 batch，逐项保存状态、参数、指标和失败；
+- **Stage outcome**：直接支撑 `stage-criterion.image-computing.batch-pipeline`，但 Concept 发布不等于该出口证据已通过；
+- **Pixel Lab**：ROADMAP 预期其 Stage 2 增量证明批量 I/O 与坏文件显式失败；当前 catalog 仍只有 Stage 0 requirement/evidence，本页不修改 Project；
+- **Classical Inspection**：draft 项目未来可复用 manifest、冻结输入、规则结果和失败分组；本页不把 draft 伪装成可执行项目；
+- **Application**：课程实验、经典检测基线和后续工业批量验收都需要知道“每张输入发生了什么”，但学完本页不等于已完成真实工业部署。
+
+## 12. Mastery Evidence
+
+### Evidence 1：Reliable Batch Run
+
+整理 Practice 1–7：提交 explicit input/config、deterministic order、preflight、顺序 processing、逐项 records、安全输出、metrics、summary、JSON manifest 和 source protection 断言。同时提交相对 input_path 的数量、无重复、名称集合核对，以及 counts 正确但重复／漏记被拒绝的反例。不得用“输出目录里有几张图”代替逐项状态、计数和 identity 核对。
+
+### Evidence 2：Failure & Reproducibility
+
+整理 Practice 6–8：至少保留一个真实失败 item 的完整 failure record，证明失败后下一项继续处理；分别提交两个 clean output 的 semantic manifest 对照和受控 PNG pixel-array equality；再提交 same-output rerun 的 error-on-existing 诊断，以及包括 manifest 的既有文件前后 bytes 快照一致证据。在 cleanup 前保存证据。核心是诊断与可复现行为，不是从零设计批处理框架。
+
+## 13. 后续复用与复习
+
+- planned `opencv.features-preview` 可以把 feature visualization 放进同一 batch shell，但它不是本页 dependency；
+- Stage 3 的受控算法比较会复用 config、固定输入和逐项 metrics；
+- draft `project.classical-inspection` 会复用冻结输入、summary 与失败分组；
+- 更后的部署节点才会增加长时间运行、恢复、性能与外部系统接口。
+
+复习时优先重新运行一批包含坏图的 fixture，核对稳定顺序、failure record、summary 与 rerun；不需要背诵 pathlib 或 OpenCV 的完整 API。
+
+## 14. 精选学习资源
+
+### Python `pathlib` 官方文档
+
+- **必看**：`Path` 基础、`iterdir()`、`is_file()`、`name`、`stem`、`suffix`、`exists()`、`resolve()` 与 `mkdir()`；目标是能构造可移植的非递归 input discovery；
+- **选看**：非递归 `glob()`，只用于理解另一种选择表达；正文正式路径仍是 `iterdir()`；
+- **跳过**：`rglob`、递归 traversal、symlink、permissions 与完整 pathlib API。
+
+### OpenCV-Python Tutorials
+
+- **必看**：`imread`、读取失败检查，以及 `imwrite` 返回值；只核对 `process_one` 的 I/O 边界；
+- **选看**：最低限度 image format 行为；
+- **跳过**：GUI、video、camera、filtering、threshold、contour、feature 与 advanced color 等算法章节。本页正文仍是 batch 主教材，不要求顺序学习整套 OpenCV 教程。

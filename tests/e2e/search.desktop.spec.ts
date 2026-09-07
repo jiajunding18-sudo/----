@@ -345,6 +345,23 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   await edgesContoursLink.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/knowledge\/opencv-edges-contours\/$/u);
+
+  await page.goto("/search/?q=batch%20manifest");
+  const batchImages = page.locator(
+    '[data-search-result-id="pipeline.batch-images"]',
+  );
+  await expect(batchImages).toBeVisible();
+  await expect(batchImages).toContainText("available · 正式内容");
+  const batchImagesLink = batchImages.getByRole("link", {
+    name: "批处理、配置、结果保存与日志",
+  });
+  await expect(batchImagesLink).toHaveAttribute(
+    "href",
+    "/knowledge/pipeline-batch-images/",
+  );
+  await batchImagesLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/knowledge\/pipeline-batch-images\/$/u);
   await expectNoHorizontalOverflow(page);
   expect(browserErrors).toEqual([]);
 });

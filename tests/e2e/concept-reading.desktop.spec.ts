@@ -689,6 +689,72 @@ test("边缘与轮廓正文呈现有符号响应、数据契约、已知几何�
   expect(browserErrors).toEqual([]);
 });
 
+test("批处理正文呈现确定性 discovery、失败记录、manifest 与 rerun 闭环", async ({
+  page,
+}) => {
+  const browserErrors = trackBrowserErrors(page);
+  await page.goto("/knowledge/pipeline-batch-images/");
+
+  const document = page.locator(".learning-document");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /批处理、配置、结果保存与日志/u,
+    }),
+  ).toBeVisible();
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(11);
+  await expect(document.locator('[data-code-language="json"]')).toHaveCount(1);
+  await expect(document).toContainText(
+    "discover → sort → preflight → process one → record → summarize → verify",
+  );
+  await expect(document).toContainText("Path.iterdir()");
+  await expect(document).toContainText("continue-on-item-error");
+  await expect(document).toContainText("error-on-existing");
+  await expect(document).toContainText("processed == succeeded + failed");
+  await expect(document).toContainText("discovered == processed + skipped");
+  await expect(document).toContainText("counts consistent ≠ records complete");
+  await expect(document).toContainText("validate_record_identities");
+  await expect(document).toContainText("np.array_equal(pixels_a, pixels_b)");
+  await expect(document).toContainText("assert before_rerun == after_rerun");
+  for (const checkpoint of [1, 2, 3, 4, 5]) {
+    await expect(
+      document.getByRole("heading", {
+        level: 3,
+        name: new RegExp(`Checkpoint ${checkpoint}`, "u"),
+      }),
+    ).toBeVisible();
+  }
+
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  const workedExampleLink = toc.getByRole("link", {
+    name: /8\. Worked Example/u,
+  });
+  await workedExampleLink.focus();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+    .toBe("#section-8-worked-example");
+  await page.reload();
+  await expect(page.locator("#section-8-worked-example")).toBeVisible();
+
+  const resources = page.getByLabel("精选学习资源");
+  await expect(
+    resources.getByRole("link", {
+      name: "pathlib — Object-oriented filesystem paths",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/resources/python-pathlib/");
+  await expect(
+    resources.getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
+  ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
+  const accessibilityScan = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScan.violations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

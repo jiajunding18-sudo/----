@@ -34,15 +34,15 @@ export const resources: readonly Resource[] = [
     reason:
       "官方文档展示了跨平台路径对象的基本用法，可避免把 Windows 路径长期当作容易出错的字符串拼接。",
     recommendedParts: [
-      "页面开头的类选择说明",
-      "Basic use",
-      "Path.resolve、Path.exists 与 Path.mkdir 的条目",
+      "必看：页面开头的类选择说明与 Basic use；Path.iterdir、Path.is_file、Path.name、Path.stem、Path.suffix、Path.resolve、Path.exists 与 Path.mkdir 的条目",
+      "选看：Path.glob 的非递归文件选择；正式批处理正文仍以 Path.iterdir 为主路径",
+      "跳过：Path.rglob、递归目录遍历、symlink、permissions 与完整 pathlib API",
     ],
     aliases: ["Python pathlib 文档"],
     verification: "verified",
     url: "https://docs.python.org/3/library/pathlib.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-08-29",
+    lastCheckedAt: "2026-09-07",
   },
   {
     id: "resource.python-venv",

@@ -41,6 +41,7 @@ const stageTwoConceptIds = [
   "opencv.filtering-basics",
   "opencv.threshold-morphology",
   "opencv.edges-contours",
+  "pipeline.batch-images",
 ] as const;
 
 describe("Knowledge manifest 派生视图", () => {
@@ -56,7 +57,7 @@ describe("Knowledge manifest 派生视图", () => {
       ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      Array.from({ length: 27 }, (_, index) => index + 1),
+      Array.from({ length: 28 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -100,12 +101,12 @@ describe("Knowledge manifest 派生视图", () => {
     });
     expect(stageTwo).toMatchObject({
       contentStatus: "available",
-      publishedConceptCount: 10,
+      publishedConceptCount: 11,
     });
     expect(knowledge.availableStageCount).toBe(4);
     expect(knowledge.plannedStageCount).toBe(13);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      27, 0, 0,
+      28, 0, 0,
     ]);
   });
 

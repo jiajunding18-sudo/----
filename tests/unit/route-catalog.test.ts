@@ -61,6 +61,7 @@ const stageTwoConceptIds = [
   "opencv.threshold-morphology",
   "opencv.edges-contours",
   "pipeline.batch-images",
+  "opencv.features-preview",
 ] as const;
 
 function getStage(stageId: string): ContentManifest["stages"][number] {

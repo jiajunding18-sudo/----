@@ -1,0 +1,350 @@
+---
+schemaVersion: 1
+id: opencv.features-preview
+slug: opencv-features-preview
+title: 局部特征预览
+englishTitle: Feature Preview
+aliases:
+  - ORB 关键点预览
+  - Keypoints and Descriptors
+searchKeywords:
+  - ORB_create
+  - detectAndCompute
+  - drawKeypoints
+  - descriptorSize
+  - descriptors None
+  - 局部特征
+summary: 在提供的 ORB 实验框架帮助下检查关键点、描述子与显示结果，观察平坦区域、局部结构、模糊和旋转，区分检测候选与经过验证的对应关系。
+why: 会提取边缘和轮廓后，还需要认识稀疏局部特征这一种不同的数据表示，为 Stage 5 的描述与匹配建立直觉，但不能把点数当作定位能力。
+stageId: stage.image-computing
+trackIds:
+  - track.common
+order: 120
+level: beginner
+requiredness: required
+targetDepth: understand
+estimatedHours:
+  min: 2
+  max: 3
+dependencies:
+  - conceptId: opencv.edges-contours
+    kind: hard
+    reason: 先能区分边缘证据、区域与轮廓，才能理解关键点和描述子是不同的数据对象，而不是另一种轮廓输出。
+tags:
+  - OpenCV
+  - ORB
+  - Keypoints
+  - Descriptors
+learningOutcomes:
+  - 能在框架帮助下调用 ORB，检查输入、KeyPoint 字段、描述子 None/shape/dtype，并可信显示和保护 source。
+  - 能区分 edge、contour、keypoint 与 descriptor，观察模糊或旋转前后的变化，不把检测点数或 response 当质量评分。
+masteryCriteria:
+  - id: criterion.opencv-features-preview.feature-contract
+    description: 在提供的框架帮助下完成 Feature contract inspection，解释输入、少量关键点字段、描述子结构和显示结果，以及 edge/contour/keypoint/descriptor 的区别。
+    evidenceHint: 可直接整理 Practice 记录：input shape/dtype/range、count、几个 pt、size/response 的含义、None 或 shape/dtype、descriptorSize()、可视化和 source 断言；不要求从零实现检测器或完整流程。
+    required: true
+  - id: criterion.opencv-features-preview.controlled-observation
+    description: 在示例帮助下修改一次 blur 或 rotation 条件，比较前后关键点与描述子观察，并解释一个 flat/None 或其他限制案例。
+    evidenceHint: 提交参数、前后 count/descriptor availability、空间分布观察与限制说明；不要求点对应、匹配准确率、重复性 benchmark 或算法推导。
+    required: true
+resourceIds:
+  - resource.opencv-python-tutorials
+publicationStatus: published
+contentVersion: 2026.09.07
+---
+
+# 局部特征预览（Feature Preview）
+
+看到图上的许多标记，不等于已经找到了可靠对应点。本页用一个 ORB 实验认识“位置候选”和“局部描述”这两种输出。你可以借助代码框架完成检查与解释，不需要独立搭建匹配系统。
+
+## 1. 这是什么
+
+**关键点（keypoint）**是检测器根据局部图像结构找到的稀疏候选位置；它是否能在另一幅图或图像变换后稳定重现，需要后续实验或匹配验证。**检测器（detector）**负责提出这些候选。
+
+**描述子（descriptor）**是对关键点邻域图像内容的数值编码。它不是原始 pixel patch，也不是整张图片的一个分数。以后可以比较局部描述，但本篇只检查它描述谁、以什么结构返回。
+
+| 对象 | 当前典型结构 | 表达什么 |
+| --- | --- | --- |
+| Edge map | H×W | 局部边界证据；有符号梯度不一定是二值图 |
+| Contour | 每条通常 Ni×1×2 | 二值区域的边界点序列，Ni 是该条保存点数 |
+| Keypoints | 稀疏 KeyPoint 对象集合 | 检测器提出的局部候选位置，不是完整边界 |
+| Descriptors | 通常 N×D，可能为 None | 与本次返回关键点对应的局部编码集合 |
+
+keypoint 不是 corner 的通用同义词，也不是 contour point 的另一种名称。不同方法寻找的局部结构可以不同；本页只采用 ORB 一个主路径。
+
+## 2. 为什么机器视觉需要它
+
+### 为什么现在学
+
+前面已经能问“哪里有边界”“哪块区域属于前景”。现在增加一个问题：“哪些局部位置值得作为以后比较两幅图的候选？”先认识输出，后续才不会把彩色标记图误认成定位结果。
+
+### 在机器视觉中会在哪里使用
+
+ROADMAP 的 Stage 5 将在 `cv.corners-keypoints`、`cv.local-descriptors`、`cv.feature-matching` 中正式讨论关键点、描述与匹配，再连接 `geometry.homography` 和 `robust.ransac` 的几何验证。本页只是这些任务的数据结构预览，不证明已经能够配准、定位或重建。
+
+## 3. 前置知识
+
+正式 hard prerequisite 仅 [边缘、轮廓与区域测量](/knowledge/opencv-edges-contours/)。复用已经学过的数组轴、灰度、dtype、可靠 I/O 和可信显示，不重新教授它们。
+
+ROADMAP 推荐未来回访 `dip.feature-representation`，它仍未发布，不是开始本篇的条件。等它正式发布后再补入正式 recommended DAG；当前不提供占位链接。
+
+[批处理](/knowledge/pipeline-batch-images/)与本页同属 S2-U9，但没有直接 dependency。本实验只处理单张图，未来才可以复用 batch shell。
+
+## 4. 核心概念
+
+### 输入先于检测
+
+本实验约定非空 H×W grayscale、uint8，并检查实际 min/max。uint8 不代表每张图都覆盖 0–255。真实文件可沿用 [可靠 I/O](/knowledge/opencv-io-color/)，检查读取成功后把 BGR 转成 grayscale；这是当前受控输入约定，不代表所有特征方法只能用这种输入。
+
+### 从对象中只取当前需要的信息
+
+- `pt`：浮点 `(x,y)`，分别表示水平和垂直位置；数组访问仍是 `image[y,x]`。不能把浮点坐标机械用作 NumPy 整数索引，本页只查看坐标。
+- `size`：检测器相关的局部尺度信息（邻域直径，以像素计），不是物体真实尺寸。
+- `response`：当前 detector 的响应值，不是跨图、跨算法的通用质量评分。
+
+对象还可以带 angle 等字段，本页只画位置，不展开方向标记和其他字段。
+
+### 描述子与关键点成对检查
+
+`detectAndCompute` 在一次调用中检测位置并计算描述，返回 `keypoints, descriptors`。第二个输入 `None` 表示本次不使用额外的检测区域 mask。
+
+描述子非 None 时，设 N 为本次返回的关键点数、D 为该方法每行编码长度，应核对 `len(keypoints) == descriptors.shape[0]`，并用 `orb.descriptorSize()` 核对 D。第 i 行对应**同一次调用**的第 i 个关键点，不对应另一张图列表的第 i 个点。
+
+ORB 返回 uint8 编码；这里的数值不是灰度 intensity。某个 descriptor 元素的数值更大，不表示该关键点更重要，也不能据此给关键点排序。当前接口通常给出 D=32，但不用背它，更不要把不同方法的 D 或 dtype 都写死。没有可描述点时可能得到 `descriptors is None`，必须先判断再访问 shape。
+
+### 标记图与数据分开
+
+`drawKeypoints` 把候选位置画到新显示数组。`flags=0` 只画位置，`None` 输出参数让函数创建显示结果。它不是把 KeyPoint 变成检测质量证明。
+
+本页用红色 BGR `(0,0,255)` 标记，让颜色约定可检查：显示结果按 BGR 解释，送入 Matplotlib 前转 RGB。source 与 snapshot 保留作对照；变量名不提供自动只读保护。
+
+## 5. 初学者直觉解释
+
+想象你只拿一小块图来寻找位置。平坦灰块移动一点仍然差不多，很难区别位置；交叉、转折或局部纹理提供更多变化线索。但重复棋盘中的许多局部又很相似，因此“检测到了”不等于“能唯一匹配”。
+
+关键点像一个候选地址，描述子像该地址周围内容的编码摘要。地址列表、摘要表和画了标记的照片，是三个不同对象。
+
+## 6. 必须掌握到什么程度
+
+本节点正式 `targetDepth: understand`，预计 2–3 小时。达到 `understood` 即满足默认路线目标；schema 中的 masteryCriteria 不意味着这里必须完成 master 级项目。
+
+现在需要：借助框架运行、检查输出、解释结构、做一次参数变化观察并说明局限。Practice 可以直接整理为 Evidence，不用再做第二套实验。
+
+**当前不学习**：完整 ORB 原理、方法比较、特征匹配、BFMatcher/FLANN、描述子距离、ratio test、RANSAC、homography、pose、tracking、SfM/SLAM 或重复性 benchmark。后续还有其他 detector/descriptor，Stage 5 再系统学习。
+
+## 7. 常见误区
+
+| 现象或判断 | 为什么有风险 | 最小检查与修正 |
+| --- | --- | --- |
+| 空数组、错误 shape/dtype 直接送入 ORB | 不符合当前实验输入 | 调用前检查 None、ndim、size、dtype，回到来源修正，不盲目 astype |
+| 平坦图没有点，就认为文件损坏 | 合法图也可能没有可检测结构 | 先看输入契约，再安全报告 count=0 / descriptors=None |
+| 把 pt 当作 image[x,y] | x/y 与 row/column 顺序不同，且坐标是浮点 | 报告 `(x,y)`；若未来需要采样，应另行确认取整和边界 |
+| 点多、response 大或标记漂亮就是质量高 | 数量、响应和显示都不是任务验收指标 | 只报告当前观察，不宣称匹配/定位准确 |
+
+另外，变换后不能按 keypoint list index 宣称是同一个点；列表顺序不是跨图身份。
+
+## 8. Worked Example
+
+三个 checkpoint 在同一个 Python 会话中按顺序运行，后段使用前段变量。使用已经安装 OpenCV、NumPy、Matplotlib 的学习环境，记录打印的版本。输入完全由小数组生成，不需下载数据集。
+
+### Checkpoint 1 — Detect
+
+先预测：左侧平坦内部与右侧转折/棋盘，哪边更可能出现候选？写下理由，再运行。
+
+下面使用 H=192、W=288，结构离外边缘留有空间，避免把很小图的边缘排除效应误认成“没有结构”。两个矩形和一个 L 形提供非对称局部结构；棋盘提供重复纹理。循环只用于造少量图块，不是逐像素实现检测算法。
+
+```python
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+def make_fixture():
+    image = np.full((192, 288), 90, dtype=np.uint8)
+    image[42:65, 105:128] = 220
+    image[92:117, 103:119] = 30
+    image[132:153, 103:111] = 220
+    image[145:153, 103:134] = 220  # 非对称 L 形
+    for row in range(8):
+        for column in range(8):
+            y = 40 + row * 14
+            x = 144 + column * 14
+            value = 220 if (row + column) % 2 else 30
+            image[y:y + 14, x:x + 14] = value
+    return image
+
+def validate_gray(image):
+    if image is None:
+        raise ValueError("expected nonempty HxW uint8; actual=None; check input")
+    if image.ndim != 2 or image.size == 0 or image.dtype != np.uint8:
+        raise ValueError(
+            f"expected nonempty HxW uint8; actual={image.shape}/{image.dtype}; "
+            "check source and grayscale conversion"
+        )
+
+source = make_fixture()
+snapshot = source.copy()
+validate_gray(source)
+print("OpenCV", cv2.__version__)
+print("input", source.shape, source.dtype, source.min().item(), source.max().item())
+orb = cv2.ORB_create()
+keypoints, descriptors = orb.detectAndCompute(source, None)
+print("count", len(keypoints))
+for point in keypoints[:3]:
+    print("pt(x,y)", point.pt, "size", point.size, "response", point.response)
+
+flat = np.full(source.shape, 90, dtype=np.uint8)
+validate_gray(flat)
+flat_keypoints, flat_descriptors = orb.detectAndCompute(flat, None)
+print("flat count", len(flat_keypoints), "descriptors", flat_descriptors)
+assert np.array_equal(source, snapshot)
+```
+
+预期输入 `(192,288)`、uint8、实际范围 30–220；结构图产生候选，全平坦图在本受控 ORB 实验中为 0 个点和 None。具体结构图点数、位置小数和 response 不作为跨版本常量。
+
+若结构图意外没有点，先检查是否完整生成了结构、尺寸和 dtype，再记录版本，不要为凑点数盲目改参数。下一 checkpoint 的 None 分支仍应能安全运行。
+
+### Checkpoint 2 — Describe / visualize
+
+不要直接打印 `descriptors.shape`。先区分“没有描述子”与“有一张描述子表”，再验证表的每行对应本次返回的一个关键点。
+
+```python
+def inspect_descriptors(points, description):
+    if description is None:
+        print("descriptors=None; no descriptors to inspect; count", len(points))
+        return
+    assert description.ndim == 2
+    assert len(points) == description.shape[0]
+    assert description.shape[1] == orb.descriptorSize()
+    assert description.dtype == np.uint8
+    print("descriptor shape/dtype", description.shape, description.dtype)
+    print("D from descriptorSize()", orb.descriptorSize())
+
+inspect_descriptors(keypoints, descriptors)
+inspect_descriptors(flat_keypoints, flat_descriptors)
+display_bgr = cv2.drawKeypoints(source, keypoints, None, color=(0, 0, 255), flags=0)
+assert display_bgr.shape == source.shape + (3,)
+assert display_bgr.dtype == np.uint8
+assert not np.shares_memory(source, display_bgr)
+display_rgb = cv2.cvtColor(display_bgr, cv2.COLOR_BGR2RGB)
+assert np.array_equal(source, snapshot)
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 3))
+axes[0].imshow(source, cmap="gray", vmin=0, vmax=255)
+axes[0].set_title("source: gray intensity 0-255")
+axes[1].imshow(display_rgb)
+axes[1].set_title("keypoint positions: RGB display")
+plt.tight_layout()
+plt.show()
+```
+
+预期描述子为 `(N,D)`、uint8，N 等于返回点数，D 等于接口报告的长度；平坦图不会触发 None.shape。显示数组为 `(192,288,3)`，source 对照断言通过。
+
+观察左侧平坦内部是否很少有标记，以及右侧哪些转折被检测出来。绿色或红色标记的美观不构成证据，位置和编码表才是需要检查的数据。这里实际选择红色，且明确做了 BGR→RGB；灰度原图仍使用固定 scalar 显示范围。上方四对象表解释了为什么标记图既不是 edge map，也不是 contour 列表。
+
+### Checkpoint 3 — Controlled change
+
+保持同一个 ORB 对象和输入画布，只改变模糊或旋转。GaussianBlur 复用前面的滤波内容；旋转只用于制造受控变化，不要求先学旋转接口理论。这里围绕图像中心旋转 10°（参数 `10.0`，单位 degree），`scale=1.0` 表示不额外缩放，输出画布仍为原图的 `(width, height)`。旋转采用原画布、线性插值和边界复制；新图包含重采样影响，不是只改一个坐标标签。
+
+```python
+height, width = source.shape
+blurred = cv2.GaussianBlur(source, (7, 7), 1.5)
+rotation = cv2.getRotationMatrix2D((width / 2, height / 2), 10.0, 1.0)
+rotated = cv2.warpAffine(
+    source, rotation, (width, height),
+    flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE,
+)
+variants = {"original": source, "blur": blurred, "rotation": rotated}
+observations = {}
+fig, axes = plt.subplots(1, 3, figsize=(12, 3))
+for axis, (name, image) in zip(axes, variants.items()):
+    validate_gray(image)
+    before = image.copy()
+    points, description = orb.detectAndCompute(image, None)
+    inspect_descriptors(points, description)
+    observations[name] = {
+        "count": len(points),
+        "descriptors_available": description is not None,
+    }
+    print(name, observations[name])
+    marked_bgr = cv2.drawKeypoints(image, points, None, color=(0, 0, 255), flags=0)
+    axis.imshow(cv2.cvtColor(marked_bgr, cv2.COLOR_BGR2RGB))
+    axis.set_title(f"{name}: {len(points)} candidates")
+    assert np.array_equal(image, before)
+assert np.array_equal(source, snapshot)
+plt.tight_layout()
+plt.show()
+```
+
+`zip` 让三个绘图区依次对应三张图；`observations` 只保存数量与是否有描述子的摘要。预期三张图均符合输入契约，None 分支可安全处理，source 不变。
+
+请记录“哪些结构附近仍有点、哪些位置看起来变化”，不要只交 count。**模糊不保证点数单调减少**，旋转后也不保证同一关键点存在；实际结果受图像结构、采样、参数和版本/实现影响。点数相同也不能证明点一一对应。本实验没有建立 point correspondence，不是 invariance proof（不变性证明）。
+
+## 9. Active Recall
+
+1. keypoint 是什么？检测到它是否已经证明重复性？
+2. descriptor 描述什么？为什么不是原始图块或整图分数？
+3. 平坦内部缺少哪些可区别位置的线索？重复纹理又有什么限制？
+4. keypoint 与 edge pixel 有何区别？与 contour point 呢？
+5. N×D 两个维度是什么？第 i 行对应哪一次调用的点？
+6. 为什么 descriptors 可能为 None，检查顺序应怎样？
+7. 为什么 `(x,y)` 不能直接作为 `image[x,y]`，也不能直接拿浮点位置索引？
+8. 为什么 keypoint count / response 不是质量分数？
+9. 为什么 drawKeypoints 只是显示？如何证明没有改 source？
+10. 为什么变换后列表第 i 个点不能认作原来的第 i 个点？为什么 matching 留给后续？
+
+## 10. Practice
+
+以下六项可直接整理为两项 Evidence，不重复做项目。
+
+### 理解检查
+
+1. 给四种对象分别写出数据结构和含义。完成标准：不把 KeyPoint 列表当 H×W 图，不把 descriptor 当 contour。
+2. 运行前指出 fixture 的平坦区、转折与重复纹理，预测哪里更可能有点；运行后解释一处符合或不符合预期的观察。完成标准：不能将预测当作检测保证。
+
+### 数值练习
+
+3. 借助 Checkpoint 1 记录 count 和最多三个 pt，以及 size/response；如果一个新输入点不足三个，如实记录。完成标准：说清 x/y、浮点坐标与两个字段的有限意义。
+4. 用 Checkpoint 2 解释实际 N、D、dtype和 None 分支。完成标准：非空时行数等于同次返回点数、列数与 descriptorSize() 一致，uint8 被解释为编码而非灰度。
+
+### 视觉小练习
+
+5. 借助 Checkpoint 3 将模糊核改为另一个合法奇数尺寸，或改变一次小角度旋转。完成标准：保留参数、前后显示、count/availability、空间观察和 source 断言；不要求单调变化或固定点数。
+6. 从平坦图 None、空输入、坐标误用中选一个问题，说明输入、现象和修正。完成标准：不访问 None.shape、不吞掉输入错误，也不把合法无特征结果自动称为失败。
+
+## 11. 实际使用：Project / Capability / Application 映射
+
+目前没有正式 Project requirement 反向引用本节点。本页不添加项目验收规则。
+
+- **未来 Pixel Lab 增量建议，尚未实施**：在真实图像实验骨架上附一份 feature preview，检查输入、描述摘要和显示；这与项目现有“可复现实验与交接”能力相关，但不是当前已生效的 task 或 acceptance criterion。
+- **后续用途来自 ROADMAP**：Stage 5 的局部描述与匹配、平面几何验证；本篇只提供其最初的数据检查意识，不代表学完就能做真实工业定位。
+- `project.classical-inspection` 继续为 draft，不因发布本篇而增加内容或执行能力。
+
+## 12. Mastery Evidence
+
+### Evidence 1 — Feature contract inspection
+
+在框架帮助下整理 Practice 1–4：input shape/dtype/range、count、少量 pt、size/response 解释、None 或描述子 shape/dtype、descriptorSize()、标记图和 source 断言。再用自己的话区分四种对象。只复制 API 输出而不能解释，不满足此证据。
+
+### Evidence 2 — Controlled change observation
+
+整理 Practice 5–6：一次 blur 或 rotation 参数变化、前后数量与描述子可用性、空间分布观察，以及一个 flat/None 或其他限制案例。说明为什么没有证明跨图重复性或匹配可靠性。
+
+两项都允许直接使用正文框架，不要求独立开发系统。`targetDepth: understand` 保持不变；达到 understood 即满足本节点路线目标，不要求匹配指标或重复性 benchmark。
+
+## 13. 后续复用与复习
+
+Stage 3 仍学习采样、卷积、噪声、滤波、分割与边缘机制；未来 `dip.feature-representation` 提供形状/纹理表示的补充。正式关键点原理、描述子与匹配留给 Stage 5，不把完整 feature learning 错放到 Stage 3。
+
+再次遇到标记图时先问：我看到的是候选、描述编码，还是已经验证的对应？没有对应与几何证据时，不宣称定位成功。
+
+本节点发布只使 Stage 2 的十二个规划 Concept 内容齐备，不代表个人 Stage 2 completed；仍需学习状态、Pixel Lab gate、exit evidence 和复测。项目增量的设计另行进行。
+
+## 14. 精选学习资源
+
+仅复用 [OpenCV-Python Tutorials](/resources/opencv-python-tutorials/)。推荐它是为了核对当前 API，而不是让零基础学习者顺序阅读整套特征课程。正文是主教材。
+
+- **必看**：官方 [ORB 教程](https://docs.opencv.org/4.x/d1/d89/tutorial_py_orb.html) 的 **ORB in OpenCV** 中创建对象、检测/计算和画点代码；这里只用 detectAndCompute 合并前两步。查 [KeyPoint](https://docs.opencv.org/4.x/d2/d29/classcv_1_1KeyPoint.html) 的 pt、size、response，以及当前 drawKeypoints 用法即可。
+- **选看**：知道还存在其他 detector/descriptor 即可，不做比较实验。
+- **跳过**：Theory、完整 ORB 原理、算法和历史性能比较、matching、BFMatcher、FLANN、ratio test、homography、tracking、camera、reconstruction；示例旁出现距离/匹配参数时也跳过。
+
+官方页面核验日期：2026-09-07。接口与精确输出会随版本变化；运行时记录自己的 cv2 版本，不背本机 probe 的点数。

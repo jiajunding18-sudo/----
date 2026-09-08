@@ -35,6 +35,7 @@ test("Concept 一跳图与等价列表共享正式 DAG，展示状态并可导�
     )
   ).toSorted();
   expect(listEdgeIds).toEqual([
+    "tooling.debugging->pipeline.batch-images:recommended",
     "tooling.debugging->python.numpy-arrays:recommended",
     "tooling.debugging->tooling.reproducibility:recommended",
     "tooling.dev-environment->tooling.debugging:recommended",
@@ -73,7 +74,7 @@ test("Concept 一跳图与等价列表共享正式 DAG，展示状态并可导�
     .filter(Boolean)
     .toSorted();
   expect(graphEdgeIds).toEqual(listEdgeIds);
-  await expect(canvas.locator("[data-graph-concept-id]")).toHaveCount(5);
+  await expect(canvas.locator("[data-graph-concept-id]")).toHaveCount(6);
   await expect(
     canvas.locator('[data-graph-concept-id="tooling.debugging"]'),
   ).toHaveAttribute("data-graph-current", "true");
@@ -82,6 +83,7 @@ test("Concept 一跳图与等价列表共享正式 DAG，展示状态并可导�
   ).toHaveAttribute("data-graph-progress-status", "learning");
   await expect(canvas.getByText("当前 Concept", { exact: true })).toBeVisible();
   await expect(canvas.locator(".react-flow__edge-text")).toHaveText([
+    "recommended",
     "recommended",
     "recommended",
     "recommended",

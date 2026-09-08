@@ -755,6 +755,37 @@ test("批处理正文呈现确定性 discovery、失败记录、manifest 与 rer
   expect(browserErrors).toEqual([]);
 });
 
+test("Feature Preview 的三个 checkpoint、understand 边界和深链接可访问", async ({ page }) => {
+  const errors = trackBrowserErrors(page);
+  await page.goto("/knowledge/opencv-features-preview/");
+  const document = page.locator(".learning-document");
+  await expect(document.getByRole("heading", { level: 1 })).toContainText("局部特征预览");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(3);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  for (const checkpoint of [1, 2, 3]) {
+    await expect(document.getByRole("heading", { level: 3, name: new RegExp(`Checkpoint ${checkpoint}`, "u") })).toBeVisible();
+  }
+  await expect(document).toContainText("达到 understood 即满足本节点路线目标");
+  await expect(document).toContainText("if description is None:");
+  await expect(document).toContainText("orb.descriptorSize()");
+  await expect(document).toContainText("模糊不保证点数单调减少");
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  const toc = page.locator('[data-concept-toc="desktop"]');
+  await toc.getByRole("link", { name: /8\. Worked Example/u }).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#section-8-worked-example");
+  await page.reload();
+  await expect(page.locator("#section-8-worked-example")).toBeVisible();
+  const codeRegion = document.locator('[data-code-language="python"] pre').first();
+  await codeRegion.focus();
+  await expect(codeRegion).toBeFocused();
+  const resource = page.getByLabel("精选学习资源").getByRole("link", { name: "OpenCV-Python Tutorials", exact: true });
+  await expect(resource).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
+  await expectNoHorizontalOverflow(page);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test("真实 GFM 表格保留语义并由独立容器承载", async ({ page }) => {
   await page.goto("/knowledge/linux-command-line-basics/");
 

@@ -19,7 +19,7 @@ test("360px 优先提供等价列表，用户可用键盘按需展开邻域图",
   await page.goto("/knowledge/debugging-and-problem-localization/");
 
   const navigation = page.locator("[data-concept-navigation]");
-  await expect(navigation.locator("[data-graph-edge-id]")).toHaveCount(4);
+  await expect(navigation.locator("[data-graph-edge-id]")).toHaveCount(5);
   const prerequisiteLink = navigation.getByRole("link", {
     name: "Python 核心语法",
   });
@@ -34,7 +34,7 @@ test("360px 优先提供等价列表，用户可用键盘按需展开邻域图",
 
   const canvas = page.locator("[data-knowledge-graph-canvas]");
   await expect(canvas).toBeVisible();
-  await expect(canvas.locator("[data-graph-concept-id]")).toHaveCount(5);
+  await expect(canvas.locator("[data-graph-concept-id]")).toHaveCount(6);
   await expect(page.getByRole("button", { name: "收起邻域图" })).toBeFocused();
   await expectNoHorizontalOverflow(page);
 

@@ -153,6 +153,10 @@ test("15 个 Resource 均有静态详情，正式外链只由详情主动打开"
 
   await page.goto("/resources/opencv-python-tutorials/");
   const openCvDetail = page.locator('[data-resource-detail="true"]');
+  await expect(openCvDetail).toContainText("ORB in OpenCV");
+  await expect(openCvDetail).toContainText("除 ORB 最小预览外的 features");
+  await expect(openCvDetail.getByRole("link", { name: "局部特征预览", exact: true }))
+    .toHaveAttribute("href", "/knowledge/opencv-features-preview/");
   await expect(openCvDetail).toContainText("Averaging、Gaussian Blurring");
   await expect(openCvDetail).toContainText("filter2D");
   await expect(openCvDetail).toContainText("sharpening mask");

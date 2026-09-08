@@ -74,17 +74,17 @@ export const resources: readonly Resource[] = [
     priority: "recommended",
     language: "en",
     reason:
-      "OpenCV 官方 Python 教程用于核对图像读写、最低限度颜色转换、图像属性与 ROI、基础几何变换、mean/Gaussian/自定义 kernel filtering、固定阈值与基础 morphology，以及 Sobel/Canny、轮廓与基础区域测量的接口契约；正文仍是零基础主教材，不要求顺序学习整套教程。",
+      "OpenCV 官方 Python 教程用于核对图像读写、最低限度颜色转换、图像属性与 ROI、基础几何变换、mean/Gaussian/自定义 kernel filtering、固定阈值与基础 morphology，以及 Sobel/Canny、轮廓与基础区域测量及 ORB 局部特征预览的接口契约；正文仍是零基础主教材，不要求顺序学习整套教程。",
     recommendedParts: [
-      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI；Geometric Transformations of Images 中 Scaling、Translation、Rotation 与 Affine Transformation；Smoothing Images 中 2D filtering 最低限度说明、Averaging、Gaussian Blurring，以及 blur、GaussianBlur、filter2D、ddepth 与 borderType；Image Thresholding 中 Simple Thresholding 的 THRESH_BINARY、THRESH_BINARY_INV、ret/output；Morphological Transformations 中 Erosion、Dilation、Opening、Closing 与 rectangular structuring element；Image Gradients 中 Sobel 与 output depth；Canny Edge Detection 中 low/high threshold 与二值输出；Contours Getting Started 中 binary input、findContours、RETR_EXTERNAL、CHAIN_APPROX_SIMPLE；Contour Features 中 area、perimeter 与 bounding rectangle",
-      "选看：IMREAD_UNCHANGED、最低限度 codec/channel inspection；Geometric Image Transformations API 中 interpolation、reverse sampling、mapping direction、border 与 output canvas；官方最小 sharpening mask 示例与最低限度 filtering border reference；getStructuringElement 的 rectangular form 与 morphology borderType/borderValue 最低限度说明；drawContours 最小显示用法、显式 3×3 Gaussian 前处理对照，以及 RETR_EXTERNAL 对 hole 只保留外边界的最低限度说明",
-      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、Perspective Transformation、warpPerspective、homography、remap、polar transform、camera geometry、median、bilateral、adaptive threshold、Otsu、morphology gradient、top-hat、black-hat、Scharr/Laplacian 深入、Canny 完整推导与 trackbar demo、contour hierarchy、moments/centroid、approxPolyDP、convex hull/defects、rotated rectangle、ellipse、shape matching、Hough、watershed、GrabCut、pyramids、Fourier、features、实现算法细节与 advanced color processing",
+      "必看：Getting Started with Images 中 imread、读取 flags、读取失败检查与 imwrite；颜色转换参考中的 BGR↔RGB 和 BGR→Gray；Basic Operations on Images 中 image properties、pixel access 与 Image ROI；Geometric Transformations of Images 中 Scaling、Translation、Rotation 与 Affine Transformation；Smoothing Images 中 2D filtering 最低限度说明、Averaging、Gaussian Blurring，以及 blur、GaussianBlur、filter2D、ddepth 与 borderType；Image Thresholding 中 Simple Thresholding 的 THRESH_BINARY、THRESH_BINARY_INV、ret/output；Morphological Transformations 中 Erosion、Dilation、Opening、Closing 与 rectangular structuring element；Image Gradients 中 Sobel 与 output depth；Canny Edge Detection 中 low/high threshold 与二值输出；Contours Getting Started 中 binary input、findContours、RETR_EXTERNAL、CHAIN_APPROX_SIMPLE；Contour Features 中 area、perimeter 与 bounding rectangle；仅 features-preview 节点必看 ORB tutorial 的 ORB in OpenCV 中 ORB_create / detectAndCompute、KeyPoint 的 pt/size/response、descriptorSize() 与 drawKeypoints 当前用法",
+      "选看：IMREAD_UNCHANGED、最低限度 codec/channel inspection；Geometric Image Transformations API 中 interpolation、reverse sampling、mapping direction、border 与 output canvas；官方最小 sharpening mask 示例与最低限度 filtering border reference；getStructuringElement 的 rectangular form 与 morphology borderType/borderValue 最低限度说明；drawContours 最小显示用法、显式 3×3 Gaussian 前处理对照，以及 RETR_EXTERNAL 对 hole 只保留外边界的最低限度说明；features-preview 只需知道还存在其他 detector/descriptor",
+      "跳过：GUI 深入、video、HSV/inRange、split/merge 优化、padding、Perspective Transformation、warpPerspective、homography、remap、polar transform、camera geometry、median、bilateral、adaptive threshold、Otsu、morphology gradient、top-hat、black-hat、Scharr/Laplacian 深入、Canny 完整推导与 trackbar demo、contour hierarchy、moments/centroid、approxPolyDP、convex hull/defects、rotated rectangle、ellipse、shape matching、Hough、watershed、GrabCut、pyramids、Fourier、除 ORB 最小预览外的 features、matching、BFMatcher、FLANN、ratio test、tracking、reconstruction、完整 ORB 原理与算法比较、实现算法细节与 advanced color processing",
     ],
     aliases: ["OpenCV Python 官方教程"],
     verification: "verified",
     url: "https://docs.opencv.org/4.x/d6/d00/tutorial_py_root.html",
     verifiedAt: "2026-08-27",
-    lastCheckedAt: "2026-09-01",
+    lastCheckedAt: "2026-09-07",
   },
   {
     id: "resource.pro-git",

@@ -366,6 +366,21 @@ test("Stage 2 数组、图像表示与 OpenCV I/O 自动进入搜索并落到正
   expect(browserErrors).toEqual([]);
 });
 
+test("Feature Preview 中文英文和 ORB API 搜索进入正式 Concept", async ({ page }) => {
+  const errors = trackBrowserErrors(page);
+  for (const query of ["局部特征预览", "Feature Preview", "detectAndCompute"]) {
+    await page.goto(`/search/?q=${encodeURIComponent(query)}`);
+    const result = page.locator('[data-search-result-id="opencv.features-preview"]');
+    await expect(result).toBeVisible();
+    const link = result.getByRole("link", { name: "局部特征预览", exact: true });
+    await expect(link).toHaveAttribute("href", "/knowledge/opencv-features-preview/");
+    await link.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/knowledge\/opencv-features-preview\/$/u);
+  }
+  expect(errors).toEqual([]);
+});
+
 test("正文标题命中直接进入 Concept 对应稳定章节", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await page.goto("/search/?q=9.%20Active%20Recall%20主动回忆");

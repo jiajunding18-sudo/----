@@ -326,6 +326,34 @@ test("360px 下边缘与轮廓的代码、表格、TOC、深链接与键盘保�
   expect(accessibilityScan.violations).toEqual([]);
 });
 
+test("360px Feature Preview 的代码、表格、TOC、键盘与资源可访问", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await page.goto("/knowledge/opencv-features-preview/");
+  const document = page.locator(".learning-document");
+  await expect(document.locator('[data-code-language="python"]')).toHaveCount(3);
+  await expect(document.getByRole("table")).toHaveCount(2);
+  await expect(document).toContainText("descriptors=None");
+  const tableContainer = document.getByRole("table").first().locator("xpath=..");
+  await tableContainer.focus();
+  await expect(tableContainer).toBeFocused();
+  const toc = page.locator('[data-concept-toc="mobile"]');
+  await toc.getByText("本页目录", { exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await toc.getByRole("link", { name: /12\. Mastery Evidence/u }).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#section-12-mastery-evidence");
+  await page.reload();
+  await expect(page.locator("#section-12-mastery-evidence")).toBeVisible();
+  const resource = page.getByLabel("精选学习资源").getByRole("link", { name: "OpenCV-Python Tutorials", exact: true });
+  await resource.focus();
+  await expect(resource).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test("360px 下批处理的代码、TOC、深链接、键盘与资源保持可访问", async ({
   page,
 }) => {

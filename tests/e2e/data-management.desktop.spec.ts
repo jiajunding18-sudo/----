@@ -31,7 +31,7 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
   await page.getByRole("button", { name: "导出 JSON 备份" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(
-    /^machine-vision-learning-os-backup-\d{4}-\d{2}-\d{2}-v1\.json$/,
+    /^machine-vision-learning-os-backup-\d{4}-\d{2}-\d{2}-v2\.json$/,
   );
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
@@ -44,7 +44,7 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
   };
   expect(exported).toMatchObject({
     app: "machine-vision-learning-os",
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: {
       conceptProgress: { "tooling.python-core": { status: "learning" } },
     },

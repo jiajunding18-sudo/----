@@ -23,7 +23,7 @@ export type {
 export type {
   ConceptProgress,
   EvidenceKind,
-  LearningStateV1,
+  LearningStateV2,
   MasteryConfirmation,
   MasteryEvidence,
   ProjectProgress,

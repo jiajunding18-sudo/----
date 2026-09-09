@@ -275,6 +275,7 @@ export const trackDefinitionSchema = z
 
 export const stageProjectGateSchema = z.strictObject({
   projectId: projectIdSchema,
+  milestoneId: semanticIdSchema.optional(),
   when: trackGoalConditionSchema,
 });
 
@@ -516,6 +517,27 @@ export const projectExecutionPathSchema = z.strictObject({
   evidenceBoundary: trimmedTextSchema,
 });
 
+export const projectMilestoneContractSchema = z.strictObject({
+  conceptRequirements: z.array(projectConceptRequirementSchema),
+  acceptanceCriteria: z.array(projectAcceptanceCriterionSchema),
+  deliverableRequirements: uniqueTextArraySchema,
+  evidenceConceptIds: uniqueSemanticIdArraySchema,
+});
+
+export const projectMilestoneSchema = z.strictObject({
+  id: semanticIdSchema,
+  stageId: stageIdSchema,
+  title: trimmedTextSchema,
+  // A legacy contract is referenced, not copied into a second content source.
+  contract: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("project") }),
+    z.strictObject({ kind: z.literal("inline"), definition: projectMilestoneContractSchema }),
+    z.strictObject({ kind: z.literal("planned") }),
+  ]),
+});
+
+export type ProjectMilestone = z.infer<typeof projectMilestoneSchema>;
+
 export const projectMetaSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
@@ -541,8 +563,26 @@ export const projectMetaSchema = z
     tags: uniqueTextArraySchema,
     publicationStatus: publicationStatusSchema,
     contentVersion: trimmedTextSchema,
+    milestones: z.array(projectMilestoneSchema).optional(),
   })
   .superRefine((project, context) => {
+    const milestoneIds = new Set<string>();
+    let projectContractCount = 0;
+    for (const [index, milestone] of (project.milestones ?? []).entries()) {
+      if (milestoneIds.has(milestone.id)) context.addIssue({ code: "custom", message: "milestone ID 不得重复", path: ["milestones", index, "id"] });
+      milestoneIds.add(milestone.id);
+      if (milestone.contract.kind === "project") projectContractCount += 1;
+      if (milestone.contract.kind === "inline") {
+        const contract = milestone.contract.definition;
+        if (!contract.acceptanceCriteria.some(({ required }) => required) || contract.deliverableRequirements.length === 0) {
+          context.addIssue({ code: "custom", message: "可执行 milestone 必须有必需验收与交付物", path: ["milestones", index, "contract"] });
+        }
+        for (const ids of [contract.conceptRequirements.map(({ conceptId }) => conceptId), contract.acceptanceCriteria.map(({ id }) => id)]) {
+          if (new Set(ids).size !== ids.length) context.addIssue({ code: "custom", message: "milestone contract 引用不得重复", path: ["milestones", index, "contract"] });
+        }
+      }
+    }
+    if (projectContractCount > 1) context.addIssue({ code: "custom", message: "既有 project contract 只能由一个 milestone 承接", path: ["milestones"] });
     if (project.legacySlugs?.includes(project.slug)) {
       context.addIssue({
         code: "custom",
@@ -627,6 +667,9 @@ export const projectMetaSchema = z
     });
 
     if (project.publicationStatus === "published") {
+      const executionContracts = project.milestones?.length
+        ? project.milestones.flatMap(({ contract }) => contract.kind === "project" ? [project] : contract.kind === "inline" ? [contract.definition] : [])
+        : [project];
       if (project.executionPaths.length === 0) {
         context.addIssue({
           code: "custom",
@@ -635,18 +678,18 @@ export const projectMetaSchema = z
         });
       }
 
-      if (!project.acceptanceCriteria.some((criterion) => criterion.required)) {
+      if (executionContracts.length === 0 || !executionContracts.every((contract) => contract.acceptanceCriteria.some((criterion) => criterion.required))) {
         context.addIssue({
           code: "custom",
-          message: "已发布项目必须至少包含一项必需验收标准",
+          message: "已发布项目的每个可执行契约必须至少包含一项必需验收标准",
           path: ["acceptanceCriteria"],
         });
       }
 
-      if (project.deliverableRequirements.length === 0) {
+      if (executionContracts.length === 0 || !executionContracts.every((contract) => contract.deliverableRequirements.length > 0)) {
         context.addIssue({
           code: "custom",
-          message: "已发布项目必须声明交付物要求",
+          message: "已发布项目的每个可执行契约必须声明交付物要求",
           path: ["deliverableRequirements"],
         });
       }

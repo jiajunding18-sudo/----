@@ -330,6 +330,37 @@ describe("MDX 扫描与 frontmatter 加载", () => {
 });
 
 describe("manifest 与跨实体校验", () => {
+  it("R1: executable contracts 独立验证，不由合法 sibling 掩盖空契约", () => {
+    const definition = {
+      conceptRequirements: [],
+      acceptanceCriteria: [{ id: "acceptance.fixture.required", description: "验证独立成果", required: true }],
+      deliverableRequirements: ["独立成果"], evidenceConceptIds: [],
+    };
+    const base = createProject({
+      publicationStatus: "published", ...definition,
+      executionPaths: [{ id: "execution.fixture", title: "模拟", mode: "simulation", requirementIds: [], evidenceBoundary: "测试" }],
+    });
+    const reused = { id: "milestone.fixture.first", stageId: "stage.fixture", title: "first", contract: { kind: "project" as const } };
+    const inline = { id: "milestone.fixture.second", stageId: "stage.fixture", title: "second", contract: { kind: "inline" as const, definition } };
+    const validate = (project: ProjectMeta) => buildContentManifest(createCatalogInput({ concepts: [], projects: [loadedProject(projectMetaSchema.parse(project))] }));
+    const empty = { ...base, acceptanceCriteria: [], deliverableRequirements: [] };
+    expect(() => validate({ ...empty, milestones: [reused, inline] })).toThrow(); // A
+    expect(() => validate({ ...base, milestones: [reused, inline] })).not.toThrow(); // B
+    expect(() => validate({ ...empty, milestones: [{ ...reused, contract: { kind: "planned" } }, inline] })).not.toThrow(); // C
+    expect(() => validate({ ...base, milestones: [inline, { ...inline, id: "milestone.fixture.third", contract: { kind: "inline", definition: { ...definition, acceptanceCriteria: [] } } }] })).toThrow(); // D
+  });
+  it("milestone gate 必须引用所属 Project 的真实增量，增量 Stage 和 Concept 引用均校验", () => {
+    const project = createProject({ milestones: [{ id: "milestone.fixture.first", stageId: "stage.fixture", title: "first", contract: { kind: "planned" } }] });
+    const stage = createStage({ projectGates: [{ projectId: project.id, milestoneId: "milestone.fixture.first", when: { kind: "always" } }] });
+    const input = createCatalogInput({ concepts: [], projects: [loadedProject(project)], stages: [stage] });
+    expect(() => buildContentManifest(input)).not.toThrow();
+    expect(() => buildContentManifest({ ...input, stages: [{ ...stage, projectGates: [{ ...stage.projectGates[0], milestoneId: "milestone.missing" }] }] })).toThrow();
+    const broken = createProject({ milestones: [{ id: "milestone.fixture.first", stageId: "stage.missing", title: "bad", contract: { kind: "inline", definition: {
+      conceptRequirements: [{ conceptId: "concept.missing", kind: "hard", minimumStatus: "understood", reason: "test" }],
+      acceptanceCriteria: [{ id: "acceptance.fixture", description: "test", required: true }], deliverableRequirements: ["test"], evidenceConceptIds: [],
+    } } }] });
+    expect(() => buildContentManifest({ ...input, projects: [loadedProject(broken)] })).toThrow();
+  });
   it("生成稳定排序、规范化依赖以及 ID/canonical/legacy slug 索引", () => {
     const alpha = createConcept("fixture.alpha", "fixture-alpha");
     const beta = createConcept("fixture.beta", "fixture-beta", {

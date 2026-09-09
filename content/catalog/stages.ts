@@ -147,7 +147,7 @@ export const stages: readonly StageDefinition[] = [
     ],
     estimatedHours: { min: 60, max: 75 },
     projectGates: [
-      { projectId: "project.pixel-lab", when: { kind: "always" } },
+      { projectId: "project.pixel-lab", milestoneId: "milestone.pixel-lab.image-computing", when: { kind: "always" } },
     ],
     exitCriteria: [
       {

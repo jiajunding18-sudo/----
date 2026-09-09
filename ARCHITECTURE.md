@@ -376,6 +376,7 @@ interface TrackDefinition {
 
 interface StageProjectGate {
   projectId: ProjectId;
+  milestoneId?: string;
   when: TrackGoalCondition;
 }
 
@@ -514,12 +515,24 @@ interface ProjectMeta {
   tags: string[];
   publicationStatus: "draft" | "published" | "hidden" | "retired";
   contentVersion: string;
+  milestones?: ProjectMilestone[];
+}
+
+interface ProjectMilestone {
+  id: string; // milestone.<project-name>.<increment-name>
+  stageId: StageId;
+  title: string;
+  contract:
+    | { kind: "project" } // 引用既有 project-level contract；每个项目最多一个，不复制正文与验收
+    | { kind: "inline"; definition: Pick<ProjectMeta,
+        "conceptRequirements" | "acceptanceCriteria" | "deliverableRequirements" | "evidenceConceptIds"> }
+    | { kind: "planned" }; // 只有身份；不可开始、不可完成
 }
 ```
 
 概念之间的 `hard` 前置统一由 `understood` 或 `mastered` 满足；项目可以通过 `minimumStatus` 对个别知识要求 `mastered`。项目完成不能自动把关联概念设为 `mastered`，只能成为用户可选择引用的证据候选。
 
-`capabilitySummary` 是 Project 级最小能力表达，不建立独立 Capability catalog、图或用户状态。`Concept → Project` 只从 `ProjectMeta.conceptRequirements` 建立反向索引；Project 所属 Stage 只从 `StageDefinition.projectGates` 与 requirement Concept 的 `stageId` 派生，不在 `ProjectMeta` 重复维护 `stageIds`。
+`capabilitySummary` 是 Project 级最小能力表达，不建立独立 Capability catalog、图或用户状态。`Concept → Project` 从 `ProjectMeta.conceptRequirements` 及 inline milestone 的 `conceptRequirements` 建立反向索引；Project 所属 Stage 从 `StageDefinition.projectGates` 与这些 requirement Concept 的 `stageId` 派生，不在 `ProjectMeta` 重复维护 `stageIds`。
 
 Stage→Track 关系只维护在 `StageDefinition.trackIds`；`TrackDefinition` 的阶段列表按 `stage.order` 派生，不双向保存。`categoryExitForTrackIds` 必须是 `trackIds` 的子集。资源关联也只从 `ConceptMeta.resourceIds` 与 `ProjectMeta.resources` 单向维护，`Resource` 不保存反向实体数组；Resources 页面和搜索索引使用构建期反向索引。
 
@@ -538,6 +551,8 @@ Stage→Track 关系只维护在 `StageDefinition.trackIds`；`TrackDefinition` 
 `StageExitCriterion.when` 与 `StageProjectGate.when` 使用同一条件语义。公共 checkpoint 的必需出口标准为 `always`；高级副修 checkpoint 只执行 `always` 的 U/M 共同标准，目标达到 `master` 后才额外执行对应的主修级标准和项目门槛。
 
 ### 7.3 个人进度、证据和学习日志
+
+Phase 9E-A1 将持久化升级为 v2。`ProjectProgress.milestones` 按稳定 milestone ID 保存与 legacy execution record 相同的结构；不允许递归嵌套 milestone。下列 execution 字段同时适用于 legacy Project 与单个 milestone。
 
 ```ts
 type LearningStatus =
@@ -591,6 +606,7 @@ interface ConceptProgress {
 }
 
 interface ProjectProgress {
+  milestones?: Record<string, Omit<ProjectProgress, "milestones">>;
   status: "not_started" | "in_progress" | "paused" | "completed";
   note: string;
   nextAction?: string;
@@ -653,8 +669,8 @@ interface StageCheckpoint {
   updatedAt: string;
 }
 
-interface LearningStateV1 {
-  schemaVersion: 1;
+interface LearningStateV2 {
+  schemaVersion: 2;
   preferences: UserPreferences;
   conceptProgress: Record<ConceptId, ConceptProgress>;
   projectProgress: Record<ProjectId, ProjectProgress>;
@@ -664,6 +680,16 @@ interface LearningStateV1 {
 ```
 
 ### 7.4 状态规则
+
+- 没有 milestones 的 Project 沿用原有 progress/completion；milestone-enabled Project 的顶层旧记录仅保留历史，不是未来增量的权威完成状态。整体 UI 状态从各增量派生。
+- `resolveProjectMilestone` 只解析一个增量：`project` 引用既有四组验收字段，`inline` 使用自身四组字段；软件与执行路径继续复用 Project。不得把跨阶段 requirements 合并成开始门槛。
+- `mutateProjectMilestone` 复用现有 started + required acceptance + 至少一项可检查 deliverable + explicit confirmation 规则，通过统一 store 写入指定增量。交付物要求仍由用户逐项核对，不是文件自动评分系统。
+- 一个增量 completed 不冻结其他增量，不改变 Concept progress；planned contract 即使被注入 completed 也不能通过 gate，catalog inspection 拒绝其执行记录。
+- Stage gate 指定 milestoneId 时只读该增量，不同时要求顶层 completed。无 milestone 的 Project 保持 legacy gate；Pixel Lab Stage 2 指向 `milestone.pixel-lab.image-computing`，Stage 0 的 projectGates 仍为空。
+- `projectGate(projectId)` 始终读取 legacy project-level completion，即使 Project 后来新增 milestones 也不改变含义；`projectGate(projectId, milestoneId)` 只读指定增量。`areAllProjectMilestonesCompleted` 是独立 UI aggregate selector，不复用 legacy gate。
+- 所有 executable contracts 逐个验证必需验收和交付物，包含 `kind: project` 所引用的顶层契约；planned 仅有身份、不参与执行校验，不能借合法 sibling 通过空契约。
+- NextStep 候选保留 milestoneId 和 scoped progress，以增量 status/updatedAt 判断进行中优先级。Project 页面用 `#milestone=<encoded ID>` 定位，先校验归属，未知 ID 回退首个增量；URL 不参与授权或完成判断。
+- NextStep 仅增加 milestone 待办兼容：历史 completed 不隐藏其知识缺口或待验收增量；planned contract 只能展示发布状态，不推荐假执行任务。Stage exit evidence、时间锚点与 retest action 留给 Phase 9E-B。
 
 - `not_started → learning → understood → mastered` 是推荐顺序，但用户可以手动回退。
 - 首次进入 `learning` 时记录 `startedAt`；首次达到 `understood` 时记录 `understoodAt`。
@@ -740,7 +766,7 @@ interface ProjectExecutionPathReadiness {
 
 function getProjectReadiness(
   project: ProjectMeta,
-  state: LearningStateV1,
+  state: LearningStateV2,
 ): ProjectReadiness;
 
 interface ProjectCompletionEligibility {
@@ -811,7 +837,7 @@ function getStageReadiness(
   concepts: ConceptMeta[],
   projects: ProjectMeta[],
   tracks: TrackDefinition[],
-  state: LearningStateV1,
+  state: LearningStateV2,
 ): StageReadiness;
 
 interface RecommendationTaskBase {
@@ -857,11 +883,11 @@ Study Log 的日期排序、今日/本周分钟数、最近记录、最近学习
 
 使用一个逻辑 Learning Store，按 feature 文件拆分 actions 和 selectors。持久化数据与瞬时 UI 状态分开：
 
-- 持久化：`LearningStateV1`。
+- 持久化：`LearningStateV2`；`LearningStateV1` 只用于迁移前校验。
 - 不持久化：action、selector、hydration 状态、当前弹窗、搜索输入、临时错误。
 - UI 只能调用 `startConcept`、`markUnderstood`、`confirmMastery`、`addEvidence`、`updateNote`、`createStudyLog`、`updateStudyLog`、`deleteStudyLog` 等领域 action。
 - action 必须先验证不变量，再一次性提交新状态；组件不能直接写任意 status。
-- Study Log action 只替换 `LearningStateV1.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
+- Study Log action 只替换 `LearningStateV2.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
 
 Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 hydration（如 `skipHydration`），在根部的窄 Client Provider 挂载后调用 `rehydrate()`。hydration 完成前，进度相关 UI 显示中性占位，不得先渲染错误的 0%。
 
@@ -870,23 +896,23 @@ Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 
 ```ts
 const LEARNING_STATE_STORAGE_KEY = "mv-learning-os:learning-state";
 
-interface PersistedEnvelopeV1 {
+interface PersistedEnvelopeV2 {
   app: "machine-vision-learning-os";
-  schemaVersion: 1;
+  schemaVersion: 2;
   contentVersion: string;
   revision: number;
   savedAt: string;
-  payload: LearningStateV1;
+  payload: LearningStateV2;
 }
 
-interface ExportEnvelopeV1 {
+interface ExportEnvelopeV2 {
   app: "machine-vision-learning-os";
-  schemaVersion: 1;
+  schemaVersion: 2;
   contentVersion: string;
   revision: number;
   savedAt: string;
   exportedAt: string;
-  payload: LearningStateV1;
+  payload: LearningStateV2;
 }
 
 type ImportMode = "merge" | "replace";
@@ -909,7 +935,7 @@ interface ImportReport {
 }
 
 type StorageLoadResult =
-  | { ok: true; value: PersistedEnvelopeV1 | null }
+  | { ok: true; value: PersistedEnvelopeV2 | null }
   | {
       ok: false;
       reason: "unavailable" | "corrupt" | "unsupported-newer-version";
@@ -919,7 +945,7 @@ type StorageLoadResult =
 
 interface LearningStateStorageAdapter {
   load(): Promise<StorageLoadResult>;
-  save(value: PersistedEnvelopeV1): Promise<void>;
+  save(value: PersistedEnvelopeV2): Promise<void>;
   clear(): Promise<void>;
 }
 ```
@@ -927,6 +953,12 @@ interface LearningStateStorageAdapter {
 LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` 的具体 API，未来可在不改变领域 action 的情况下替换为 IndexedDB 或云端 adapter。
 
 ### 9.3 schema 版本和迁移
+
+- v1 → v2 通过正式 persisted/export migration chain 执行。冻结的 Pixel Lab v1 contract ID 集合只用于历史迁移，不读取未来 MDX 推测旧验收。可验证 completed/partial/not_started 记录完整归入 `milestone.pixel-lab.tooling-foundations`，保留所有字段与原始时间；Stage 2 不创建进度记录。
+- 未知验收、路径、环境或损坏确认导致 migration 失败并进入 blocked/recovery。无 Pixel Lab 记录及 unrelated Project 原样保留。v2 hydrate 不重新执行迁移，避免重复交付物或改写时间。
+- LocalStorage adapter 在允许后续 v2 写入前保留原始 v1 字符串到 recovery key；备份失败即阻塞。主 key 不在读取时覆盖。回滚应使用保留的 v1 原始备份与旧应用；不能把 v2 数据强行改版本号交给旧应用。
+- 原始 recovery 按来源 storage key、迁移/恢复原因与完整 raw 字节去重；重复 load/hydrate 复用相同快照，payload 或原因不同则保留新快照。不删除旧备份、不覆盖不同 payload，不依赖时间或哈希相等来断言内容相等。损坏输入同样尝试保留原始快照；备份失败继续 blocked，主 key 保留。
+- merge 对 milestone map 按稳定 ID 和各记录 updatedAt 合并，并保留各自 deliverables/confirmation；顶层历史完成不是合并时授予新 milestone 的依据。
 
 - storage key 保持稳定，版本放在 envelope 内，避免更换 key 后找不到旧数据。
 - 每次破坏性 schema 变化增加版本，并实现连续、可单测的 `vN → vN+1` 迁移；不得跨版本猜测转换。
@@ -937,10 +969,10 @@ LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` �
 
 ### 9.4 导入、导出和损坏恢复
 
-- 导出使用 `ExportEnvelopeV1`，其中 `revision` 与 `savedAt` 记录被导出状态的本地持久化位置，`exportedAt` 记录备份生成时间；文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
+- 导出使用 `ExportEnvelopeV2`，其中 `revision` 与 `savedAt` 记录被导出状态的本地持久化位置，`exportedAt` 记录备份生成时间；文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
 - 导入先解析、识别 app、迁移、Zod 校验，再显示 `ImportReport`；用户确认前不得写入主 storage key。
 - 默认 `merge`：`UserPreferences` 整体按 `updatedAt` 选择；Concept、Project 与 StageCheckpoint 记录按其 Record key 和 `updatedAt` 合并，不能按状态高低合并，因此用户主动降级会被保留；证据、交付物和日志再按自身稳定 ID 与 `updatedAt` 合并。
-- 可选 `replace`：完全替换现有用户状态。提交前必须先成功生成可下载的 `ExportEnvelopeV1` 或写入独立 recovery key，再进行二次确认；备份生成/持久化失败时 action 必须拒绝替换。
+- 可选 `replace`：完全替换现有用户状态。提交前必须先成功生成可下载的 `ExportEnvelopeV2` 或写入独立 recovery key，再进行二次确认；备份生成/持久化失败时 action 必须拒绝替换。
 - 合并和替换完成后都要再次校验，并重新计算进度、阶段/项目就绪度和推荐。
 - JSON 解析失败、schema 不合法或版本过新时，不得向主 storage key 写入任何内容。
 - 若主数据损坏，应用保留原始字符串于内存并提供“下载原始数据”“导入备份”“明确清空并重新开始”三种动作；用户做出选择前禁用持久化写入。

@@ -9,7 +9,7 @@ import {
   createExportEnvelope,
   createInitialLearningState,
   createLearningBackup,
-  exportEnvelopeV1Schema,
+  exportEnvelopeV2Schema,
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_RECOVERY_KEY_PREFIX,
   LEARNING_STATE_STORAGE_KEY,
@@ -18,7 +18,7 @@ import {
   prepareLearningStateImport,
   type StringStorage,
 } from "@/lib/storage";
-import type { LearningStateV1 } from "@/types";
+import type { LearningStateV2 } from "@/types";
 
 const early = "2026-08-28T01:00:00.000Z";
 const later = "2026-08-28T02:00:00.000Z";
@@ -131,7 +131,7 @@ function learningStateWithConcept(timestamp = early) {
   };
 }
 
-function backupJson(state: LearningStateV1 = learningStateWithConcept()) {
+function backupJson(state: LearningStateV2 = learningStateWithConcept()) {
   return createLearningBackup({
     state,
     contentVersion: "2026.08.28",
@@ -151,12 +151,12 @@ describe("Learning OS JSON 备份", () => {
       exportedAt: later,
     });
 
-    expect(exportEnvelopeV1Schema.parse(JSON.parse(backup.json))).toEqual(
+    expect(exportEnvelopeV2Schema.parse(JSON.parse(backup.json))).toEqual(
       backup.envelope,
     );
     expect(backup.envelope).toMatchObject({
       app: LEARNING_STATE_APP_ID,
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 3,
       savedAt: early,
       exportedAt: later,

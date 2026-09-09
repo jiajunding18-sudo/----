@@ -1,6 +1,6 @@
 import type { ProgressProjectDefinition } from "@/features/progress/progress-domain";
 import type {
-  LearningStateV1,
+  LearningStateV2,
   ProjectProgress,
 } from "@/types";
 import { projectProgressSchema } from "@/lib/validation/progress-schemas";
@@ -52,11 +52,11 @@ export type ProjectProgressMutationResult =
 
 export function startProjectProgress(
   project: ProgressProjectDefinition,
-  state: LearningStateV1,
+  state: LearningStateV2,
   input: StartProjectInput,
   timestamp: string,
 ): ProjectProgressMutationResult {
-  if (project.publicationStatus !== "published") {
+  if (project.publicationStatus !== "published" || project.milestones?.length) {
     return {
       ok: false,
       code: "project-not-published",
@@ -155,7 +155,7 @@ export function setProjectEnvironmentCheck(
   checked: boolean,
   timestamp: string,
 ): ProjectProgressMutationResult {
-  if (!progress || progress.status !== "in_progress") {
+  if (project.milestones?.length || !progress || progress.status !== "in_progress") {
     return {
       ok: false,
       code: "project-not-started",
@@ -197,7 +197,7 @@ function getEditableProjectProgress(
   project: ProgressProjectDefinition,
   progress: ProjectProgress | undefined,
 ): ProjectProgressMutationResult | ProjectProgress {
-  if (project.publicationStatus !== "published") {
+  if (project.publicationStatus !== "published" || project.milestones?.length) {
     return {
       ok: false,
       code: "project-not-published",

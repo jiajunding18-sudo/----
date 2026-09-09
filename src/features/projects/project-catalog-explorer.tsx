@@ -7,6 +7,7 @@ import { useLearningStore } from "@/features/progress";
 
 import type { ProjectCatalogView } from "./project-model";
 import { getProjectKnowledgeReadiness } from "./project-readiness";
+import { getProjectAggregateStatus } from "./project-milestones";
 
 const levelLabels = {
   beginner: "Beginner",
@@ -24,9 +25,8 @@ function ProjectReadinessSummary({
   const progress = useLearningStore(
     ({ learningState }) => learningState.conceptProgress,
   );
-  const projectProgress = useLearningStore(
-    ({ learningState }) => learningState.projectProgress[project.id],
-  );
+  const aggregateStatus = useLearningStore(({ learningState }) => getProjectAggregateStatus(project, learningState));
+  const projectProgress = { status: aggregateStatus };
   const readiness = getProjectKnowledgeReadiness(project, progress);
 
   if (project.conceptRequirements.length === 0) {
@@ -44,6 +44,8 @@ function ProjectReadinessSummary({
       </p>
     );
   }
+
+  if (project.milestones?.length) return <p className="text-sm" data-project-execution-status={aggregateStatus}>按能力增量独立验收 · {aggregateStatus === "completed" ? "全部增量已完成" : "仍有增量未完成"}，请进入项目查看各增量的准备度与历史。</p>;
 
   return (
     <div

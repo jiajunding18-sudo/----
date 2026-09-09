@@ -218,6 +218,7 @@ export function getProgressCatalog(): ProgressCatalog {
           minimumStatus,
         }),
       ),
+      milestones: "milestones" in project ? project.milestones : undefined,
       environmentRequirements: project.environmentRequirements.map(
         ({ id, required }) => ({ id, required }),
       ),

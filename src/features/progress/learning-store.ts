@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { mutateProjectMilestone, type MilestoneAction } from "@/features/projects/project-milestone-progress";
 
 import {
   addProjectDeliverable as addProjectDeliverableMutation,
@@ -37,16 +38,16 @@ import {
   createPersistedEnvelope,
   getLearningBackupFileName,
   prepareLearningStateImport,
-  type ExportEnvelopeV1,
+  type ExportEnvelopeV2,
   type ImportMode,
   type LearningStateStorageAdapter,
   LocalStorageLearningStateAdapter,
   type PreparedLearningStateImport,
   type PrepareImportResult,
 } from "@/lib/storage";
-import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
 import type {
-  LearningStateV1,
+  LearningStateV2,
   MasteryEvidence,
   StudyLog,
   UserDifficulty,
@@ -108,7 +109,7 @@ export type DataManagementActionResult =
 export type BackupCreationResult =
   | {
       readonly ok: true;
-      readonly envelope: ExportEnvelopeV1;
+      readonly envelope: ExportEnvelopeV2;
       readonly filename: string;
       readonly json: string;
     }
@@ -118,7 +119,8 @@ export type BackupCreationResult =
     };
 
 export interface LearningStoreState {
-  readonly learningState: LearningStateV1;
+  mutateMilestone: (projectId: string, milestoneId: string, action: MilestoneAction) => Promise<ProjectLearningStoreActionResult>;
+  readonly learningState: LearningStateV2;
   readonly hydrated: boolean;
   readonly persistenceStatus: PersistenceStatus;
   readonly persistenceMessage?: string;
@@ -246,7 +248,7 @@ export function createLearningStore({
 
   return createStore<LearningStoreState>()((set, get) => {
     async function persist(
-      nextState: LearningStateV1,
+      nextState: LearningStateV2,
     ): Promise<string | undefined> {
       const current = get();
       const nextRevision = current.revision + 1;
@@ -285,9 +287,9 @@ export function createLearningStore({
     }
 
     async function persistAtomically(
-      nextState: LearningStateV1,
+      nextState: LearningStateV2,
     ): Promise<DataManagementActionResult> {
-      const parsed = learningStateV1Schema.safeParse(nextState);
+      const parsed = learningStateV2Schema.safeParse(nextState);
       if (!parsed.success) {
         return {
           ok: false,
@@ -369,7 +371,7 @@ export function createLearningStore({
       }
 
       const current = get().learningState;
-      const nextState = learningStateV1Schema.parse({
+      const nextState = learningStateV2Schema.parse({
         ...current,
         conceptProgress: {
           ...current.conceptProgress,
@@ -401,7 +403,7 @@ export function createLearningStore({
       }
 
       const current = get().learningState;
-      const nextState = learningStateV1Schema.parse({
+      const nextState = learningStateV2Schema.parse({
         ...current,
         projectProgress: {
           ...current.projectProgress,
@@ -448,7 +450,7 @@ export function createLearningStore({
         return "原始本地数据需要恢复处理；为避免覆盖，当前已禁用持久化写入。";
       }
       const current = get().learningState;
-      const nextState = learningStateV1Schema.parse({
+      const nextState = learningStateV2Schema.parse({
         ...current,
         studyLogs: nextLogs,
       });
@@ -456,6 +458,11 @@ export function createLearningStore({
     }
 
     return {
+      mutateMilestone: async (projectId, milestoneId, action) => {
+        const project = projectsById.get(projectId);
+        if (!project) return { ok: false, code: "missing-project", message: `不存在 Project ${projectId}` };
+        return commitProjectMutation(projectId, mutateProjectMilestone(project, get().learningState, milestoneId, action, now()));
+      },
       learningState: initialState(),
       hydrated: false,
       persistenceStatus: "pending",
@@ -888,7 +895,7 @@ export function createLearningStore({
 
       recordBackupCreated: async (timestamp) => {
         const current = get().learningState;
-        const nextState = learningStateV1Schema.parse({
+        const nextState = learningStateV2Schema.parse({
           ...current,
           preferences: {
             ...current.preferences,
@@ -952,7 +959,7 @@ export function createLearningStore({
         if (!recovery.ok) return recovery;
         const timestamp = now();
         const current = get().learningState;
-        const nextState = learningStateV1Schema.parse({
+        const nextState = learningStateV2Schema.parse({
           ...current,
           preferences: {
             ...current.preferences,

@@ -161,9 +161,9 @@ describe("LocalStorage adapter 与 hydration", () => {
       storage.getItem(LEARNING_STATE_STORAGE_KEY) ?? "null",
     );
     expect(persisted).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       payload: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         conceptProgress: {
           "concept.foundation": {
             note: "我的基础概念笔记",

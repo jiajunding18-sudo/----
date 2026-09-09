@@ -1,4 +1,5 @@
 import { getProjectReadiness } from "@/features/projects/project-readiness";
+import { getProjectScopeProgress, resolveProjectMilestone, scopeProjectState } from "@/features/projects/project-milestones";
 import {
   selectConceptIdsByStatus,
   summarizeProgress,
@@ -7,7 +8,7 @@ import {
 } from "@/features/progress/progress-domain";
 import type { NextStepCatalog } from "@/features/recommendations";
 import { selectStudyLogSummary } from "@/features/study-log/study-log-domain";
-import type { LearningStateV1 } from "@/types";
+import type { LearningStateV2 } from "@/types";
 
 export interface DashboardConcept {
   readonly id: string;
@@ -79,7 +80,7 @@ function sortConceptsByRoute(catalog: DashboardCatalog) {
 
 export function selectDashboardLearningConcepts(
   catalog: DashboardCatalog,
-  state: LearningStateV1,
+  state: LearningStateV2,
 ) {
   const routeConcepts = sortConceptsByRoute(catalog);
   const learningIds = new Set(
@@ -95,39 +96,25 @@ export function selectDashboardLearningConcepts(
 
 export function selectDashboardCurrentProject(
   catalog: DashboardCatalog,
-  state: LearningStateV1,
+  state: LearningStateV2,
 ) {
-  const inProgressProjects = catalog.projects.filter(
-    (project) =>
-      project.publicationStatus === "published" &&
-      state.projectProgress[project.id]?.status === "in_progress",
-  );
-  const primaryProject = inProgressProjects.find(
-    ({ id }) => id === state.preferences.primaryProjectId,
-  );
-  const project =
-    primaryProject ??
-    inProgressProjects.toSorted((left, right) => {
-      const leftUpdatedAt = state.projectProgress[left.id]?.updatedAt ?? "";
-      const rightUpdatedAt = state.projectProgress[right.id]?.updatedAt ?? "";
-      return (
-        rightUpdatedAt.localeCompare(leftUpdatedAt, "en") ||
-        left.id.localeCompare(right.id, "en")
-      );
-    })[0];
-
-  if (!project) return undefined;
-
-  return {
-    progress: state.projectProgress[project.id],
-    project,
-    readiness: getProjectReadiness(project, state),
-  } as const;
+  const candidates = catalog.projects.flatMap((project) => {
+    const scopes = project.milestones?.length ? project.milestones.map(({ id }) => id) : [undefined];
+    return scopes.flatMap((milestoneId) => {
+      const scoped = resolveProjectMilestone(project, milestoneId);
+      const progress = getProjectScopeProgress(state, project.id, milestoneId);
+      return scoped && scoped.publicationStatus === "published" && progress?.status === "in_progress"
+        ? [{ project: scoped, progress, milestoneId }] : [];
+    });
+  }).sort((a, b) => b.progress.updatedAt.localeCompare(a.progress.updatedAt) || a.project.id.localeCompare(b.project.id) || (a.milestoneId ?? "").localeCompare(b.milestoneId ?? ""));
+  const chosen = candidates.find(({ project }) => project.id === state.preferences.primaryProjectId) ?? candidates[0];
+  if (!chosen) return undefined;
+  return { project: chosen.project, progress: chosen.progress, readiness: getProjectReadiness(chosen.project, scopeProjectState(state, chosen.project.id, chosen.milestoneId)) } as const;
 }
 
 export function selectDashboardSnapshot(
   catalog: DashboardCatalog,
-  state: LearningStateV1,
+  state: LearningStateV2,
   todayLocalDate: string,
 ) {
   return {

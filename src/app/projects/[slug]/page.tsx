@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { DocumentContext } from "@/components/content/document-context";
 import { ResourceGuidanceList } from "@/features/resources";
+import { ProjectMilestonePanel } from "@/features/projects/project-milestone-panel";
 import {
   getProjectCatalogItem,
   getProjectNextProjects,
@@ -78,18 +79,21 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         eyebrow="Project · published（正式内容）"
       />
       <ProjectCapabilityOverview item={projectItem} />
-      <ProjectExecutionPanel
+      {project.milestones?.length ? <ProjectMilestonePanel project={project} concepts={getConcepts([...new Set([
+        ...project.conceptRequirements.map(({ conceptId }) => conceptId), ...project.evidenceConceptIds,
+        ...project.milestones.flatMap(({ contract }) => contract.kind === "inline" ? [...contract.definition.conceptRequirements.map(({ conceptId }) => conceptId), ...contract.definition.evidenceConceptIds] : []),
+      ])])} /> : <><ProjectExecutionPanel
         concepts={concepts.map(({ concept }) => concept)}
         project={project}
       />
-      <ProjectKnowledgePanel project={project} requirements={concepts} />
+      <ProjectKnowledgePanel project={project} requirements={concepts} /></>}
       <div className="learning-document">
         <ProjectContent />
       </div>
-      <ProjectCompletionPanel
+      {!project.milestones?.length ? <ProjectCompletionPanel
         evidenceConcepts={evidenceConcepts}
         project={project}
-      />
+      /> : null}
       <ResourceGuidanceList
         description="这里只显示 ProjectMeta.resources 中真实声明的关系，并保留正式角色；资源名称统一先进入站内详情。"
         items={resources}

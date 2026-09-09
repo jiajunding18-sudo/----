@@ -1,41 +1,41 @@
 import { z } from "zod";
 
-import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
 import { trimmedTextSchema, utcTimestampSchema } from "@/lib/validation/shared-schemas";
-import type { LearningStateV1, TrackDefinition } from "@/types";
+import type { LearningStateV2, TrackDefinition } from "@/types";
 
 export const LEARNING_STATE_APP_ID = "machine-vision-learning-os" as const;
-export const LEARNING_STATE_SCHEMA_VERSION = 1 as const;
+export const LEARNING_STATE_SCHEMA_VERSION = 2 as const;
 export const LEARNING_STATE_STORAGE_KEY = "mv-learning-os:learning-state";
 export const LEARNING_STATE_RECOVERY_KEY_PREFIX = "mv-learning-os:recovery:";
 
-export const persistedEnvelopeV1Schema = z.strictObject({
+export const persistedEnvelopeV2Schema = z.strictObject({
   app: z.literal(LEARNING_STATE_APP_ID),
   schemaVersion: z.literal(LEARNING_STATE_SCHEMA_VERSION),
   contentVersion: trimmedTextSchema,
   revision: z.number().int().positive(),
   savedAt: utcTimestampSchema,
-  payload: learningStateV1Schema,
+  payload: learningStateV2Schema,
 });
 
-export type PersistedEnvelopeV1 = z.infer<typeof persistedEnvelopeV1Schema>;
+export type PersistedEnvelopeV2 = z.infer<typeof persistedEnvelopeV2Schema>;
 
-export const exportEnvelopeV1Schema = z.strictObject({
+export const exportEnvelopeV2Schema = z.strictObject({
   app: z.literal(LEARNING_STATE_APP_ID),
   schemaVersion: z.literal(LEARNING_STATE_SCHEMA_VERSION),
   contentVersion: trimmedTextSchema,
   revision: z.number().int().nonnegative(),
   savedAt: utcTimestampSchema,
   exportedAt: utcTimestampSchema,
-  payload: learningStateV1Schema,
+  payload: learningStateV2Schema,
 });
 
-export type ExportEnvelopeV1 = z.infer<typeof exportEnvelopeV1Schema>;
+export type ExportEnvelopeV2 = z.infer<typeof exportEnvelopeV2Schema>;
 
 export function createInitialLearningState(
   tracks: readonly Pick<TrackDefinition, "id" | "defaultGoal" | "kind">[],
   timestamp: string,
-): LearningStateV1 {
+): LearningStateV2 {
   const trackGoals = Object.fromEntries(
     tracks.map(({ defaultGoal, id }) => [id, defaultGoal]),
   );
@@ -44,7 +44,7 @@ export function createInitialLearningState(
       kind === "advanced-branch" && defaultGoal === "master",
   );
 
-  return learningStateV1Schema.parse({
+  return learningStateV2Schema.parse({
     schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
     preferences: {
       focusedTrackIds: defaultAdvancedMaster ? [defaultAdvancedMaster.id] : [],
@@ -60,12 +60,12 @@ export function createInitialLearningState(
 }
 
 export function createPersistedEnvelope(
-  payload: LearningStateV1,
+  payload: LearningStateV2,
   contentVersion: string,
   revision: number,
   savedAt: string,
-): PersistedEnvelopeV1 {
-  return persistedEnvelopeV1Schema.parse({
+): PersistedEnvelopeV2 {
+  return persistedEnvelopeV2Schema.parse({
     app: LEARNING_STATE_APP_ID,
     schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
     contentVersion,
@@ -76,13 +76,13 @@ export function createPersistedEnvelope(
 }
 
 export function createExportEnvelope(
-  payload: LearningStateV1,
+  payload: LearningStateV2,
   contentVersion: string,
   revision: number,
   savedAt: string,
   exportedAt: string,
-): ExportEnvelopeV1 {
-  return exportEnvelopeV1Schema.parse({
+): ExportEnvelopeV2 {
+  return exportEnvelopeV2Schema.parse({
     app: LEARNING_STATE_APP_ID,
     schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
     contentVersion,

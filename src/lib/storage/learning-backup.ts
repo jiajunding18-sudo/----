@@ -4,10 +4,10 @@ import {
   inspectLearningStateAgainstCatalog,
   type ProgressCatalog,
 } from "@/features/progress/progress-domain";
-import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
 import type {
   ConceptProgress,
-  LearningStateV1,
+  LearningStateV2,
   ProjectProgress,
   StageCheckpoint,
   StudyLog,
@@ -17,7 +17,7 @@ import {
   createExportEnvelope,
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_SCHEMA_VERSION,
-  type ExportEnvelopeV1,
+  type ExportEnvelopeV2,
 } from "./learning-state";
 import { migrateExportEnvelope } from "./migrations";
 
@@ -49,8 +49,8 @@ export interface ImportPreview {
 }
 
 export interface PreparedLearningStateImport {
-  readonly envelope: ExportEnvelopeV1;
-  readonly nextState: LearningStateV1;
+  readonly envelope: ExportEnvelopeV2;
+  readonly nextState: LearningStateV2;
   readonly preview: ImportPreview;
 }
 
@@ -112,6 +112,9 @@ function mergeProjectProgress(
   return {
     ...selected,
     deliverables: mergeByStableId(current.deliverables, incoming.deliverables),
+    ...(current.milestones || incoming.milestones ? {
+      milestones: mergeRecord(current.milestones ?? {}, incoming.milestones ?? {}, mergeProjectProgress),
+    } : {}),
   };
 }
 
@@ -129,10 +132,10 @@ function mergeRecord<Value extends { readonly updatedAt: string }>(
 }
 
 export function mergeLearningStates(
-  current: LearningStateV1,
-  incoming: LearningStateV1,
-): LearningStateV1 {
-  return learningStateV1Schema.parse({
+  current: LearningStateV2,
+  incoming: LearningStateV2,
+): LearningStateV2 {
+  return learningStateV2Schema.parse({
     schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
     preferences: chooseNewer(current.preferences, incoming.preferences),
     conceptProgress: mergeRecord<ConceptProgress>(
@@ -187,12 +190,12 @@ function summarizeStudyLogChanges(
 }
 
 export function createLearningBackup(options: {
-  readonly state: LearningStateV1;
+  readonly state: LearningStateV2;
   readonly contentVersion: string;
   readonly revision: number;
   readonly savedAt: string;
   readonly exportedAt: string;
-}): { readonly envelope: ExportEnvelopeV1; readonly json: string } {
+}): { readonly envelope: ExportEnvelopeV2; readonly json: string } {
   const envelope = createExportEnvelope(
     options.state,
     options.contentVersion,
@@ -209,7 +212,7 @@ export function getLearningBackupFileName(localDate: string) {
 
 export function prepareLearningStateImport(options: {
   readonly raw: string;
-  readonly currentState: LearningStateV1;
+  readonly currentState: LearningStateV2;
   readonly catalog: ProgressCatalog;
   readonly mode: ImportMode;
 }): PrepareImportResult {
@@ -276,7 +279,7 @@ export function prepareLearningStateImport(options: {
   const nextState =
     options.mode === "merge"
       ? mergeLearningStates(options.currentState, migrated.value.payload)
-      : learningStateV1Schema.parse(migrated.value.payload);
+      : learningStateV2Schema.parse(migrated.value.payload);
   const records = Object.values(migrated.value.payload.conceptProgress);
 
   return {

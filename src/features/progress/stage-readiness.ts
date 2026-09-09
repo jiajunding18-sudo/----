@@ -4,11 +4,12 @@ import {
   hasReachedRequiredStatus,
   type RequiredConceptStatus,
 } from "@/features/progress/progress-domain";
+import { isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type {
   CheckpointGate,
   ConceptMeta,
-  LearningStateV1,
+  LearningStateV2,
   ProjectMeta,
   StageDefinition,
   TrackDefinition,
@@ -104,7 +105,7 @@ interface StageReadinessContext {
   readonly concepts: readonly ReadonlyConcept[];
   readonly projects: readonly ReadonlyProject[];
   readonly tracks: readonly ReadonlyTrack[];
-  readonly state: LearningStateV1;
+  readonly state: LearningStateV2;
   readonly stagesById: ReadonlyMap<string, ReadonlyStage>;
   readonly projectsById: ReadonlyMap<string, ReadonlyProject>;
   readonly tracksById: ReadonlyMap<string, ReadonlyTrack>;
@@ -305,12 +306,12 @@ function evaluateStage(
   const unmetProjectRequirementConceptIds: string[] = [];
   const projectBlockers: StageReadinessBlocker[] = [];
 
-  for (const projectId of effectiveRequiredProjectIds) {
+  for (const { projectId, milestoneId } of effectiveProjectGates) {
     const project = context.projectsById.get(projectId);
     if (
       !project ||
       project.publicationStatus !== "published" ||
-      context.state.projectProgress[projectId]?.status !== "completed"
+      !isProjectGateCompleted(project, context.state, milestoneId)
     ) {
       incompleteProjectIds.push(projectId);
       projectBlockers.push({
@@ -321,7 +322,8 @@ function evaluateStage(
     }
 
     if (!project) continue;
-    for (const requirement of project.conceptRequirements) {
+    const scopedProject = milestoneId ? resolveProjectMilestone(project, milestoneId) : project;
+    for (const requirement of scopedProject?.conceptRequirements ?? []) {
       if (requirement.kind !== "hard") continue;
       const concept = context.concepts.find(
         ({ id }) => id === requirement.conceptId,
@@ -430,7 +432,7 @@ export function getStageReadiness(
   concepts: readonly DeepReadonly<ConceptMeta>[],
   projects: readonly DeepReadonly<ProjectMeta>[],
   tracks: readonly DeepReadonly<TrackDefinition>[],
-  state: LearningStateV1,
+  state: LearningStateV2,
 ): StageReadiness {
   const context: StageReadinessContext = {
     stages,

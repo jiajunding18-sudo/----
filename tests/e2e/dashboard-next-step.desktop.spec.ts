@@ -172,22 +172,18 @@ test("Concept 状态变化后 Dashboard 重新派生并可进入新目标", asyn
   expect(browserErrors).toEqual([]);
 });
 
-test("全部 published Concept 完成后显示诚实 empty state", async ({ page }) => {
+test("全部 published Concept 完成后仍显示未完成的项目增量契约", async ({ page }) => {
   const browserErrors = trackBrowserErrors(page);
   await seedAllPublishedConceptsMastered(page);
   await page.goto("/");
 
-  const nextStep = page.locator('[data-dashboard-next-step="empty"]');
-  await expect(nextStep).toHaveAttribute(
-    "data-next-step-reason-code",
-    "published-route-complete",
-  );
-  await expect(nextStep).toContainText(
-    "当前已发布内容已全部完成，后续路线尚未正式展开。",
-  );
+  const nextStep = page.locator('[data-dashboard-next-step="project-milestone"]');
+  await expect(nextStep).toContainText("Stage 2");
   await expect(nextStep.locator("[data-next-step-target-id]")).toHaveCount(0);
-  await expect(nextStep.getByRole("link", { name: "浏览 Roadmap" })).toBeVisible();
-  await expect(nextStep.getByRole("link", { name: "浏览 Knowledge" })).toBeVisible();
+  await expect(nextStep.getByRole("link", { name: "查看增量发布状态" })).toHaveAttribute("href", "/projects/pixel-lab/#milestone=milestone.pixel-lab.image-computing");
+  await nextStep.getByRole("link", { name: "查看增量发布状态" }).click();
+  await expect(page.getByLabel("查看能力增量")).toHaveValue("milestone.pixel-lab.image-computing");
+  await expect(page.getByRole("status")).toContainText("当前不能开始或确认完成");
   expect(browserErrors).toEqual([]);
 });
 

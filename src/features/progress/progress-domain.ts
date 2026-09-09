@@ -1,7 +1,7 @@
 import {
   masteryEvidenceSchema,
   type ConceptProgress,
-  type LearningStateV1,
+  type LearningStateV2,
   type MasteryEvidence,
   type UserDifficulty,
 } from "@/lib/validation/progress-schemas";
@@ -11,6 +11,9 @@ import type {
   TrackDefinition,
   TrackGoal,
 } from "@/types";
+import type { DeepReadonly } from "@/lib/content/manifest-types";
+import type { ProjectMilestone } from "@/lib/validation/content-schemas";
+import { resolveProjectMilestone } from "@/features/projects/project-milestones";
 
 export interface DependencyConceptDefinition {
   readonly dependencies: readonly {
@@ -45,6 +48,7 @@ export interface ProgressCatalog {
 }
 
 export interface ProgressProjectDefinition {
+  readonly milestones?: readonly DeepReadonly<ProjectMilestone>[];
   readonly id: string;
   readonly publicationStatus: "draft" | "published" | "hidden" | "retired";
   readonly conceptRequirements: readonly {
@@ -559,7 +563,7 @@ export interface LearningStateCatalogInspection {
 }
 
 export function inspectLearningStateAgainstCatalog(
-  state: LearningStateV1,
+  state: LearningStateV2,
   catalog: ProgressCatalog,
 ): LearningStateCatalogInspection {
   const conceptsById = new Map(catalog.concepts.map((concept) => [concept.id, concept]));
@@ -611,9 +615,21 @@ export function inspectLearningStateAgainstCatalog(
     }
   }
 
-  for (const [projectId, progress] of Object.entries(state.projectProgress)) {
+  const projectRecords = Object.entries(state.projectProgress).flatMap(([projectId, progress]) => {
     const project = projectsById.get(projectId);
-    if (!project) continue;
+    if (!project) return [];
+    const records = [{ projectId, progress, project }];
+    if (project.milestones?.length && progress.status !== "not_started" && !project.milestones.some(({ id, contract }) => contract.kind === "project" && progress.milestones?.[id])) {
+      errors.push(`${projectId} 的历史执行记录缺少正式迁移后的 milestone，不能猜测归属`);
+    }
+    for (const [milestoneId, milestoneProgress] of Object.entries(progress.milestones ?? {})) {
+      const scoped = resolveProjectMilestone(project, milestoneId);
+      if (!scoped) errors.push(`${projectId} 引用了未知或未发布契约的 milestone ${milestoneId}`);
+      else records.push({ projectId: `${projectId}/${milestoneId}`, progress: milestoneProgress, project: scoped });
+    }
+    return records;
+  });
+  for (const { projectId, progress, project } of projectRecords) {
     const executionPathIds = new Set(
       project.executionPaths.map(({ id }) => id),
     );

@@ -11,7 +11,7 @@ import {
   getNextStepCatalog,
   getProgressCatalog,
 } from "@/lib/content/site-content";
-import type { ConceptProgress, LearningStateV1, StudyLog } from "@/types";
+import type { ConceptProgress, LearningStateV2, StudyLog } from "@/types";
 
 const timestamp = "2026-08-29T08:00:00.000Z";
 
@@ -114,7 +114,7 @@ describe("Dashboard 只读聚合 selector", () => {
       },
     };
 
-    const changed: LearningStateV1 = {
+    const changed: LearningStateV2 = {
       ...state,
       conceptProgress: {
         [laterConcept!.id]: learningProgress("2026-08-29T10:00:00.000Z"),
@@ -141,7 +141,7 @@ describe("Dashboard 只读聚合 selector", () => {
     const path = project!.executionPaths[0];
     expect(path).toBeDefined();
 
-    const changed: LearningStateV1 = {
+    const changed: LearningStateV2 = {
       ...state,
       preferences: {
         ...state.preferences,
@@ -165,6 +165,8 @@ describe("Dashboard 只读聚合 selector", () => {
       },
     };
 
+    const legacyExecution = structuredClone(changed.projectProgress[project!.id]);
+    changed.projectProgress[project!.id].milestones = { "milestone.pixel-lab.tooling-foundations": legacyExecution };
     const current = selectDashboardCurrentProject(catalog, changed);
     expect(current?.project.id).toBe(project!.id);
     expect(current?.progress.nextAction).toBe("创建可复现实验目录");
@@ -174,7 +176,7 @@ describe("Dashboard 只读聚合 selector", () => {
 
   it("今日、本周、最近日志与最近学习日期全部来自 Study Log selector", () => {
     const { catalog, state } = setup();
-    const changed: LearningStateV1 = {
+    const changed: LearningStateV2 = {
       ...state,
       studyLogs: [
         studyLog("study-log.previous-week", "2026-08-23", 99, "2026-08-23T08:00:00.000Z"),

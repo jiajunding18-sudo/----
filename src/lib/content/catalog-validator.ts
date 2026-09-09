@@ -885,6 +885,28 @@ export function validateContentCatalog(
 
   const conceptIds = new Set(input.concepts.map((concept) => concept.meta.id));
   const projectIds = new Set(input.projects.map((project) => project.meta.id));
+  const milestoneOwners = new Set<string>();
+  for (const project of input.projects) {
+    for (const milestone of project.meta.milestones ?? []) {
+      const identity = projectIdentity(project);
+      if (milestoneOwners.has(milestone.id)) addMissingReferenceIssue(issues, identity, "milestones", milestone.id, "Duplicate milestone ");
+      milestoneOwners.add(milestone.id);
+      if (!input.stages.some(({ id }) => id === milestone.stageId)) addMissingReferenceIssue(issues, identity, "milestones.stageId", milestone.stageId, "Milestone Stage ");
+      if (milestone.contract.kind === "inline") {
+        const contract = milestone.contract.definition;
+        for (const id of [...contract.conceptRequirements.map(({ conceptId }) => conceptId), ...contract.evidenceConceptIds]) {
+          if (!conceptIds.has(id)) addMissingReferenceIssue(issues, identity, "milestones.contract", id, "Milestone Concept ");
+        }
+      }
+    }
+  }
+  for (const stage of input.stages) {
+    for (const gate of stage.projectGates) {
+      if (!gate.milestoneId) continue;
+      const milestone = input.projects.find(({ meta }) => meta.id === gate.projectId)?.meta.milestones?.find(({ id }) => id === gate.milestoneId);
+      if (!milestone || milestone.stageId !== stage.id) addMissingReferenceIssue(issues, catalogIdentity(stage.id, "content/catalog/stages.ts"), "projectGates.milestoneId", gate.milestoneId, "Milestone of this Project/checkpoint ");
+    }
+  }
   const trackIds = new Set(input.tracks.map((track) => track.id));
   const stageIds = new Set(input.stages.map((stage) => stage.id));
   const resourceIds = new Set(input.resources.map((resource) => resource.id));

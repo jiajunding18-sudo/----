@@ -226,7 +226,7 @@ export const conceptProgressSchema = z
     });
   });
 
-export const projectProgressSchema = z
+export const legacyProjectProgressSchema = z
   .strictObject({
     status: z.enum(["not_started", "in_progress", "paused", "completed"]),
     note: z.string(),
@@ -311,6 +311,10 @@ export const projectProgressSchema = z
     }
   });
 
+export const projectProgressSchema = legacyProjectProgressSchema.safeExtend({
+  milestones: z.record(semanticIdSchema, legacyProjectProgressSchema).optional(),
+});
+
 export const studyLogSchema = z
   .strictObject({
     id: semanticIdSchema,
@@ -353,10 +357,16 @@ export const learningStateV1Schema = z.strictObject({
   schemaVersion: z.literal(1),
   preferences: userPreferencesSchema,
   conceptProgress: z.record(conceptIdSchema, conceptProgressSchema),
-  projectProgress: z.record(projectIdSchema, projectProgressSchema),
+  projectProgress: z.record(projectIdSchema, legacyProjectProgressSchema),
   stageCheckpoints: z.record(stageIdSchema, stageCheckpointSchema),
   studyLogs: z.array(studyLogSchema),
 });
+
+export const learningStateV2Schema = learningStateV1Schema.extend({
+  schemaVersion: z.literal(2),
+  projectProgress: z.record(projectIdSchema, projectProgressSchema),
+});
+export type LearningStateV2 = z.infer<typeof learningStateV2Schema>;
 
 export type EvidenceKind = z.infer<typeof evidenceKindSchema>;
 export type MasteryEvidence = z.infer<typeof masteryEvidenceSchema>;

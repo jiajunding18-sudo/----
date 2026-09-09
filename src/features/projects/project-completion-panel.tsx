@@ -8,6 +8,7 @@ import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type { ProjectMeta } from "@/types";
 
 import { getProjectCompletionEligibility } from "./project-readiness";
+import { getProjectScopeProgress } from "./project-milestones";
 
 interface EvidenceConceptPresentation {
   readonly id: string;
@@ -31,7 +32,9 @@ function createDeliverableId(projectId: string) {
 export function ProjectCompletionPanel({
   evidenceConcepts,
   project,
+  milestoneId,
 }: {
+  readonly milestoneId?: string;
   readonly evidenceConcepts: readonly EvidenceConceptPresentation[];
   readonly project: DeepReadonly<ProjectMeta>;
 }) {
@@ -45,8 +48,9 @@ export function ProjectCompletionPanel({
     ({ persistenceStatus }) => persistenceStatus,
   );
   const projectProgress = useLearningStore(
-    ({ learningState }) => learningState.projectProgress[project.id],
+    ({ learningState }) => getProjectScopeProgress(learningState, project.id, milestoneId),
   );
+  const mutateMilestone = useLearningStore((state) => state.mutateMilestone);
   const setAcceptanceCriterion = useLearningStore(
     (state) => state.setProjectAcceptanceCriterion,
   );
@@ -67,12 +71,13 @@ export function ProjectCompletionPanel({
 
   async function handleDeliverableSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const result = await addDeliverable(project.id, {
+    const input = {
       id: createDeliverableId(project.id),
       title: deliverableTitle,
       reference: deliverableReference || undefined,
       note: deliverableNote || undefined,
-    });
+    };
+    const result = milestoneId ? await mutateMilestone(project.id, milestoneId, { kind: "add-deliverable", input }) : await addDeliverable(project.id, input);
     setActionMessage(
       result.ok ? "交付物记录已保存。" : result.message,
     );
@@ -88,7 +93,7 @@ export function ProjectCompletionPanel({
     criterionId: string,
     satisfied: boolean,
   ) {
-    const result = await setAcceptanceCriterion(
+    const result = milestoneId ? await mutateMilestone(project.id, milestoneId, { kind: "acceptance", id: criterionId, checked: satisfied }) : await setAcceptanceCriterion(
       project.id,
       criterionId,
       satisfied,
@@ -100,7 +105,7 @@ export function ProjectCompletionPanel({
   }
 
   async function handleRemoveDeliverable(deliverableId: string) {
-    const result = await removeDeliverable(project.id, deliverableId);
+    const result = milestoneId ? await mutateMilestone(project.id, milestoneId, { kind: "remove-deliverable", id: deliverableId }) : await removeDeliverable(project.id, deliverableId);
     setActionMessage(
       result.ok ? "交付物记录已删除。" : result.message,
     );
@@ -108,10 +113,10 @@ export function ProjectCompletionPanel({
   }
 
   async function handleComplete() {
-    const result = await completeProject(project.id, completionConfirmed);
+    const result = milestoneId ? await mutateMilestone(project.id, milestoneId, { kind: "complete", confirmed: completionConfirmed }) : await completeProject(project.id, completionConfirmed);
     setActionMessage(
       result.ok
-        ? "Project 已由你主动确认完成；Concept 状态和证据没有自动改变。"
+        ? `${milestoneId ? "该项目增量已完成" : "Project 已由你主动确认完成"}；Concept 状态和证据没有自动改变。`
         : result.message,
     );
     if (result.ok) setCompletionConfirmed(false);
@@ -130,7 +135,7 @@ export function ProjectCompletionPanel({
       <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
           <h2 className="text-2xl font-semibold" id="project-completion-title">
-            项目交付与完成验收
+            {milestoneId ? "当前项目增量交付与完成验收" : "项目交付与完成验收"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
             交付要求和验收标准直接来自正式 ProjectMeta。勾选最后一项不会自动完成项目。
@@ -138,7 +143,7 @@ export function ProjectCompletionPanel({
         </div>
         {completed && projectProgress.completedAt ? (
           <p className="text-sm font-semibold" data-project-completed-at>
-            已完成 · {formatTimestamp(projectProgress.completedAt)}
+            {milestoneId ? "该项目增量已完成" : "已完成"} · {formatTimestamp(projectProgress.completedAt)}
           </p>
         ) : null}
       </div>
@@ -319,7 +324,7 @@ export function ProjectCompletionPanel({
                   type="checkbox"
                 />
                 <span className="text-sm leading-6">
-                  我已逐项检查正式验收标准与交付物，并主动确认完成此 Project。我理解这不会自动授予任何 Concept mastered。
+                  我已逐项检查正式验收标准与交付物，并主动确认完成此{milestoneId ? "项目增量" : " Project"}。我理解这不会自动授予任何 Concept mastered。
                 </span>
               </label>
               <button
@@ -330,7 +335,7 @@ export function ProjectCompletionPanel({
                 onClick={() => void handleComplete()}
                 type="button"
               >
-                确认完成项目
+                {milestoneId ? "确认完成此项目增量" : "确认完成项目"}
               </button>
             </section>
           ) : null}

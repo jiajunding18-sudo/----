@@ -75,11 +75,11 @@ async function completePixelLab(page: Page) {
   });
   await completionConfirmation.focus();
   await page.keyboard.press("Space");
-  const complete = page.getByRole("button", { name: "确认完成项目" });
+  const complete = page.getByRole("button", { name: "确认完成此项目增量" });
   await complete.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-project-completion-message]")).toContainText(
-    "Project 已由你主动确认完成",
+    "该项目增量已完成",
   );
 }
 
@@ -172,7 +172,7 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
   await startPixelLabWithGaps(page);
   await expect(page.locator("[data-deliverable-requirements] li")).toHaveCount(4);
   await expect(page.locator("[data-acceptance-criterion]")).toHaveCount(7);
-  await expect(page.getByRole("button", { name: "确认完成项目" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "确认完成此项目增量" })).toBeDisabled();
 
   await page
     .getByLabel("交付物标题")
@@ -182,7 +182,7 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
     .fill("evidence/stage-0-exit/index.md");
   await page.getByRole("button", { name: "记录交付物" }).click();
   await expect(page.locator("[data-project-deliverable]")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "确认完成项目" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "确认完成此项目增量" })).toBeDisabled();
 
   const acceptanceCheckboxes = page.locator(
     "[data-acceptance-criterion] input[type=checkbox]",
@@ -194,7 +194,7 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
     "data-project-completion-status",
     "in_progress",
   );
-  await expect(page.getByRole("button", { name: "确认完成项目" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "确认完成此项目增量" })).toBeDisabled();
   await expect(page.locator('[data-completion-eligible="true"]')).toBeVisible();
 
   const completionConfirmation = page.getByRole("checkbox", {
@@ -202,7 +202,7 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
   });
   await completionConfirmation.focus();
   await page.keyboard.press("Space");
-  const complete = page.getByRole("button", { name: "确认完成项目" });
+  const complete = page.getByRole("button", { name: "确认完成此项目增量" });
   await complete.focus();
   await page.keyboard.press("Enter");
 
@@ -211,7 +211,7 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
     "completed",
   );
   await expect(page.locator("[data-project-completed-at]")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "项目已完成" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "该项目增量已完成" })).toBeVisible();
   await expect(page.locator("[data-project-evidence-candidates] li")).toHaveCount(8);
   await expect(page.locator("[data-project-deliverable]")).toContainText(
     "evidence/stage-0-exit/index.md",
@@ -222,7 +222,7 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
     ),
   );
   expect(stored.payload.conceptProgress).toEqual({});
-  expect(stored.payload.projectProgress["project.pixel-lab"]).toMatchObject({
+  expect(stored.payload.projectProgress["project.pixel-lab"].milestones["milestone.pixel-lab.tooling-foundations"]).toMatchObject({
     status: "completed",
     completionConfirmation: {
       acceptanceCriterionIds: expect.arrayContaining([
@@ -241,9 +241,9 @@ test("Pixel Lab 交付物与验收项满足后仍须主动确认完成", async (
   await page.goto("/projects/");
   await expect(
     page.locator(
-      '[data-project-id="project.pixel-lab"] [data-project-execution-status="completed"]',
+      '[data-project-id="project.pixel-lab"] [data-project-execution-status="in_progress"]',
     ),
-  ).toContainText("执行状态：已完成");
+  ).toContainText("仍有增量未完成");
   await page.goto("/");
   await expect(
     page.locator('[data-dashboard-next-step="recommendation"]'),
@@ -307,6 +307,7 @@ test("Pixel Lab 必须主动确认带缺口开始，并在刷新后保持正式�
     conceptProgress: {},
     projectProgress: {
       "project.pixel-lab": {
+        milestones: { "milestone.pixel-lab.tooling-foundations": {
         status: "in_progress",
         selectedExecutionPathId: "execution.pixel-lab.generated-image",
         prerequisiteOverride: {
@@ -315,6 +316,7 @@ test("Pixel Lab 必须主动确认带缺口开始，并在刷新后保持正式�
             "tooling.reproducibility",
           ]),
         },
+        } },
       },
     },
   });
@@ -346,7 +348,7 @@ test("完整 Project 完成快照经 Export → Reset → Import 后恢复", asy
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const backupBuffer = Buffer.concat(chunks);
   const exported = JSON.parse(backupBuffer.toString("utf8"));
-  expect(exported.payload.projectProgress["project.pixel-lab"]).toMatchObject({
+  expect(exported.payload.projectProgress["project.pixel-lab"].milestones["milestone.pixel-lab.tooling-foundations"]).toMatchObject({
     status: "completed",
     selectedExecutionPathId: "execution.pixel-lab.generated-image",
     deliverables: [{ title: "Pixel Lab 可复现项目目录" }],

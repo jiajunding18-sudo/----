@@ -6,6 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useLearningStore } from "@/features/progress";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type { ProjectMeta } from "@/types";
+import { getProjectScopeProgress, scopeProjectState } from "./project-milestones";
 
 import {
   getProjectKnowledgeReadiness,
@@ -76,7 +77,9 @@ function MissingConcepts({
 export function ProjectExecutionPanel({
   project,
   concepts,
+  milestoneId,
 }: {
+  readonly milestoneId?: string;
   readonly project: DeepReadonly<ProjectMeta>;
   readonly concepts: readonly ProjectConceptPresentation[];
 }) {
@@ -97,15 +100,16 @@ export function ProjectExecutionPanel({
   const setStoredEnvironmentCheck = useLearningStore(
     (state) => state.setProjectEnvironmentCheck,
   );
-  const projectProgress = learningState.projectProgress[project.id];
+  const mutateMilestone = useLearningStore((state) => state.mutateMilestone);
+  const projectProgress = getProjectScopeProgress(learningState, project.id, milestoneId);
   const knowledge = useMemo(
     () =>
       getProjectKnowledgeReadiness(project, learningState.conceptProgress),
     [learningState.conceptProgress, project],
   );
   const readiness = useMemo(
-    () => getProjectReadiness(project, learningState),
-    [learningState, project],
+    () => getProjectReadiness(project, scopeProjectState(learningState, project.id, milestoneId)),
+    [learningState, project, milestoneId],
   );
   const conceptsById = useMemo(
     () => new Map(concepts.map((concept) => [concept.id, concept])),
@@ -144,12 +148,15 @@ export function ProjectExecutionPanel({
   async function handleStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
-    const result = await startProject(project.id, {
+    const input = {
       selectedExecutionPathId: selectedPathId,
       nextAction,
       environmentChecks,
       confirmPrerequisiteOverride: overrideConfirmed,
-    });
+    };
+    const result = milestoneId
+      ? await mutateMilestone(project.id, milestoneId, { kind: "start", input })
+      : await startProject(project.id, input);
     setSubmitting(false);
     setActionMessage(
       result.ok
@@ -162,7 +169,7 @@ export function ProjectExecutionPanel({
     requirementId: string,
     checked: boolean,
   ) {
-    const result = await setStoredEnvironmentCheck(
+    const result = milestoneId ? await mutateMilestone(project.id, milestoneId, { kind: "environment", id: requirementId, checked }) : await setStoredEnvironmentCheck(
       project.id,
       requirementId,
       checked,
@@ -204,7 +211,7 @@ export function ProjectExecutionPanel({
       <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold" id="project-execution-title">
-            {completed ? "项目已完成" : executing ? "当前正在执行" : "开始执行"}
+            {completed ? (milestoneId ? "该项目增量已完成" : "项目已完成") : executing ? "当前正在执行" : "开始执行"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
             {completed
@@ -283,7 +290,7 @@ export function ProjectExecutionPanel({
               </h3>
               <p className="mt-2 text-sm leading-6" data-project-next-action>
                 {completed
-                  ? "项目已完成；完成快照中不再保留待执行下一动作。"
+                  ? `${milestoneId ? "该项目增量已完成" : "项目已完成"}；完成快照中不再保留待执行下一动作。`
                   : projectProgress.nextAction}
               </p>
             </section>

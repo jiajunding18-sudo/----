@@ -54,8 +54,8 @@ test("360px 下可筛选 Project 并浏览未 ready 的 Pixel Lab", async ({ pag
   await page
     .getByRole("checkbox", { name: /我已逐项检查正式验收标准与交付物/ })
     .check();
-  await page.getByRole("button", { name: "确认完成项目" }).click();
-  await expect(page.getByRole("heading", { name: "项目已完成" })).toBeVisible();
+  await page.getByRole("button", { name: "确认完成此项目增量" }).click();
+  await expect(page.getByRole("heading", { name: "该项目增量已完成" })).toBeVisible();
   await expect(page.locator("[data-project-evidence-candidates] li")).toHaveCount(8);
   await expectNoHorizontalOverflow(page);
 

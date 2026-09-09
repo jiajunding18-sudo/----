@@ -989,7 +989,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     if (next.kind === "recommendation") expect(next.targetId).not.toBe(preview.id);
     const stage = contentManifest.stages.find(({ id }) => id === preview.stageId);
     expect(stage?.projectGates).toEqual([
-      { projectId: "project.pixel-lab", when: { kind: "always" } },
+      { projectId: "project.pixel-lab", milestoneId: "milestone.pixel-lab.image-computing", when: { kind: "always" } },
     ]);
     expect(stage?.exitCriteria).toHaveLength(2);
     expect(stage && "retestAfterDays" in stage ? stage.retestAfterDays : undefined).toBe(7);

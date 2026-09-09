@@ -23,7 +23,7 @@ function getProjectStages(
   project: ManifestProject,
 ) {
   const requirementStageIds = new Set(
-    project.conceptRequirements.map(({ conceptId }) => {
+    [...project.conceptRequirements, ...(project.milestones ?? []).flatMap(({ contract }) => contract.kind === "inline" ? contract.definition.conceptRequirements : [])].map(({ conceptId }) => {
       const concept = getConceptById(manifest, conceptId);
       if (!concept) {
         throw new Error(`Project ${project.id} 引用了不存在的 Concept ${conceptId}`);
@@ -90,7 +90,7 @@ export function getProjectsForConcept(
 ) {
   return buildProjectCatalogView(manifest).projects
     .flatMap((view) => {
-      const requirement = view.project.conceptRequirements.find(
+      const requirement = [...view.project.conceptRequirements, ...(view.project.milestones ?? []).flatMap(({ contract }) => contract.kind === "inline" ? contract.definition.conceptRequirements : [])].find(
         (item) => item.conceptId === conceptId,
       );
       return requirement ? [{ ...view, requirement }] : [];
@@ -133,4 +133,3 @@ export function getNextProjects(
 
 export type ProjectCatalogView = ReturnType<typeof buildProjectCatalogView>;
 export type ProjectCatalogItemView = ProjectCatalogView["projects"][number];
-

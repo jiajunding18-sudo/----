@@ -10,9 +10,10 @@ import {
   type StageReadiness,
 } from "@/features/progress/stage-readiness";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
+import { getProjectScopeProgress, isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
 import type {
   ConceptMeta,
-  LearningStateV1,
+  LearningStateV2,
   ProjectMeta,
   StageDefinition,
   TrackDefinition,
@@ -57,7 +58,15 @@ export interface EmptyNextStep {
   readonly reasonText: string;
 }
 
-export type NextStep = ConceptNextStep | EmptyNextStep;
+export interface ProjectMilestoneNextStep {
+  readonly kind: "project-milestone";
+  readonly projectId: string;
+  readonly milestoneId: string;
+  readonly title: string;
+  readonly contractPublished: boolean;
+  readonly reasonText: string;
+}
+export type NextStep = ConceptNextStep | EmptyNextStep | ProjectMilestoneNextStep;
 
 export interface NextStepCatalog {
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
@@ -68,12 +77,12 @@ export interface NextStepCatalog {
 
 export interface GetNextStepInput {
   readonly catalog: NextStepCatalog;
-  readonly state: LearningStateV1;
+  readonly state: LearningStateV2;
 }
 
 interface RecommendationContext {
   readonly catalog: NextStepCatalog;
-  readonly state: LearningStateV1;
+  readonly state: LearningStateV2;
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
   readonly conceptsById: ReadonlyMap<string, DeepReadonly<ConceptMeta>>;
   readonly stagesById: ReadonlyMap<string, DeepReadonly<StageDefinition>>;
@@ -108,7 +117,7 @@ function isCurrentPublishedConcept(
 
 function createContext(
   catalog: NextStepCatalog,
-  state: LearningStateV1,
+  state: LearningStateV2,
 ): RecommendationContext {
   const stageOrder = new Map(catalog.stages.map((stage) => [stage.id, stage.order]));
   const availableStageIds = new Set(
@@ -343,37 +352,47 @@ function getCurrentPublishedProject(
     context.concepts.map((concept, index) => [concept.id, index]),
   );
   const unfinishedProjects = context.catalog.projects
+    .flatMap((project) => {
+      const scopes = project.milestones?.length ? project.milestones.map(({ id }) => id) : [undefined];
+      return scopes.flatMap((milestoneId) => {
+        const scoped = resolveProjectMilestone(project, milestoneId);
+        const progress = getProjectScopeProgress(context.state, project.id, milestoneId);
+        return scoped && !isProjectGateCompleted(project, context.state, milestoneId)
+          ? [{ project: scoped, milestoneId, progress }] : [];
+      });
+    })
     .filter(
-      (project) =>
-        project.publicationStatus === "published" &&
-        context.state.projectProgress[project.id]?.status !== "completed",
+      ({ project }) =>
+        project.publicationStatus === "published",
     )
     .toSorted(
       (left, right) =>
-        getProjectRouteRank(left, conceptRank) -
-          getProjectRouteRank(right, conceptRank) ||
-        left.id.localeCompare(right.id, "en"),
+        getProjectRouteRank(left.project, conceptRank) -
+          getProjectRouteRank(right.project, conceptRank) ||
+        left.project.id.localeCompare(right.project.id, "en") ||
+        (left.milestoneId ?? "").localeCompare(right.milestoneId ?? "", "en"),
     );
   const primaryProject = unfinishedProjects.find(
-    ({ id }) => id === context.state.preferences.primaryProjectId,
+    ({ project }) => project.id === context.state.preferences.primaryProjectId,
   );
-  if (primaryProject) return primaryProject;
-
   const inProgressProjects = unfinishedProjects
     .filter(
-      ({ id }) => context.state.projectProgress[id]?.status === "in_progress",
+      ({ progress }) => progress?.status === "in_progress",
     )
     .toSorted((left, right) => {
-      const leftUpdatedAt = context.state.projectProgress[left.id]?.updatedAt ?? "";
-      const rightUpdatedAt =
-        context.state.projectProgress[right.id]?.updatedAt ?? "";
+      const leftUpdatedAt = left.progress?.updatedAt ?? "";
+      const rightUpdatedAt = right.progress?.updatedAt ?? "";
       return (
         rightUpdatedAt.localeCompare(leftUpdatedAt, "en") ||
-        left.id.localeCompare(right.id, "en")
+        left.project.id.localeCompare(right.project.id, "en") ||
+        (left.milestoneId ?? "").localeCompare(right.milestoneId ?? "", "en")
       );
     });
 
-  return inProgressProjects[0] ?? unfinishedProjects[0];
+  if (primaryProject) {
+    return inProgressProjects.find(({ project }) => project.id === primaryProject.project.id)?.project ?? primaryProject.project;
+  }
+  return (inProgressProjects[0] ?? unfinishedProjects[0])?.project;
 }
 
 function getProjectGapStep(
@@ -470,12 +489,33 @@ function hasCompletedPublishedRoute(context: RecommendationContext) {
   );
 }
 
+function getPendingMilestoneStep(context: RecommendationContext): ProjectMilestoneNextStep | undefined {
+  const stages = [...context.catalog.stages].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+  for (const stage of stages) {
+    if (context.state.preferences.activeStageId && context.state.preferences.activeStageId !== stage.id) continue;
+    const readiness = getStageReadiness(stage, context.catalog.stages, context.catalog.concepts, context.catalog.projects, context.catalog.tracks, context.state);
+    if (!readiness.entryReady || readiness.unmetMasterConceptIds.length || readiness.unmetUnderstandConceptIds.length || readiness.unmetProjectRequirementConceptIds.length) continue;
+    for (const gate of stage.projectGates) {
+      if (!gate.milestoneId || !readiness.effectiveRequiredProjectIds.includes(gate.projectId)) continue;
+      if (gate.when.kind === "track-goal" && gate.when.minimumGoal === "master" && context.state.preferences.trackGoals[gate.when.trackId] !== "master") continue;
+      const project = context.catalog.projects.find(({ id }) => id === gate.projectId);
+      const milestone = project?.milestones?.find(({ id }) => id === gate.milestoneId);
+      if (!project || project.publicationStatus !== "published" || !milestone || isProjectGateCompleted(project, context.state, milestone.id)) continue;
+      const contractPublished = milestone.contract.kind !== "planned";
+      return { kind: "project-milestone", projectId: project.id, milestoneId: milestone.id, title: milestone.title, contractPublished,
+        reasonText: contractPublished ? "当前阶段仍需独立验收此项目增量；历史完成不会代替它。" : "当前阶段项目增量的正式契约尚未发布；已有历史完成不能满足此 gate。" };
+    }
+  }
+  return undefined;
+}
+
 export function getNextStep({ catalog, state }: GetNextStepInput): NextStep {
   const context = createContext(catalog, state);
 
   return (
     getContinueLearningStep(context) ??
     getProjectGapStep(context) ??
+    getPendingMilestoneStep(context) ??
     getNextUnlockedConceptStep(context) ??
     (hasCompletedPublishedRoute(context)
       ? {

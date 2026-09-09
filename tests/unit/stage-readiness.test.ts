@@ -6,7 +6,7 @@ import type {
   CheckpointGate,
   ConceptMeta,
   ConceptProgress,
-  LearningStateV1,
+  LearningStateV2,
   ProjectMeta,
   ProjectProgress,
   StageDefinition,
@@ -219,7 +219,7 @@ interface StateOptions {
   };
 }
 
-function state(options: StateOptions = {}): LearningStateV1 {
+function state(options: StateOptions = {}): LearningStateV2 {
   const initial = createInitialLearningState(tracks, timestamp);
   const stageIds = new Set(options.evidenceStageIds ?? []);
   if (options.retest) stageIds.add(options.retest.stageId);
@@ -266,7 +266,7 @@ function readiness(
   stages: readonly StageDefinition[],
   concepts: readonly ConceptMeta[],
   projects: readonly ProjectMeta[],
-  learningState: LearningStateV1,
+  learningState: LearningStateV2,
 ) {
   return getStageReadiness(
     target,

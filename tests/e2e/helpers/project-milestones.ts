@@ -14,8 +14,8 @@ export function registerMilestoneAudit() {
     await expect(select).toHaveValue(milestone2);
     await page.reload();
     await expect(select).toHaveValue(milestone2);
-    await expect(page.getByRole("status")).toContainText("正式验收与交付物契约尚未发布");
-    await expect(page.locator("[data-project-completion]")).toHaveCount(0);
+    await expect(page.locator("[data-project-completion]")).toHaveAttribute("data-project-completion-status", "not_started");
+    await expect(page.locator("[data-project-hard-gaps]")).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.goto("/projects/pixel-lab/#milestone=milestone.another-project.invalid");
     await expect(select).toHaveValue(milestone0);
@@ -23,7 +23,7 @@ export function registerMilestoneAudit() {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });
-  test("milestone migration retains Stage 0 history, Stage 2 stays planned; keyboard/axe/overflow", async ({ page }) => {
+  test("milestone migration retains Stage 0 history, published Stage 2 stays unstarted; keyboard/axe/overflow", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
@@ -39,7 +39,7 @@ export function registerMilestoneAudit() {
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect(select).toHaveValue(milestone2);
-    await expect(page.getByRole("status")).toContainText("当前不能开始或确认完成");
+    await expect(page.locator("[data-project-completion]")).toHaveAttribute("data-project-completion-status", "not_started");
     await expect(page.getByRole("button", { name: "确认完成此项目增量" })).toHaveCount(0);
     await expect(page.locator(`[data-milestone-id="${milestone0}"]`)).toContainText("已完成");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -52,5 +52,50 @@ export function registerMilestoneAudit() {
     // Read-only hydrate leaves the old primary key untouched; its recovery copy preserves bytes.
     expect(raw.payload.projectProgress["project.pixel-lab"].completedAt).toBe(historyTime);
     expect(errors).toEqual([]);
+  });
+  test("real Stage 2 contract blocks gaps and completes only through acceptance, record and confirmation", async ({ page }) => {
+    await page.goto("/");
+    const old = legacyEnvelope();
+    await page.evaluate((value) => localStorage.setItem("mv-learning-os:learning-state", JSON.stringify(value)), old);
+    await page.goto(`/projects/pixel-lab/#milestone=${milestone2}`);
+    await expect(page.locator("[data-project-hard-gaps]")).toBeVisible();
+    await expect(page.getByRole("button", { name: "确认带缺口开始 Project", exact: true })).toBeDisabled();
+    const hard = ["python.numpy-arrays", "python.numpy-dtypes", "image.digital-representation", "opencv.io-color", "opencv.roi-masks", "pipeline.batch-images"];
+    for (const id of hard) old.payload.conceptProgress[id] = { status: "understood", note: "", favorite: false, evidence: [], updatedAt: historyTime, startedAt: historyTime, understoodAt: historyTime };
+    await page.evaluate((value) => localStorage.setItem("mv-learning-os:learning-state", JSON.stringify(value)), old);
+    await page.reload();
+    await expect(page.locator("[data-project-hard-gaps]")).toHaveCount(0);
+    await page.getByRole("radio").first().check();
+    await page.getByLabel("第一项下一动作").fill("Task 1：fixture 与真实输入报告");
+    await page.getByRole("button", { name: "开始 Project", exact: true }).click();
+    await expect(page.locator("[data-project-execution]")).toHaveAttribute("data-project-progress-status", "in_progress");
+    const criteria = page.locator("[data-acceptance-criterion] input");
+    await expect(criteria).toHaveCount(6);
+    const finish = page.getByRole("button", { name: "确认完成此项目增量", exact: true });
+    await expect(finish).toBeDisabled();
+    for (let index = 0; index < 6; index++) await criteria.nth(index).check();
+    await expect(page.locator("[data-completion-eligible]")).toHaveAttribute("data-completion-eligible", "false");
+    await page.getByLabel("交付物标题", { exact: true }).fill("A/B/C 人工核对索引");
+    await page.getByLabel("文件、commit 或结果引用（可选）", { exact: true }).fill("evidence/stage-two/index.md");
+    await page.getByRole("button", { name: "记录交付物", exact: true }).click();
+    await expect(page.locator("[data-completion-eligible]")).toHaveAttribute("data-completion-eligible", "true");
+    await expect(finish).toBeDisabled();
+    await page.getByLabel(/我已逐项检查正式验收标准与交付物/).check();
+    await finish.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-project-completion]")).toHaveAttribute("data-project-completion-status", "completed");
+    await page.reload();
+    await expect(page.getByLabel("查看能力增量")).toHaveValue(milestone2);
+    await expect(page.locator("[data-project-completion]")).toHaveAttribute("data-project-completion-status", "completed");
+    const summary = page.getByText("Stage 2：图像计算增量 · 三任务实施说明", { exact: true });
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: /^Task 3：批处理与可复现交付/ })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("mv-learning-os:learning-state")!));
+    expect(saved.payload.conceptProgress).toEqual(old.payload.conceptProgress);
+    expect(saved.payload.stageCheckpoints).toEqual(old.payload.stageCheckpoints);
+    expect(saved.payload.projectProgress["project.pixel-lab"].milestones[milestone0].completedAt).toBe(historyTime);
   });
 }

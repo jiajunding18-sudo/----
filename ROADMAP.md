@@ -124,6 +124,8 @@ checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `
 
 ---
 
+Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computing` 可执行契约：六个 hard requirement 均为 understood，围绕输入契约、受控 ROI/mask 与可靠 batch 验收。Stage 2 的 Project gate 现已有可执行内容；12/12 Concept published 和 checkpoint available 不变，不表示 Stage completed，exit evidence 与 retest 写入流程仍未实现。
+
 ## 2. Stage 0：计算机与编程基础
 
 **目标：** 建立可复现的机器视觉实验能力，能独立创建环境、运行脚本、组织小项目、调试常见错误并记录版本。

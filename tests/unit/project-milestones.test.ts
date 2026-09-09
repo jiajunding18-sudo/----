@@ -12,6 +12,7 @@ import { inspectLearningStateAgainstCatalog } from "@/features/progress/progress
 import { createLearningStore } from "@/features/progress/learning-store";
 import { projectMetaSchema } from "@/lib/validation/content-schemas";
 import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
+import { plannedMilestoneProject } from "../fixtures/project-milestones";
 
 function migrated() {
   const result = migratePersistedEnvelope(legacyEnvelope());
@@ -72,12 +73,13 @@ describe("Phase 9E-A1 milestone contract and migration", () => {
     expect(result.ready).toBe(false);
   });
   it("planned contract is neither ready nor completable, even with forged completed progress", () => {
+    const pixelLab = plannedMilestoneProject();
     const state = stateForGate();
     state.projectProgress[pixelLab.id].milestones![milestone2] = oldPixelRecord();
     expect(getMilestoneReadiness(pixelLab, state, milestone2).contractPublished).toBe(false);
     expect(getMilestoneCompletionEligibility(pixelLab, state, milestone2).eligible).toBe(false);
     expect(isProjectGateCompleted(pixelLab, state, milestone2)).toBe(false);
-    expect(inspectLearningStateAgainstCatalog(state, getProgressCatalog()).errors.join()).toContain("未发布契约");
+    expect(inspectLearningStateAgainstCatalog(state, { ...getProgressCatalog(), projects: [pixelLab] }).errors.join()).toContain("未发布契约");
     expect(mutateProjectMilestone(pixelLab, state, milestone2, { kind: "complete", confirmed: true }, historyTime).ok).toBe(false);
   });
   it("CASE 2: independently finish future published contract; history does not freeze it", () => {
@@ -127,7 +129,7 @@ describe("Phase 9E-A1 milestone contract and migration", () => {
     const state = stateForGate();
     state.preferences.activeStageId = stage.id;
     const catalog = { ...contentManifest, concepts: contentManifest.concepts.filter(({ stageId }) => stageId === stage.id), projects: [pixelLab] };
-    expect(getNextStep({ catalog, state })).toMatchObject({ kind: "project-milestone", milestoneId: milestone2, contractPublished: false });
+    expect(getNextStep({ catalog, state })).toMatchObject({ kind: "project-milestone", milestoneId: milestone2, contractPublished: true });
     const project = activeMilestoneProject();
     state.conceptProgress["python.numpy-arrays"].status = "not_started";
     for (const prerequisite of ["tooling.dev-environment", "tooling.python-core", "math.vectors-matrices"]) {

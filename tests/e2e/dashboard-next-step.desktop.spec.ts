@@ -180,10 +180,10 @@ test("全部 published Concept 完成后仍显示未完成的项目增量契约"
   const nextStep = page.locator('[data-dashboard-next-step="project-milestone"]');
   await expect(nextStep).toContainText("Stage 2");
   await expect(nextStep.locator("[data-next-step-target-id]")).toHaveCount(0);
-  await expect(nextStep.getByRole("link", { name: "查看增量发布状态" })).toHaveAttribute("href", "/projects/pixel-lab/#milestone=milestone.pixel-lab.image-computing");
-  await nextStep.getByRole("link", { name: "查看增量发布状态" }).click();
+  await expect(nextStep.getByRole("link", { name: "进入项目增量" })).toHaveAttribute("href", "/projects/pixel-lab/#milestone=milestone.pixel-lab.image-computing");
+  await nextStep.getByRole("link", { name: "进入项目增量" }).click();
   await expect(page.getByLabel("查看能力增量")).toHaveValue("milestone.pixel-lab.image-computing");
-  await expect(page.getByRole("status")).toContainText("当前不能开始或确认完成");
+  await expect(page.locator("[data-project-completion]")).toHaveAttribute("data-project-completion-status", "not_started");
   expect(browserErrors).toEqual([]);
 });
 

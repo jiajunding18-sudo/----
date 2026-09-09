@@ -144,7 +144,7 @@ tags:
   - 可复现性
   - 调试
 publicationStatus: published
-contentVersion: 2026.08.29.1
+contentVersion: 2026.09.09.1
 milestones:
   - id: milestone.pixel-lab.tooling-foundations
     stageId: stage.tooling-foundations
@@ -155,10 +155,264 @@ milestones:
     stageId: stage.image-computing
     title: Stage 2：图像计算增量
     contract:
-      kind: planned
+      kind: inline
+      definition:
+        conceptRequirements:
+          - conceptId: python.numpy-arrays
+            kind: hard
+            minimumStatus: understood
+            reason: 能解释空间轴、切片和 boolean selection，才能验证局部处理。
+          - conceptId: python.numpy-dtypes
+            kind: hard
+            minimumStatus: understood
+            reason: 能区分实际范围与 dtype，并用副本保护输入。
+          - conceptId: image.digital-representation
+            kind: hard
+            minimumStatus: understood
+            reason: 能解释通道与行列坐标，不以 shape 猜测数据含义。
+          - conceptId: opencv.io-color
+            kind: hard
+            minimumStatus: understood
+            reason: 能安全解码、解释 BGR 并验证写入和读回。
+          - conceptId: opencv.roi-masks
+            kind: hard
+            minimumStatus: understood
+            reason: 能验证 ROI 边界、mask 契约和原图保护。
+          - conceptId: pipeline.batch-images
+            kind: hard
+            minimumStatus: understood
+            reason: 能复用确定性发现、逐项身份、失败策略与重跑契约。
+        acceptanceCriteria:
+          - id: acceptance.pixel-lab.image-computing.unfamiliar-input-contract
+            description: 展示 Input Contract Report：fixture、真实图片和坏文件的路径与解码结果；成功输入含 shape、ndim、dtype、actual min/max、通道、坐标与显示说明，fixture 已知 BGR/RGB 像素断言正确，失败不访问 None.shape。
+            required: true
+          - id: acceptance.pixel-lab.image-computing.roi-mask-contract
+            description: 展示 ROI / Mask Processing Record：从坐标推导 slice，核对 bounds、非空及 expected shape、H×W bool mask；证明 result 保持空间结构、选中区保留且未选中区为零。
+            required: true
+          - id: acceptance.pixel-lab.image-computing.source-protection
+            description: Validation report 提供 source snapshot 与相等性断言、输入文件前后 bytes 或 hash 对照；说明只修改 working/result，原图没有被意外污染或覆盖。
+            required: true
+          - id: acceptance.pixel-lab.image-computing.batch-identity-integrity
+            description: 核对 Runtime package、config 与 manifest：稳定发现的每个普通文件恰有一条 succeeded/failed/skipped 记录；数量、去重及身份集合一致，不能只用数量等式代替完整性证据。
+            required: true
+          - id: acceptance.pixel-lab.image-computing.output-manifest-integrity
+            description: 按 README 运行并检查 Run artifacts：成功项均有 imwrite 与 reload 契约验证、输出对应输入；JSON manifest 保存并读回成功后才声明 run completed，保留 summary 和输入清单。
+            required: true
+          - id: acceptance.pixel-lab.image-computing.failure-reproducibility
+            description: Validation report 保留 decode、无效 ROI 和输出安全三类失败证据；坏项记录后继续、输出风险写前停止；依据 README 在干净输出目录重跑，比较语义 manifest 和受控 PNG，并证明同目录重跑未覆盖既有结果。
+            required: true
+        deliverableRequirements:
+          - A. Runtime package：可运行程序、config、README / run instructions，记录解释器与依赖版本、输入来源、命令、处理和重跑规则。
+          - B. Run artifacts：输出图像、JSON manifest、input listing 或等价的 manifest 内容，能从每项结果定位输入。
+          - C. Validation report：Input Contract Report、ROI / Mask Processing Record、原图保护断言、三类失败记录和干净输出目录 rerun 证据。
+        evidenceConceptIds:
+          - python.numpy-arrays
+          - python.numpy-dtypes
+          - image.digital-representation
+          - opencv.io-color
+          - opencv.roi-masks
+          - pipeline.batch-images
+          - visualization.image-plots
 ---
 
 # Pixel Lab：可复现的第一次图像读写实验
+
+本页有两个独立增量：上方“查看能力增量”切换准备度、验收和交付物记录；下方按 Stage 分开阅读任务。Stage 0 历史不需重做。Stage 2 使用下面的折叠任务说明，不要求重新安装环境或建立 Git 仓库。
+
+<details>
+<summary>Stage 2：图像计算增量 · 三任务实施说明</summary>
+
+## Stage 2 Goal：先确认数据，再安全处理，最后可复现交付
+
+本说明对应 `milestone.pixel-lab.image-computing`。复用 Stage 0 已建立的项目骨架，只新增三个连续任务：陌生输入检查、安全 ROI/mask、小规模 batch。建议增量工作量 **6–8 小时**（Task 1 约 1–2 h，Task 2 约 2 h，Task 3 与核验约 3–4 h），计入跨 Stage 0–2 的 **12–18 h** 总预算，不再额外加一个完整项目预算。
+
+六个 hard requirement 均只需 `understood`，详见当前增量准备度。这里验证整合能力，不代替 Concept 自己的 master 目标。[可信显示](/knowledge/image-plots/) 是证据支持，不是新增启动门槛。复现有疑问时回查 [Stage 0 复现说明](/knowledge/reproducible-learning-projects/)，不重做安装、首次 commit 或完整路径课程。
+
+### Task 1：陌生输入的数据契约检查
+
+先按这条短路径执行，后面的三个任务共用同一处理规则：
+
+1. 打开 Stage 0 的原项目，不重建环境。
+2. 准备输入并声明下面的 config。
+3. 用 fixture 完成 Task 1 的已知像素核对。
+4. 用真实图片完成同一数据契约检查。
+5. 单图验证 ROI/mask 和 source 保护。
+6. 把通过的单图处理接入 `process_one`。
+7. 对 10–20 个输入执行 batch 并核对身份集合。
+8. 在干净输出目录重跑，再依据报告确认六项 acceptance。
+
+**目标**：在处理之前说明“我读到了什么”。先准备一个独立 input 目录，保留来源：
+
+- 从 [I/O 教材](/knowledge/opencv-io-color/) 取得 [known fixture](/media/opencv-io-color-fixture.ppm)。PPM 只是已知像素工具，不需学习编码结构。
+- 至少一张自己的静物照片或合法持有的真实图片，建议 2–3 张；无相机可用已有真实图片，不能把合成图描述成真实采集。不要提交私密照片。
+- 在实验目录用 `Path("input/broken.png").write_bytes(b"not an image")` 生成坏文件；另建 `notes.txt` 作为不支持扩展名的输入，后者将在 batch 中记为 skipped。
+
+Stage 0 的照片/生成图路径只是历史起步方式；无论当时选哪条，Stage 2 都至少使用一张合法真实图片。已有照片即可，不强制相机或网络下载。fixture 提供精确像素参照，真实图片检查陌生数据，两者不能互相替代。
+
+### 共用 config：先单图，后批量
+
+沿用 batch 教材的 Python dict，不另建配置系统。下面只增加 ROI；输入/输出路径仍作为已有 `run_batch(input_dir, output_dir, config)` 的参数传入。读取继续使用 `IMREAD_UNCHANGED`，处理只接受 uint8、H×W×3 的 BGR；灰度读取是 Task 1 的单独结构核对，不暗中改变 batch 契约。
+
+```python
+config = {
+    "allowed_suffixes": [".png", ".jpg", ".jpeg", ".bmp"],
+    "roi": {"x": 0, "y": 0, "width": 2, "height": 1},
+    "output_extension": ".png",
+    "continue_on_error": True,
+    "output_policy": "error-on-existing",
+}
+```
+
+先用此 ROI 核对 fixture，再为真实图声明有观察意义的固定窗口；最终 batch 与 rerun 使用冻结后的同一 config。Task 1 检查输入是否符合它，Task 2 使用其中 ROI，Task 3 不再换处理算法。
+
+复用 I/O 页的 read/validate/inspect，记录输入文本、解析路径和文件存在性，再调用 `imread`。只有排除 `None` 才读取属性；文件存在不证明能解码。将 **Input Contract Report** 放在唯一的 `report.md` 中：逐项字段由 manifest 保留，报告只展开代表性输入。
+
+| 字段 | 需要展示什么 |
+| --- | --- |
+| path / decode status | 原路径、解析路径、存在性、成功或失败；坏文件写明原因和下一动作 |
+| shape / ndim | 成功解码后记录；失败写“不适用”，不要伪造 shape |
+| dtype / actual min/max | 用 `.min().item()` / `.max().item()` 保留小数；dtype 不代表实际覆盖整个范围 |
+| channel interpretation | 声明读取 flag；默认彩色按 BGR，灰度 H×W 没有第三轴；未知通道先诊断 |
+| coordinate convention | `image[row,column]`，当前 x 对应 column、y 对应 row，shape 先 H 后 W |
+| display note | BGR 转 RGB 后显示；灰度明确 cmap 与范围，RGB 不套用标量 colorbar |
+
+fixture 先核对 `(2,3,3)`、uint8、`bgr[0,0] == [0,0,255]`，转换 RGB 后为 `[255,0,0]`。另以灰度读取核对 `(2,3)`。普通照片不要求预先知道像素真值。说明 uint8 不意味着实际范围必为 0–255，float32 也不保证 0–1；复用 [dtype](/knowledge/numpy-dtypes/) 和 [数字图像表示](/knowledge/digital-image-representation/) 的解释，不重新做一套转换课程。
+
+**完成检查**：报告包含 fixture、真实图和 decode failure；失败没有 `None.shape`；显示截图旁有数据契约，而非仅贴“看起来正常”。
+
+### Task 2：受控 ROI / mask 处理
+
+**目标**：选中哪里、修改哪里、source 是否仍原样，都能用断言回答。只做“保留矩形内像素、矩形外置零”，不要求检测目标或生成分割区域。
+
+复用 [ROI/mask](/knowledge/opencv-roi-masks/) 的 bounds 检查和 source/original/working/result 分工。下面是单图核心的接线框架，`source` 必须来自 Task 1 已验证的 H×W×3、uint8、BGR 输入：
+
+```python
+original = source.copy()  # 基准快照，不因变量名而自动只读
+H, W = source.shape[:2]
+x, y, width, height = (config["roi"][key] for key in ("x", "y", "width", "height"))
+assert 0 <= x < x + width <= W
+assert 0 <= y < y + height <= H
+working = source.copy()
+roi = working[y:y + height, x:x + width]
+assert roi.size > 0 and roi.shape == (height, width, 3)
+mask = np.zeros((H, W), dtype=bool)
+mask[y:y + height, x:x + width] = True
+assert mask.shape == (H, W) and mask.dtype == np.bool_
+result = working.copy()
+result[~mask] = 0
+assert result.shape == source.shape and result.dtype == source.dtype
+assert np.array_equal(result[mask], original[mask])
+assert np.all(result[~mask] == 0)
+assert np.array_equal(source, original)
+```
+
+此框架使用 `import numpy as np`；batch 正式程序应将无效 bounds 转成带诊断字段的 item failure，不能用优化运行关闭断言后继续处理。`image[mask]` 是 N×C 紧凑像素集合，不是输出图像；正式输出是保持 H×W×3 的 `result`。这里 C=3 由已确认 BGR 输入决定。
+
+`(0,0,2,1)` 只用于 fixture 的坐标/像素探针，不是所有真实照片的观察任务。真实图请说明固定窗口为什么值得观察；固定绝对 ROI 不会检测目标或自动对齐。每张输入必须满足同一窗口的 bounds，尺寸不足记为 item contract failure，不能 silent clipping。若真实窗口大于小 fixture，fixture 的已知像素核对仍在 Task 1 完成，batch 中它应明确记录为尺寸失败；不为让它成功而暗中改变逐图 ROI。合法真实图与生成图应包含可成功处理的输入。
+
+**ROI / Mask Processing Record** 保存坐标、bounds、expected/actual ROI shape、mask shape/dtype、selected count、source/result contract、断言结果，以及 source/ROI/mask/result 对照。BGR 图按 RGB 显示，mask 按二维标量显示。`source` 的保护来自副本、快照和验证，不是 NumPy 的自动不可变属性。
+
+至少故意给一次 `width=0` 或超出 W 的 ROI：在切片前拒绝。保存 input / expected / actual / reason / correction；不能把 silent clipping 后的较小 ROI 当成功。Task 2 通过后再移入 batch，不同时调试数组处理和文件编排。
+
+### Task 3：批处理与可复现交付
+
+**目标**：对 10–20 个小型输入证明“每个文件发生了什么”。复用 [Batch Pipeline](/knowledge/pipeline-batch-images/) 的外层，不照搬其阈值/轮廓算法：将 `process_one` 的处理部分替换成 Task 2，保留 read、validate、write、reload 与 record 边界。
+
+准备总计 10–20 个普通文件：包括 known fixture、2–3 张真实图、若干有明确来源说明的生成图、`broken.png`、`notes.txt`；可加入一个尺寸过小的生成 PNG，触发 ROI contract failure。复制或生成的图片应标明来源，不冒充独立真实样本。本项目只接受已声明的 uint8 BGR 单图处理契约；其他解码结构应先记录诊断，而不是偷偷 reshape。
+
+PPM 不在 batch 教材的默认 allowlist 内：先按 Task 1 将 fixture 安全写为独立的 `known-fixture.png`，检查 imwrite、reload 与已知像素后，把该 PNG 放入 batch input。原 PPM 留在 input 外作为参考，保持默认 allowlist；不要让必测 fixture 被无意 skipped。
+
+按以下接线清单改造已有程序，不增加 batch 框架：
+
+| 原 batch 位置 | 本项目保留 / 替换 |
+| --- | --- |
+| config / preflight | 保留 allowlist、PNG、continue_on_error、output_policy 和路径安全；删除 threshold 配置及校验，改校验 ROI 整数坐标、正宽高 |
+| process_one 的 gray / binary 处理 | 替换为 Task 2 原样验证过的 mask 外置零；输出保持输入 H×W×3、uint8、BGR，不再验证二维 binary |
+| parameters / metrics | parameters 改记实际 roi；删除 contour count/area，记录 selected pixel count、source-preserved；不要遗留外层 threshold 引用 |
+| 外层执行 | 保留 discovery、排序、身份、item failure、写入检查、manifest 和 rerun；不是重写 batch |
+
+下面是接线伪代码，不是可以直接复制运行的完整答案；各步骤使用前两任务与 batch 教材已有实现。学习者负责连接、返回字段并验证，不需要设计新框架。
+
+```text
+process_one(input_path, output_path, config):
+    read；若 None，返回到现有 item failure 路径，不访问 shape
+    inspect：记录 shape / ndim / dtype / range / BGR 契约
+    从 config.roi 取坐标；显式检查逐图 bounds 和 expected shape
+    snapshot；working/result copy；执行 Task 2 同一 mask 处理
+    验证 selected / unselected、source 未改、result shape/dtype
+    imwrite；检查返回值；reload；核对 BGR、shape/dtype 和 PNG 像素
+    返回 input_contract、output_contract、metrics（selected count/source-preserved）
+外层沿用 batch：记录 parameters.roi；捕获 item failure；汇总并保存 manifest
+```
+
+1. **discover → stable sort**：非递归普通文件，沿用 `(name.casefold(), name)` 排序和无碰撞输出名；保留完整发现清单，unsupported extension 也必须进入记录。
+2. **preflight**：配置包含 ROI 的 x/y/width/height、读取约定、allowlist、PNG 输出、continue-on-item-error、error-on-existing。移除旧 threshold 参数及其校验和 metrics，不把轮廓算法留作隐性要求；改为检查整数坐标、正宽高，逐图再核对 bounds。
+3. **validate → process**：Task 1 建契约，Task 2 检查 ROI/mask；在 record.parameters 保存实际 ROI 参数，在 metrics 记录 selected pixel count 与 source-preserved 结果。输入尺寸变化时按声明规则拒绝越界，不自动截断。
+4. **write → reload**：检查 imwrite bool，重新读取成功、shape/dtype/BGR 契约与当前 PNG 像素一致性。不能用“输出路径存在”代替有效内容检查；原 JPEG 与解码后 PNG 也不是文件 bytes 相等。
+5. **record → summarize**：逐项状态使用 `succeeded / failed / skipped`。每个 discovered 普通文件恰好一个相对 input_path：数量相等、无重复、identity set 相同。另核对 `processed = succeeded + failed`、`discovered = processed + skipped`，不能只核对等式。
+6. **manifest → rerun**：JSON 保存并读回核对成功后才能报告 run completed；completed run 可包含已记录 failed item，不等于每张都成功。保存输入/输出对应关系、config、contracts、metrics、error、summary。
+
+两次运行使用同一输入、代码和 config，输出到分离的干净 sibling 目录 `output-a` / `output-b`。比较相对 filenames、状态/参数/契约、语义 manifest（排除已声明的根目录差异），并实际读回比较受控 PNG 像素。不要声称跨任意 codec/环境都逐字节一致。
+
+随后对 `output-a` 再运行：应在处理和写入之前因 error-on-existing 停止；保存输出和 manifest 的前后 bytes 快照证明没有覆盖。输入也做运行前后 bytes 或 hash 核对。输出目录不能等于或位于 input 内；不引入覆盖、随机改名、并行或调度器。
+
+### 三类失败证据与常见误判
+
+| 失败 | 预期策略与可检查证据 |
+| --- | --- |
+| Decode failure | broken.png eligible 但无法解码，记录 failed 和诊断，证明后续合法项继续；不是静默丢图 |
+| Processing contract failure | 无效 ROI 保存 input、expected、actual、reason、correction，记录 failed；“无异常”不证明 bounds 正确 |
+| Output safety failure | 同目录重跑或危险 input/output 关系在写前停止；保留停止信息及既有输出不变证明 |
+
+沿用 batch error 的 exceptionType / message / policyAction。unsupported extension 是 skipped，不作为处理失败凑数。Manifest 保存失败属于整次 run 失败，不得宣布正式完成。报告需解释实际失败及修正，不只复制 traceback。
+
+### Deliverables 与六项 Acceptance
+
+只提交三组：**A Runtime package**（程序、config、README），**B Run artifacts**（输出 PNG、JSON manifest、输入清单），**C Validation report**（输入报告、ROI/mask 记录、source 断言、失败及 rerun）。README 记录实际解释器/依赖、输入来源、运行命令、预期结果与现有输出策略；不提交 `.venv` 或私密原图。
+
+三组是内容分工，不是三套重复文件。沿用原项目 `src/`，可以这样组织，不需要新增模块架构：
+
+```text
+README.md                 # 运行方法；config 可保留在原程序中
+src/                      # 原有程序，接入同一 config 与 process_one
+input/                    # 有来源记录的小型输入
+output-a/                 # PNG + batch-manifest.json
+output-b/                 # 干净 rerun 的 PNG + batch-manifest.json
+report.md                 # 唯一人工验证报告
+```
+
+`report.md` 依次放 Input Contract Report、ROI / Mask Processing Record、source protection、failure records、rerun、六项 acceptance 索引。共同坐标、通道、显示约定和 config 只写一次；逐项不同的数值保留在 manifest。报告只展开 fixture、真实图、三类失败和 rerun 的代表性结果，不为 10–20 项手填卡片，也不复制整个 JSON。每次运行的 `batch-manifest.json` 只保存一份并链接；output-b 的独立运行记录不是给 A/B/C 再复制三份。
+
+三类失败可合并为一张短表，列为 `input | expected | actual | reason | correction`，填写实际观察，并链接对应 manifest 项或写前停止记录；不再另外撰写三份失败报告。
+
+在上方切换到 Stage 2 增量，按六项 required acceptance 核对：
+
+| 验收 ID 后缀 | 展示什么，核对哪些交付内容 |
+| --- | --- |
+| unfamiliar-input-contract | Task 1 报告、fixture 像素与失败输入；C |
+| roi-mask-contract | 坐标、shape/dtype、selected/unselected 断言和可信对照；C |
+| source-protection | source snapshot、数组断言与输入文件前后对照；C |
+| batch-identity-integrity | 从程序/config 与独立 input listing 对照 manifest 的数量、去重和集合；A/B |
+| output-manifest-integrity | 按 README 运行，核查输出读回、manifest 保存/读回、输入输出对应；A/B |
+| failure-reproducibility | 三类真实失败记录、干净目录复现和同目录不覆盖证据；A/B/C |
+
+完整 ID 前缀为 `acceptance.pixel-lab.image-computing.`。不要仅凭六个勾选就宣称实验成立：每一项都应指向报告中的实际结果。
+
+### Evidence 与 Completion guidance
+
+选择 Stage 2 增量、填写执行路径和下一动作后开始；复用已有环境，不再安装一遍。登记可检查的交付物索引（例如报告位置及其链接到的 A/B/C），实际核对六项 acceptance 后再显式确认完成。
+
+**Deliverable requirements 描述应提交什么；当前系统只机器检查至少存在一条 deliverable record，不逐组识别 A/B/C，也不自动检查磁盘中的每个文件。三组内容是否齐全，由学习者/验收者按六项 required acceptance 实际核对，并在最终确认时负责。** 未开始、缺任一 required acceptance 或没有交付物记录，都不能确认完成。
+
+`evidenceConceptIds` 仅索引项目可产生证据的七个 Concept（六个 hard 加可信显示），不表示覆盖各篇全部 masteryCriteria。项目不会自动提升 Concept progress、授予 mastered 或完成 Stage。
+
+本增量完成后可满足 Stage 2 的对应 Project gate，但不代表 Stage 2 completed。Task 1/2 报告可作为 `stage-criterion.image-computing.data-contract` 候选，Task 3 产物可作为 `stage-criterion.image-computing.batch-pipeline` 候选；将在阶段出口验收复用，本轮不写 stageCheckpoints，不实现 exit evidence、initiallyEligibleAt 或 7-day retest。
+
+本项目只整合输入可靠性、局部修改与批处理。几何变换、滤波、阈值/形态学、轮廓及 ORB 不列为本增量作业；Classical Inspection 仍留给后续检测任务。完成三任务后先按六项验收复核，不因代码能运行就宣称能力已通过。
+
+</details>
+
+## Stage 0：基础环境与复现（已有增量）
 
 ## 项目目标
 

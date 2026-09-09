@@ -31,7 +31,14 @@ export function legacyEnvelope(status: ProjectProgress["status"] = "completed") 
     payload: { ...state, schemaVersion: 1, projectProgress } };
 }
 
-// Test-only published future contract; never written to content/catalog or manifest.
+// Preserve the generic unpublished-contract regression after real content is published.
+export function plannedMilestoneProject(): ProjectMeta {
+  const project = structuredClone(pixelLab);
+  project.milestones![1].contract = { kind: "planned" };
+  return project;
+}
+
+// Independent test-only contract; never written to content/catalog or manifest.
 export function activeMilestoneProject(): ProjectMeta {
   return { ...structuredClone(pixelLab), milestones: [pixelLab.milestones![0], {
     id: milestone2, title: "Test-only image computing increment", stageId: "stage.image-computing",

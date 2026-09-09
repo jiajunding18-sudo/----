@@ -542,7 +542,7 @@ Stage 9/10 的出口标准与项目门槛也使用同一 Track 目标：副修 `
 - Stage projectGate 可指定 projectId + milestoneId；此时只检查指定增量及其 hard knowledge requirements，recommended 不阻塞。Stage 0 不因此新增项目 gate。
 - 不带 milestoneId 的旧形式 gate 始终检查 project-level completion，给 Project 新增 milestone 不改变它的含义。所有增量是否完成仅用于独立的 UI aggregate，不代替旧 gate；未来增量门槛必须显式指定 milestoneId。
 - 每一个可执行增量契约都必须独立满足已有必需验收和交付物规则，合法 sibling 不能替另一个契约担保；planned 身份不作为可执行契约校验。
-- 尚未发布验收契约的 milestone 只显示计划身份，不允许开始或完成。Pixel Lab Stage 2 本轮属于此类；可执行增量的流程由通用实现和测试保证，正式内容留给 Phase 9E-1。
+- 尚未发布验收契约的 milestone 只显示计划身份，不允许开始或完成。Pixel Lab Stage 2 已在 Phase 9E-1 发布可执行契约；这仅改变内容可用性，不授予任何历史用户该增量的完成状态。
 - Project/milestone 完成不自动改变 Concept progress。界面整体状态从增量派生，不以历史 project-level completed 充当当前 gate。
 - 用户数据经版本化迁移，旧 Pixel Lab 可验证记录只归入 Stage 0 增量，完整保留验收、交付物、确认和时间；未知历史进入恢复流程，不猜测、不清空。
 - 本轮不实现 Stage exit evidence、initiallyEligibleAt 或 retest 写入流程；这些属于 Phase 9E-B。

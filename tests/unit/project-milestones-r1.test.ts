@@ -8,6 +8,7 @@ import { createLearningStore } from "@/features/progress/learning-store";
 import { getProgressCatalog } from "@/lib/content/site-content";
 import { migratePersistedEnvelope } from "@/lib/storage/migrations";
 import { LocalStorageLearningStateAdapter, LEARNING_STATE_STORAGE_KEY } from "@/lib/storage";
+import { plannedMilestoneProject } from "../fixtures/project-milestones";
 
 function migrated() {
   const result = migratePersistedEnvelope(legacyEnvelope());
@@ -63,7 +64,7 @@ describe("Phase 9E-A1-R1 architecture regression probes", () => {
       // Completed or unpublished increments cannot retain execution priority.
       state.projectProgress[project.id].milestones![milestone2].status = "completed";
       expect(getNextStep({ catalog, state })).toMatchObject({ relatedProject: { projectId: other.id } });
-      expect(getNextStep({ catalog: { ...catalog, projects: [pixelLab, other] }, state })).toMatchObject({ relatedProject: { projectId: other.id } });
+      expect(getNextStep({ catalog: { ...catalog, projects: [plannedMilestoneProject(), other] }, state })).toMatchObject({ relatedProject: { projectId: other.id } });
     }
   });
 
@@ -135,6 +136,7 @@ describe("Phase 9E-A1-R1 architecture regression probes", () => {
   });
 
   it("planned rejects every execution mutation at domain boundary", () => {
+    const pixelLab = plannedMilestoneProject();
     const actions: MilestoneAction[] = [
       { kind: "start", input: { selectedExecutionPathId: pixelLab.executionPaths[0].id, nextAction: "test", environmentChecks: {}, confirmPrerequisiteOverride: true } },
       { kind: "acceptance", id: "acceptance.test", checked: true },

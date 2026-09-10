@@ -662,6 +662,7 @@ interface UserPreferences {
   updatedAt: string;
 }
 
+// Frozen v2 legacy payload only; not current qualification.
 interface StageCheckpoint {
   criterionEvidence: Record<string, string[]>;
   initiallyEligibleAt?: string;
@@ -669,12 +670,12 @@ interface StageCheckpoint {
   updatedAt: string;
 }
 
-interface LearningStateV2 {
-  schemaVersion: 2;
+interface LearningStateV3 {
+  schemaVersion: 3;
   preferences: UserPreferences;
   conceptProgress: Record<ConceptId, ConceptProgress>;
   projectProgress: Record<ProjectId, ProjectProgress>;
-  stageCheckpoints: Record<StageId, StageCheckpoint>;
+  stageCheckpoints: Record<StageId, StageProgress>; // structured model in §7.5
   studyLogs: StudyLog[];
 }
 ```
@@ -689,7 +690,7 @@ interface LearningStateV2 {
 - `projectGate(projectId)` 始终读取 legacy project-level completion，即使 Project 后来新增 milestones 也不改变含义；`projectGate(projectId, milestoneId)` 只读指定增量。`areAllProjectMilestonesCompleted` 是独立 UI aggregate selector，不复用 legacy gate。
 - 所有 executable contracts 逐个验证必需验收和交付物，包含 `kind: project` 所引用的顶层契约；planned 仅有身份、不参与执行校验，不能借合法 sibling 通过空契约。
 - NextStep 候选保留 milestoneId 和 scoped progress，以增量 status/updatedAt 判断进行中优先级。Project 页面用 `#milestone=<encoded ID>` 定位，先校验归属，未知 ID 回退首个增量；URL 不参与授权或完成判断。
-- NextStep 仅增加 milestone 待办兼容：历史 completed 不隐藏其知识缺口或待验收增量；planned contract 只能展示发布状态，不推荐假执行任务。Stage exit evidence、时间锚点与 retest action 留给 Phase 9E-B。
+- NextStep 保留 milestone 待办兼容：历史 completed 不隐藏其知识缺口或待验收增量；planned contract 只能展示发布状态，不推荐假执行任务。Stage 出口处理按第 7.5 节，retest action 留给 B2。
 
 - `not_started → learning → understood → mastered` 是推荐顺序，但用户可以手动回退。
 - 首次进入 `learning` 时记录 `startedAt`；首次达到 `understood` 时记录 `understoodAt`。
@@ -705,8 +706,32 @@ interface LearningStateV2 {
 - 路线目标状态由 `getRouteRequiredStatus` 基于学习深度和 `trackGoals` 统一计算；同一概念跨 Track 时取较高要求，项目要求可以再提高门槛。U 节点或副修 Track 中被降为 U 要求的 M 节点达到 `understood` 后不再作为普通路线任务重复推荐，但若当前项目要求 `mastered`，仍作为该项目缺口推荐。
 - `in_progress` 项目必须保存去除首尾空白后非空的 `nextAction`；转为 `paused` 时保留最近下一动作，`not_started` 或 `completed` 可以省略。开始 action 必须同时保存有效的 `selectedExecutionPathId`。
 - 项目环境准备度只由所选执行路径引用且标记为必需的环境要求计算；未选择路径时为 `null` 并返回每条路径的独立准备度。首选硬件路径的缺口不得污染消费级设备、公开数据或仿真路径。
-- Stage 通过由 `getStageReadiness` 统一判断：`entryGate` 已满足；checkpoint 内已发布必修节点达到当前 Track 的有效目标；当前 Track 下生效的 `projectGates` 已完成；这些项目的 hard `conceptRequirements` 也达到各自 `minimumStatus`；当前 Track 下生效的必需出口标准有通过证据；若配置复测则间隔已满足。项目通过覆盖操作开始或完成，不能绕过阶段的项目知识门槛；A 节点仅在生效项目以 hard 要求提升时参与。页面不得仅凭节点百分比宣告阶段通过。
-- 前述条件首次同时成立时写入 `initiallyEligibleAt`；任一条件失效时该锚点失效。配置 `retestAfterDays` 时，只有 `retestedAt >= initiallyEligibleAt + retestAfterDays` 才通过。`ROADMAP.md` 的完整 Stage 0–11 最终 checkpoint 统一使用 7 天，中间波次可省略或单独配置。
+- `getStageReadiness` 分开输出课程条件 `nonRetestReady`、合法轮次 `currentEligibilityValid`；B1 的 `ready` 不授予完成。当前条件包括入口、有效 Concept 目标、项目 gate、项目 hard 要求和出口证据确认。A 节点仅在生效项目提升要求时参与，项目 override 不绕过阶段知识门槛。
+- 当前条件全满足时生成资格轮次；完成前失去条件即保留并失效该轮次。`eligibleAt` 取代裸 `initiallyEligibleAt`，复测必须绑定有效轮次且遵守 `now` 边界；完整类别默认 7 天，中间 checkpoint 可无等待。具体持久化与历史语义见下节。
+
+### 7.5 Phase 9E-B1 Stage lifecycle
+
+R1 契约：B1 的 historicalCompletion 为 inert 保留数据，ready 恒不授予完成，入口不消费预留快照。nonRetestReady 是基础条件；currentEligibilityValid 验证可执行性、完整时间检查和 qualificationBasis。basis 保存确定性课程目标、项目 gate、当前路线和 criterion 确认/来源依据快照，以及已知可靠确认时间下界；不猜测首次满足时间。旧 cycle 缺依据、依据不符或 anchor 早于确认时，保留并失效，当前条件成立后按 injected now 重建。future/倒序时间仍拒绝。正常 export/import 的一致依据保留 anchor。
+
+criterion evidenceBasis 使用现有来源记录（包括 updatedAt）身份，不读取磁盘或 hash 文件。来源失效/变化持久化 confirmationInvalidatedAt，保留 confirmedAt 供追溯；恢复不自动确认。实质 criterion 编辑清除确认，重新确认替换依据。removed criterion 保留为 orphan，不用于当前条件；新增必需项使旧资格失效。same-ID 课程语义变化暂无正式版本机制，留给后续 contract versioning，不声称能够自动识别。
+
+LearningStore 对所有异步写入 action 排队，在获得队列位置后读取最新状态；单次失败不丢此前状态、不阻塞后续队列。NextStep 当前 focus checkpoint 的 Concept/Project/exit/qualification 优先于其他阶段 learning。B2 timer、复测提交、正式完成快照仍不实现。
+
+当前应用持久化升级为 v3；冻结 v1→v2 Project migration 不变，再顺序执行 v2→v3。旧 StageCheckpoint 完整保存在 legacy provenance 中并显示 needs-review，不作为确认、资格或历史完成。
+
+Stage criterion 记录 evidenceRefs、说明、confirmedAt 与 updatedAt；引用解析检查 Project/milestone 下真实 deliverable 或 Concept 下真实 passed evidence。实质编辑清除确认；确认需要用户显式提交。当前资格由纯 selector 合取入口、Concept 目标、项目与项目 hard 要求、当前生效的必需出口确认。
+
+`StageProgress` 的正式 schema 位于 `stage-progress-schemas.ts`：`criteria` 按 criterion ID 保存 `{ evidenceRefs, explanation, confirmedAt?, updatedAt }`；`cycles` 按稳定 cycle ID 保存 `{ id, eligibleAt, invalidatedAt? }`；`legacy` 保存带 `v2-needs-review` provenance 的完整旧 checkpoint；可选 `historicalCompletion` 预留 cycle ID、completedAt、evidenceSnapshot 和可选 retest（同 cycle ID、证据、说明、确认/复测时间）。B1 无 retest/completion 写入 action。
+
+来源失效采用保留历史确认的规则：confirmedAt 不静默删除，但引用不可解析时 current criterion satisfied=false，当前轮次失效。导入中的悬空引用拒绝并要求复核；不会把 needs-review 自动变为新证据。导入后只有当前完整非复测条件重新核验为真时才由 reconciliation 建立资格，不信任备份自称的 active 状态。
+
+eligibility cycle 使用稳定 ID、eligibleAt、可选 invalidatedAt；集中 reconciliation 在相关 mutation、加载/导入协调后建立或失效轮次，重复执行幂等。它不放入通用 persist，不让 Study Log/笔记变更 anchor。历史轮次不删除；恢复创建新 ID。复测模型绑定 cycle ID，历史完成预留完整时间与证据快照，B1 没有创建它们的 action。
+
+historical completion 与 nonRetestReady 独立；未来 B2 定义权威完成及 sticky 历史快照，B1 checkpoint entry gate 不读取预留快照。复测间隔为 elapsed 168h；current eligibility selector 校验轮次时间与依据，倒序 fail closed。`retestDue` 保留兼容名称，指未完成的复测要求，不表示今天已到期。没有服务端可信时钟，不承诺防改时钟作弊；B2 才增加时钟刷新和复测 action。
+
+Stage merge 按 criterion 合并，不以整个 checkpoint 覆盖；cycle、legacy 和 completion 历史必须保留。同 ID 同时间不同内容等无法安全判断的冲突拒绝导入并保留恢复路径。迁移先备份原始数据，失败不覆盖主 key；旧版本回滚使用对应原始备份，不手改版本号。
+
+B1 UI 仅支持 evidence selection、confirm/revoke 与资格/legacy review；NextStep 显示 stage-exit 或 eligibility-pending，不伪称 Stage completed。复测表单、复测 evidence action 和完成 action 留给 B2。
 
 ## 8. 派生服务接口
 
@@ -766,7 +791,7 @@ interface ProjectExecutionPathReadiness {
 
 function getProjectReadiness(
   project: ProjectMeta,
-  state: LearningStateV2,
+  state: LearningStateV3,
 ): ProjectReadiness;
 
 interface ProjectCompletionEligibility {
@@ -837,7 +862,7 @@ function getStageReadiness(
   concepts: ConceptMeta[],
   projects: ProjectMeta[],
   tracks: TrackDefinition[],
-  state: LearningStateV2,
+  state: LearningStateV3,
 ): StageReadiness;
 
 interface RecommendationTaskBase {
@@ -883,11 +908,11 @@ Study Log 的日期排序、今日/本周分钟数、最近记录、最近学习
 
 使用一个逻辑 Learning Store，按 feature 文件拆分 actions 和 selectors。持久化数据与瞬时 UI 状态分开：
 
-- 持久化：`LearningStateV2`；`LearningStateV1` 只用于迁移前校验。
+- 持久化：`LearningStateV3`；冻结的 `LearningStateV1` / `LearningStateV2` 用于连续迁移前校验。
 - 不持久化：action、selector、hydration 状态、当前弹窗、搜索输入、临时错误。
 - UI 只能调用 `startConcept`、`markUnderstood`、`confirmMastery`、`addEvidence`、`updateNote`、`createStudyLog`、`updateStudyLog`、`deleteStudyLog` 等领域 action。
 - action 必须先验证不变量，再一次性提交新状态；组件不能直接写任意 status。
-- Study Log action 只替换 `LearningStateV2.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
+- Study Log action 只替换 `LearningStateV3.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、Stage 资格、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
 
 Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 hydration（如 `skipHydration`），在根部的窄 Client Provider 挂载后调用 `rehydrate()`。hydration 完成前，进度相关 UI 显示中性占位，不得先渲染错误的 0%。
 
@@ -896,23 +921,23 @@ Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 
 ```ts
 const LEARNING_STATE_STORAGE_KEY = "mv-learning-os:learning-state";
 
-interface PersistedEnvelopeV2 {
+interface PersistedEnvelopeV3 {
   app: "machine-vision-learning-os";
-  schemaVersion: 2;
+  schemaVersion: 3;
   contentVersion: string;
   revision: number;
   savedAt: string;
-  payload: LearningStateV2;
+  payload: LearningStateV3;
 }
 
-interface ExportEnvelopeV2 {
+interface ExportEnvelopeV3 {
   app: "machine-vision-learning-os";
-  schemaVersion: 2;
+  schemaVersion: 3;
   contentVersion: string;
   revision: number;
   savedAt: string;
   exportedAt: string;
-  payload: LearningStateV2;
+  payload: LearningStateV3;
 }
 
 type ImportMode = "merge" | "replace";
@@ -955,8 +980,8 @@ LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` �
 ### 9.3 schema 版本和迁移
 
 - v1 → v2 通过正式 persisted/export migration chain 执行。冻结的 Pixel Lab v1 contract ID 集合只用于历史迁移，不读取未来 MDX 推测旧验收。可验证 completed/partial/not_started 记录完整归入 `milestone.pixel-lab.tooling-foundations`，保留所有字段与原始时间；Stage 2 不创建进度记录。
-- 未知验收、路径、环境或损坏确认导致 migration 失败并进入 blocked/recovery。无 Pixel Lab 记录及 unrelated Project 原样保留。v2 hydrate 不重新执行迁移，避免重复交付物或改写时间。
-- LocalStorage adapter 在允许后续 v2 写入前保留原始 v1 字符串到 recovery key；备份失败即阻塞。主 key 不在读取时覆盖。回滚应使用保留的 v1 原始备份与旧应用；不能把 v2 数据强行改版本号交给旧应用。
+- 未知验收、路径、环境或损坏确认导致 Project migration 失败并进入 blocked/recovery。无 Pixel Lab 记录及 unrelated Project 原样保留。当前 v3 hydrate 不重跑旧 migration，避免重复记录或改写历史时间。
+- LocalStorage adapter 在允许后续 v3 写入前保留原始 v1/v2 字符串到 recovery key；备份失败即阻塞。协调有实际资格变化才保存新状态。回滚使用保留的原始备份与对应旧应用，不能仅改版本号。没有资格变化的读取不覆盖主 key。
 - 原始 recovery 按来源 storage key、迁移/恢复原因与完整 raw 字节去重；重复 load/hydrate 复用相同快照，payload 或原因不同则保留新快照。不删除旧备份、不覆盖不同 payload，不依赖时间或哈希相等来断言内容相等。损坏输入同样尝试保留原始快照；备份失败继续 blocked，主 key 保留。
 - merge 对 milestone map 按稳定 ID 和各记录 updatedAt 合并，并保留各自 deliverables/confirmation；顶层历史完成不是合并时授予新 milestone 的依据。
 
@@ -969,10 +994,10 @@ LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` �
 
 ### 9.4 导入、导出和损坏恢复
 
-- 导出使用 `ExportEnvelopeV2`，其中 `revision` 与 `savedAt` 记录被导出状态的本地持久化位置，`exportedAt` 记录备份生成时间；文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
+- 导出使用 `ExportEnvelopeV3`，其中 `revision` 与 `savedAt` 记录被导出状态的本地持久化位置，`exportedAt` 记录备份生成时间；文件名包含本地日期和 schema 版本；不得只导出当前页面的一部分状态。成功生成备份后更新 `lastBackupAt`。
 - 导入先解析、识别 app、迁移、Zod 校验，再显示 `ImportReport`；用户确认前不得写入主 storage key。
-- 默认 `merge`：`UserPreferences` 整体按 `updatedAt` 选择；Concept、Project 与 StageCheckpoint 记录按其 Record key 和 `updatedAt` 合并，不能按状态高低合并，因此用户主动降级会被保留；证据、交付物和日志再按自身稳定 ID 与 `updatedAt` 合并。
-- 可选 `replace`：完全替换现有用户状态。提交前必须先成功生成可下载的 `ExportEnvelopeV2` 或写入独立 recovery key，再进行二次确认；备份生成/持久化失败时 action 必须拒绝替换。
+- 默认 `merge`：`UserPreferences` 整体按 `updatedAt` 选择；Concept、Project 按 Record key 和 `updatedAt` 合并，不能按状态高低合并；证据、交付物和日志按稳定 ID 合并。Stage 按 criterion ID 合并编辑，合并保留 cycles/legacy/历史完成；同时间冲突、轮次歧义或冲突完成快照拒绝并保留当前数据，随后按当前完整条件协调。
+- 可选 `replace`：完全替换现有用户状态。提交前必须先成功生成可下载的 `ExportEnvelopeV3` 或写入独立 recovery key，再进行二次确认；备份生成/持久化失败时 action 必须拒绝替换。
 - 合并和替换完成后都要再次校验，并重新计算进度、阶段/项目就绪度和推荐。
 - JSON 解析失败、schema 不合法或版本过新时，不得向主 storage key 写入任何内容。
 - 若主数据损坏，应用保留原始字符串于内存并提供“下载原始数据”“导入备份”“明确清空并重新开始”三种动作；用户做出选择前禁用持久化写入。

@@ -181,6 +181,7 @@ export function getPublishedProjectSlugs() {
 
 export function getProgressCatalog(): ProgressCatalog {
   return {
+    stages: contentManifest.stages,
     concepts: contentManifest.concepts.map((concept) => {
       const stage = contentManifest.stages.find(({ id }) => id === concept.stageId);
       if (!stage) {
@@ -191,6 +192,8 @@ export function getProgressCatalog(): ProgressCatalog {
 
       return {
         id: concept.id,
+        title: concept.title,
+        targetDepth: concept.targetDepth,
         stageId: concept.stageId,
         stageCategoryOrder: stage.categoryOrder,
         trackIds: concept.trackIds,

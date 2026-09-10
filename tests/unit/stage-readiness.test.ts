@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { getStageReadiness } from "@/features/progress/stage-readiness";
 import { createInitialLearningState } from "@/lib/storage";
+import { stageHistory } from "../fixtures/stage-history";
 import type {
   CheckpointGate,
   ConceptMeta,
   ConceptProgress,
-  LearningStateV2,
+  LearningStateV3,
   ProjectMeta,
   ProjectProgress,
   StageDefinition,
@@ -219,7 +220,7 @@ interface StateOptions {
   };
 }
 
-function state(options: StateOptions = {}): LearningStateV2 {
+function state(options: StateOptions = {}): LearningStateV3 {
   const initial = createInitialLearningState(tracks, timestamp);
   const stageIds = new Set(options.evidenceStageIds ?? []);
   if (options.retest) stageIds.add(options.retest.stageId);
@@ -240,22 +241,7 @@ function state(options: StateOptions = {}): LearningStateV2 {
     stageCheckpoints: Object.fromEntries(
       [...stageIds].map((stageId) => [
         stageId,
-        {
-          criterionEvidence: {
-            [`stage-criterion.${stageId}.complete`]: [
-              `evidence.${stageId}.complete`,
-            ],
-          },
-          initiallyEligibleAt:
-            options.retest?.stageId === stageId
-              ? options.retest.initiallyEligibleAt
-              : undefined,
-          retestedAt:
-            options.retest?.stageId === stageId
-              ? options.retest.retestedAt
-              : undefined,
-          updatedAt: timestamp,
-        },
+        stageHistory(stageId, timestamp, options.retest?.stageId === stageId ? options.retest : undefined),
       ]),
     ),
   };
@@ -266,7 +252,7 @@ function readiness(
   stages: readonly StageDefinition[],
   concepts: readonly ConceptMeta[],
   projects: readonly ProjectMeta[],
-  learningState: LearningStateV2,
+  learningState: LearningStateV3,
 ) {
   return getStageReadiness(
     target,
@@ -275,6 +261,7 @@ function readiness(
     projects,
     tracks,
     learningState,
+    timestamp,
   );
 }
 
@@ -304,13 +291,8 @@ describe("Phase 4D-2 Stage readiness", () => {
       [requiredProject],
       baseState,
     );
-    expect(blocked).toMatchObject({
-      entryReady: false,
-      unmetEntryStageIds: [source.id],
-    });
-    expect(blocked.blockers).toContainEqual(
-      expect.objectContaining({ code: "entry-gate" }),
-    );
+    // B1 reserved history cannot authorize entry, even after current project completion.
+    expect(blocked.entryReady).toBe(false);
 
     const ready = readiness(
       target,
@@ -325,10 +307,10 @@ describe("Phase 4D-2 Stage readiness", () => {
         evidenceStageIds: [source.id],
       }),
     );
-    expect(ready.entryReady).toBe(true);
+    expect(ready.entryReady).toBe(false);
   });
 
-  it("allOf 要求全部 checkpoint，anyOf 只要求至少一个", () => {
+  it("allOf/anyOf 均不把 B1 reserved snapshot 当作已通过 checkpoint", () => {
     const first = stage("stage.first");
     const second = stage("stage.second");
     const allTarget = stage("stage.all", {
@@ -355,12 +337,12 @@ describe("Phase 4D-2 Stage readiness", () => {
       readiness(allTarget, [first, second, allTarget], [], [], oneReady),
     ).toMatchObject({
       entryReady: false,
-      unmetEntryStageIds: [second.id],
+      unmetEntryStageIds: [first.id, second.id],
     });
     expect(
       readiness(anyTarget, [first, second, anyTarget], [], [], oneReady)
         .entryReady,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       readiness(
         allTarget,
@@ -369,7 +351,7 @@ describe("Phase 4D-2 Stage readiness", () => {
         [],
         state({ evidenceStageIds: [first.id, second.id] }),
       ).entryReady,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("track-goal checkpoint 同时要求共享 checkpoint 与当前全局 Track goal", () => {
@@ -399,7 +381,7 @@ describe("Phase 4D-2 Stage readiness", () => {
     );
     expect(blocked.entryGate).toMatchObject({
       kind: "track-goal-checkpoint",
-      checkpointReady: true,
+      checkpointReady: false,
       trackGoalReady: false,
       actualTrackGoal: "understand",
       minimumTrackGoal: "master",
@@ -419,7 +401,7 @@ describe("Phase 4D-2 Stage readiness", () => {
           },
         }),
       ).entryReady,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("Stage 11 形式的公共 allOf 与高级方向 anyOf 会随主副 Track 交换", () => {
@@ -467,7 +449,7 @@ describe("Phase 4D-2 Stage readiness", () => {
         },
       }),
     );
-    expect(industrialMajor.entryReady).toBe(true);
+    expect(industrialMajor.entryReady).toBe(false);
 
     const computationalMajor = readiness(
       capstone,
@@ -482,7 +464,7 @@ describe("Phase 4D-2 Stage readiness", () => {
         },
       }),
     );
-    expect(computationalMajor.entryReady).toBe(true);
+    expect(computationalMajor.entryReady).toBe(false);
 
     const noMasterBranch = readiness(
       capstone,
@@ -499,12 +481,12 @@ describe("Phase 4D-2 Stage readiness", () => {
     );
     expect(noMasterBranch).toMatchObject({
       entryReady: false,
-      unmetEntryStageIds: [],
+      unmetEntryStageIds: [common.id, industrial.id, computational.id],
     });
     expect(noMasterBranch.entryGate).toMatchObject({
       kind: "allOf",
       gates: [
-        { kind: "checkpoint", ready: true },
+        { kind: "checkpoint", ready: false },
         { kind: "anyOf", ready: false },
       ],
     });
@@ -542,7 +524,8 @@ describe("Phase 4D-2 Stage readiness", () => {
       }),
     );
     expect(inactive).toMatchObject({
-      ready: true,
+      ready: false,
+      nonRetestReady: true,
       effectiveRequiredProjectIds: [],
       unmetExitCriterionIds: [],
     });
@@ -587,7 +570,7 @@ describe("Phase 4D-2 Stage readiness", () => {
     ).toEqual([shared.id]);
   });
 
-  it("分类出口只有在满足正式复测间隔后才形成 ready checkpoint", () => {
+  it("B1 reserved retest 记录不能授予最终 ready（合法等待另有 R1 直接测试）", () => {
     const retested = stage("stage.retested", { retestAfterDays: 7 });
     const beforeRetest = readiness(
       retested,
@@ -604,8 +587,7 @@ describe("Phase 4D-2 Stage readiness", () => {
     );
     expect(beforeRetest).toMatchObject({
       ready: false,
-      retestDue: true,
-      blockers: [{ code: "retest", retestAfterDays: 7 }],
+      retestDue: false,
     });
 
     const afterRetest = readiness(
@@ -622,7 +604,7 @@ describe("Phase 4D-2 Stage readiness", () => {
         },
       }),
     );
-    expect(afterRetest).toMatchObject({ ready: true, retestDue: false });
+    expect(afterRetest).toMatchObject({ ready: false, retestDue: false });
   });
 
   it("相同 catalog、Track 与 Progress 输入产生完全相同的结构化结果", () => {

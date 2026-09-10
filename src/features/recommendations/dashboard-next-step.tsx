@@ -86,6 +86,13 @@ export function DashboardNextStep({
       {project ? <Link className="mt-4 inline-block underline underline-offset-4" href={`/projects/${project.slug}/#milestone=${encodeURIComponent(nextStep.milestoneId)}`}>{nextStep.contractPublished ? "进入项目增量" : "查看增量发布状态"}</Link> : null}
     </section>;
   }
+  if ("stageId" in nextStep) {
+    return <section className="mt-8" aria-labelledby="next-step-title" data-dashboard-next-step={nextStep.kind}>
+      <h2 id="next-step-title" className="text-2xl font-semibold">下一步：{nextStep.title}</h2>
+      <p className="mt-3">{nextStep.reasonText}</p>
+      <Link className="mt-4 inline-block underline underline-offset-4" href={`/roadmap/#stage-exit-${nextStep.stageId}`}>查看出口证据与资格</Link>
+    </section>;
+  }
   const concept = catalog.concepts.find(({ id }) => id === nextStep.targetId);
   if (!concept) {
     return (

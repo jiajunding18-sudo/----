@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stageProgressSchema } from "./stage-progress-schemas";
 
 import {
   conceptIdSchema,
@@ -367,6 +368,12 @@ export const learningStateV2Schema = learningStateV1Schema.extend({
   projectProgress: z.record(projectIdSchema, projectProgressSchema),
 });
 export type LearningStateV2 = z.infer<typeof learningStateV2Schema>;
+
+export const learningStateV3Schema = learningStateV2Schema.extend({
+  schemaVersion: z.literal(3),
+  stageCheckpoints: z.record(stageIdSchema, stageProgressSchema),
+});
+export type LearningStateV3 = z.infer<typeof learningStateV3Schema>;
 
 export type EvidenceKind = z.infer<typeof evidenceKindSchema>;
 export type MasteryEvidence = z.infer<typeof masteryEvidenceSchema>;

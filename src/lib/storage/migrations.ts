@@ -1,14 +1,15 @@
 import { z } from "zod";
-import { learningStateV1Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV1Schema, learningStateV2Schema } from "@/lib/validation/progress-schemas";
 import { migrateLearningStateV1ToV2 } from "./project-milestone-migration";
+import { migrateLearningStateV2ToV3 } from "./stage-progress-migration";
 
 import {
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_SCHEMA_VERSION,
-  exportEnvelopeV2Schema,
-  persistedEnvelopeV2Schema,
-  type ExportEnvelopeV2,
-  type PersistedEnvelopeV2,
+  exportEnvelopeV3Schema,
+  persistedEnvelopeV3Schema,
+  type ExportEnvelopeV3,
+  type PersistedEnvelopeV3,
 } from "./learning-state";
 
 const envelopeHeaderSchema = z.looseObject({
@@ -92,8 +93,8 @@ export function applySequentialMigrations<Value>(options: {
 }
 
 // v1 → v2 is the first real migration. Old schemas remain strict at the boundary.
-const previousPersistedSchema = persistedEnvelopeV2Schema.extend({ schemaVersion: z.literal(1), payload: learningStateV1Schema });
-const previousExportSchema = exportEnvelopeV2Schema.extend({ schemaVersion: z.literal(1), payload: learningStateV1Schema });
+const previousPersistedSchema = persistedEnvelopeV3Schema.extend({ schemaVersion: z.literal(1), payload: learningStateV1Schema });
+const previousExportSchema = exportEnvelopeV3Schema.extend({ schemaVersion: z.literal(1), payload: learningStateV1Schema });
 const persistedMigrations = new Map<number, SequentialMigration>([[1, {
   fromVersion: 1, fromSchema: previousPersistedSchema,
   migrate: (input) => { const value = previousPersistedSchema.parse(input); return { ...value, schemaVersion: 2, payload: migrateLearningStateV1ToV2(value.payload) }; },
@@ -103,9 +104,14 @@ const exportMigrations = new Map<number, SequentialMigration>([[1, {
   migrate: (input) => { const value = previousExportSchema.parse(input); return { ...value, schemaVersion: 2, payload: migrateLearningStateV1ToV2(value.payload) }; },
 }]]);
 
+const previousPersistedV2 = persistedEnvelopeV3Schema.extend({ schemaVersion: z.literal(2), payload: learningStateV2Schema });
+const previousExportV2 = exportEnvelopeV3Schema.extend({ schemaVersion: z.literal(2), payload: learningStateV2Schema });
+persistedMigrations.set(2, { fromVersion: 2, fromSchema: previousPersistedV2, migrate: (input) => { const value = previousPersistedV2.parse(input); return { ...value, schemaVersion: 3, payload: migrateLearningStateV2ToV3(value.payload) }; } });
+exportMigrations.set(2, { fromVersion: 2, fromSchema: previousExportV2, migrate: (input) => { const value = previousExportV2.parse(input); return { ...value, schemaVersion: 3, payload: migrateLearningStateV2ToV3(value.payload) }; } });
+
 export function migratePersistedEnvelope(
   input: unknown,
-): MigrationResult<PersistedEnvelopeV2> {
+): MigrationResult<PersistedEnvelopeV3> {
   const header = envelopeHeaderSchema.safeParse(input);
   if (!header.success) {
     return {
@@ -119,14 +125,14 @@ export function migratePersistedEnvelope(
     input,
     inputVersion: header.data.schemaVersion,
     targetVersion: LEARNING_STATE_SCHEMA_VERSION,
-    targetSchema: persistedEnvelopeV2Schema,
+    targetSchema: persistedEnvelopeV3Schema,
     migrations: persistedMigrations,
   });
 }
 
 export function migrateExportEnvelope(
   input: unknown,
-): MigrationResult<ExportEnvelopeV2> {
+): MigrationResult<ExportEnvelopeV3> {
   const header = envelopeHeaderSchema.safeParse(input);
   if (!header.success) {
     return {
@@ -140,7 +146,7 @@ export function migrateExportEnvelope(
     input,
     inputVersion: header.data.schemaVersion,
     targetVersion: LEARNING_STATE_SCHEMA_VERSION,
-    targetSchema: exportEnvelopeV2Schema,
+    targetSchema: exportEnvelopeV3Schema,
     migrations: exportMigrations,
   });
 }

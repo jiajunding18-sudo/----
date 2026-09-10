@@ -1,15 +1,17 @@
 import { z } from "zod";
+import { mergeStageCheckpoints } from "./stage-checkpoint-merge";
+import type { StageProgress } from "@/lib/validation/stage-progress-schemas";
+import { reconcileStageEligibility, stageInspectionErrors } from "@/features/progress/stage-lifecycle";
 
 import {
   inspectLearningStateAgainstCatalog,
   type ProgressCatalog,
 } from "@/features/progress/progress-domain";
-import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
 import type {
   ConceptProgress,
-  LearningStateV2,
+  LearningStateV3,
   ProjectProgress,
-  StageCheckpoint,
   StudyLog,
 } from "@/types";
 
@@ -17,7 +19,7 @@ import {
   createExportEnvelope,
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_SCHEMA_VERSION,
-  type ExportEnvelopeV2,
+  type ExportEnvelopeV3,
 } from "./learning-state";
 import { migrateExportEnvelope } from "./migrations";
 
@@ -49,8 +51,8 @@ export interface ImportPreview {
 }
 
 export interface PreparedLearningStateImport {
-  readonly envelope: ExportEnvelopeV2;
-  readonly nextState: LearningStateV2;
+  readonly envelope: ExportEnvelopeV3;
+  readonly nextState: LearningStateV3;
   readonly preview: ImportPreview;
 }
 
@@ -132,10 +134,10 @@ function mergeRecord<Value extends { readonly updatedAt: string }>(
 }
 
 export function mergeLearningStates(
-  current: LearningStateV2,
-  incoming: LearningStateV2,
-): LearningStateV2 {
-  return learningStateV2Schema.parse({
+  current: LearningStateV3,
+  incoming: LearningStateV3,
+): LearningStateV3 {
+  return learningStateV3Schema.parse({
     schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
     preferences: chooseNewer(current.preferences, incoming.preferences),
     conceptProgress: mergeRecord<ConceptProgress>(
@@ -148,9 +150,10 @@ export function mergeLearningStates(
       incoming.projectProgress,
       mergeProjectProgress,
     ),
-    stageCheckpoints: mergeRecord<StageCheckpoint>(
+    stageCheckpoints: mergeRecord<StageProgress>(
       current.stageCheckpoints,
       incoming.stageCheckpoints,
+      mergeStageCheckpoints,
     ),
     studyLogs: mergeByStableId<StudyLog>(current.studyLogs, incoming.studyLogs),
   });
@@ -190,12 +193,12 @@ function summarizeStudyLogChanges(
 }
 
 export function createLearningBackup(options: {
-  readonly state: LearningStateV2;
+  readonly state: LearningStateV3;
   readonly contentVersion: string;
   readonly revision: number;
   readonly savedAt: string;
   readonly exportedAt: string;
-}): { readonly envelope: ExportEnvelopeV2; readonly json: string } {
+}): { readonly envelope: ExportEnvelopeV3; readonly json: string } {
   const envelope = createExportEnvelope(
     options.state,
     options.contentVersion,
@@ -211,8 +214,9 @@ export function getLearningBackupFileName(localDate: string) {
 }
 
 export function prepareLearningStateImport(options: {
+  readonly now?: string;
   readonly raw: string;
-  readonly currentState: LearningStateV2;
+  readonly currentState: LearningStateV3;
   readonly catalog: ProgressCatalog;
   readonly mode: ImportMode;
 }): PrepareImportResult {
@@ -276,10 +280,17 @@ export function prepareLearningStateImport(options: {
     };
   }
 
-  const nextState =
-    options.mode === "merge"
+  let nextState: LearningStateV3;
+  try {
+    const timestamp = options.now ?? new Date().toISOString();
+    const stageErrors = stageInspectionErrors(migrated.value.payload, options.catalog, timestamp, true);
+    if (stageErrors.length) throw new Error(stageErrors.join("；"));
+    nextState = reconcileStageEligibility(options.mode === "merge"
       ? mergeLearningStates(options.currentState, migrated.value.payload)
-      : learningStateV2Schema.parse(migrated.value.payload);
+      : learningStateV3Schema.parse(migrated.value.payload), options.catalog, timestamp);
+  } catch (error) {
+    return { ok: false, code: "catalog-conflict", message: error instanceof Error ? error.message : String(error) };
+  }
   const records = Object.values(migrated.value.payload.conceptProgress);
 
   return {

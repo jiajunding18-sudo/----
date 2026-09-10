@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { mutateStageCriterion, reconcileStageEligibility, stageInspectionErrors, type StageAction } from "./stage-lifecycle";
 import { mutateProjectMilestone, type MilestoneAction } from "@/features/projects/project-milestone-progress";
 
 import {
@@ -38,16 +39,16 @@ import {
   createPersistedEnvelope,
   getLearningBackupFileName,
   prepareLearningStateImport,
-  type ExportEnvelopeV2,
+  type ExportEnvelopeV3,
   type ImportMode,
   type LearningStateStorageAdapter,
   LocalStorageLearningStateAdapter,
   type PreparedLearningStateImport,
   type PrepareImportResult,
 } from "@/lib/storage";
-import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
 import type {
-  LearningStateV2,
+  LearningStateV3,
   MasteryEvidence,
   StudyLog,
   UserDifficulty,
@@ -109,7 +110,7 @@ export type DataManagementActionResult =
 export type BackupCreationResult =
   | {
       readonly ok: true;
-      readonly envelope: ExportEnvelopeV2;
+      readonly envelope: ExportEnvelopeV3;
       readonly filename: string;
       readonly json: string;
     }
@@ -119,8 +120,9 @@ export type BackupCreationResult =
     };
 
 export interface LearningStoreState {
+  mutateStage: (stageId: string, criterionId: string, action: StageAction) => Promise<DataManagementActionResult>;
   mutateMilestone: (projectId: string, milestoneId: string, action: MilestoneAction) => Promise<ProjectLearningStoreActionResult>;
-  readonly learningState: LearningStateV2;
+  readonly learningState: LearningStateV3;
   readonly hydrated: boolean;
   readonly persistenceStatus: PersistenceStatus;
   readonly persistenceMessage?: string;
@@ -246,9 +248,9 @@ export function createLearningStore({
   );
   const initialState = () => createInitialLearningState(catalog.tracks, now());
 
-  return createStore<LearningStoreState>()((set, get) => {
+  const store = createStore<LearningStoreState>()((set, get) => {
     async function persist(
-      nextState: LearningStateV2,
+      nextState: LearningStateV3,
     ): Promise<string | undefined> {
       const current = get();
       const nextRevision = current.revision + 1;
@@ -287,9 +289,9 @@ export function createLearningStore({
     }
 
     async function persistAtomically(
-      nextState: LearningStateV2,
+      nextState: LearningStateV3,
     ): Promise<DataManagementActionResult> {
-      const parsed = learningStateV2Schema.safeParse(nextState);
+      const parsed = learningStateV3Schema.safeParse(nextState);
       if (!parsed.success) {
         return {
           ok: false,
@@ -371,13 +373,17 @@ export function createLearningStore({
       }
 
       const current = get().learningState;
-      const nextState = learningStateV2Schema.parse({
+      let nextState = learningStateV3Schema.parse({
         ...current,
         conceptProgress: {
           ...current.conceptProgress,
           [conceptId]: mutation.progress,
         },
       });
+      if (current.conceptProgress[conceptId]?.status !== mutation.progress.status || JSON.stringify(current.conceptProgress[conceptId]?.evidence ?? []) !== JSON.stringify(mutation.progress.evidence)) {
+        try { nextState = reconcileStageEligibility(nextState, catalog, now()); }
+        catch (error) { return { ok: false, code: "persistence-error", message: `Stage 协调拒绝写入：${String(error)}` }; }
+      }
       const persistenceError = await persist(nextState);
       if (persistenceError) {
         return {
@@ -403,13 +409,15 @@ export function createLearningStore({
       }
 
       const current = get().learningState;
-      const nextState = learningStateV2Schema.parse({
+      let nextState = learningStateV3Schema.parse({
         ...current,
         projectProgress: {
           ...current.projectProgress,
           [projectId]: mutation.progress,
         },
       });
+      try { nextState = reconcileStageEligibility(nextState, catalog, now()); }
+      catch (error) { return { ok: false, code: "persistence-error", message: `Stage 协调拒绝写入：${String(error)}` }; }
       const persistenceError = await persist(nextState);
       if (persistenceError) {
         return {
@@ -450,7 +458,7 @@ export function createLearningStore({
         return "原始本地数据需要恢复处理；为避免覆盖，当前已禁用持久化写入。";
       }
       const current = get().learningState;
-      const nextState = learningStateV2Schema.parse({
+      const nextState = learningStateV3Schema.parse({
         ...current,
         studyLogs: nextLogs,
       });
@@ -458,6 +466,11 @@ export function createLearningStore({
     }
 
     return {
+      mutateStage: async (stageId, criterionId, action) => {
+        if (!get().hydrated || !["ready", "error"].includes(get().persistenceStatus)) return { ok: false, code: "save-failed", message: "本地状态尚未就绪，不能写入 Stage evidence" };
+        try { return await persistAtomically(mutateStageCriterion(get().learningState, catalog, stageId, criterionId, action, now())); }
+        catch (error) { return { ok: false, code: "invalid-import", message: error instanceof Error ? error.message : String(error) }; }
+      },
       mutateMilestone: async (projectId, milestoneId, action) => {
         const project = projectsById.get(projectId);
         if (!project) return { ok: false, code: "missing-project", message: `不存在 Project ${projectId}` };
@@ -511,6 +524,7 @@ export function createLearningStore({
           loaded.value.payload,
           catalog,
         );
+        inspection.errors.push(...stageInspectionErrors(loaded.value.payload, catalog, now()));
         if (inspection.errors.length > 0) {
           set({
             learningState: initialState(),
@@ -540,6 +554,15 @@ export function createLearningStore({
           revision: loaded.value.revision,
           savedAt: loaded.value.savedAt,
         });
+        try {
+          const coordinated = reconcileStageEligibility(loaded.value.payload, catalog, now());
+          if (JSON.stringify(coordinated) !== JSON.stringify(loaded.value.payload)) {
+            await adapter.saveRawRecovery(loaded.raw ?? JSON.stringify(loaded.value), now());
+            await persistAtomically(coordinated);
+          }
+        } catch (error) {
+          set({ persistenceStatus: "blocked", persistenceMessage: String(error), rawRecoveryData: loaded.raw ?? JSON.stringify(loaded.value) });
+        }
       },
 
       startConcept: async (conceptId) => {
@@ -895,7 +918,7 @@ export function createLearningStore({
 
       recordBackupCreated: async (timestamp) => {
         const current = get().learningState;
-        const nextState = learningStateV2Schema.parse({
+        const nextState = learningStateV3Schema.parse({
           ...current,
           preferences: {
             ...current.preferences,
@@ -908,6 +931,7 @@ export function createLearningStore({
 
       prepareImport: (raw, mode) =>
         prepareLearningStateImport({
+          now: now(),
           raw,
           currentState: get().learningState,
           catalog,
@@ -924,6 +948,7 @@ export function createLearningStore({
         }
 
         const refreshed = prepareLearningStateImport({
+          now: now(),
           raw: JSON.stringify(prepared.envelope),
           currentState: get().learningState,
           catalog,
@@ -959,7 +984,7 @@ export function createLearningStore({
         if (!recovery.ok) return recovery;
         const timestamp = now();
         const current = get().learningState;
-        const nextState = learningStateV2Schema.parse({
+        const nextState = learningStateV3Schema.parse({
           ...current,
           preferences: {
             ...current.preferences,
@@ -977,4 +1002,41 @@ export function createLearningStore({
       },
     };
   });
+  // Serialize before reading/deriving state, not merely before writing a stale snapshot.
+  // All asynchronous writes share this queue; a rejected transaction releases it.
+  let pending: Promise<unknown> = Promise.resolve();
+  function serialize<Args extends unknown[], Result>(action: (...args: Args) => Promise<Result>) {
+    return (...args: Args): Promise<Result> => {
+      const result = pending.then(() => action(...args));
+      pending = result.then(() => undefined, () => undefined);
+      return result;
+    };
+  }
+  const actions = store.getState();
+  store.setState({
+    hydrate: serialize(actions.hydrate),
+    mutateStage: serialize(actions.mutateStage),
+    mutateMilestone: serialize(actions.mutateMilestone),
+    startConcept: serialize(actions.startConcept),
+    markUnderstood: serialize(actions.markUnderstood),
+    addEvidence: serialize(actions.addEvidence),
+    confirmMastery: serialize(actions.confirmMastery),
+    downgradeConcept: serialize(actions.downgradeConcept),
+    updateConceptNote: serialize(actions.updateConceptNote),
+    setConceptFavorite: serialize(actions.setConceptFavorite),
+    setConceptUserDifficulty: serialize(actions.setConceptUserDifficulty),
+    startProject: serialize(actions.startProject),
+    setProjectEnvironmentCheck: serialize(actions.setProjectEnvironmentCheck),
+    setProjectAcceptanceCriterion: serialize(actions.setProjectAcceptanceCriterion),
+    addProjectDeliverable: serialize(actions.addProjectDeliverable),
+    removeProjectDeliverable: serialize(actions.removeProjectDeliverable),
+    completeProject: serialize(actions.completeProject),
+    createStudyLog: serialize(actions.createStudyLog),
+    updateStudyLog: serialize(actions.updateStudyLog),
+    deleteStudyLog: serialize(actions.deleteStudyLog),
+    recordBackupCreated: serialize(actions.recordBackupCreated),
+    applyImport: serialize(actions.applyImport),
+    resetLearningData: serialize(actions.resetLearningData),
+  });
+  return store;
 }

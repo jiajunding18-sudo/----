@@ -4,13 +4,15 @@ import {
   hasReachedRequiredStatus,
   type RequiredConceptStatus,
 } from "@/features/progress/progress-domain";
-import { isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
+import { getProjectScopeProgress, isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
+import { activeCycle, criterionSatisfied, historicalStageCompleted, stableSnapshot } from "./stage-evidence";
+import type { ProgressProjectDefinition } from "./progress-domain";
+import type { EligibilityCycle, StageProgress } from "@/lib/validation/stage-progress-schemas";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type {
   CheckpointGate,
   ConceptMeta,
-  LearningStateV2,
-  ProjectMeta,
+  LearningStateV3,
   StageDefinition,
   TrackDefinition,
   TrackGoal,
@@ -80,6 +82,13 @@ export type StageReadinessBlocker =
     };
 
 export interface StageReadiness {
+  readonly nonRetestReady: boolean;
+  readonly currentEligibilityValid: boolean;
+  readonly qualificationBasis?: NonNullable<EligibilityCycle["qualificationBasis"]>;
+  readonly activeEligibility?: EligibilityCycle;
+  readonly historicalCompletion?: StageProgress["historicalCompletion"];
+  readonly retestRequired: boolean;
+  readonly temporalRetestValid: boolean;
   readonly ready: boolean;
   readonly blocked: boolean;
   readonly entryReady: boolean;
@@ -96,16 +105,17 @@ export interface StageReadiness {
 }
 
 type ReadonlyStage = DeepReadonly<StageDefinition>;
-type ReadonlyConcept = DeepReadonly<ConceptMeta>;
-type ReadonlyProject = DeepReadonly<ProjectMeta>;
-type ReadonlyTrack = DeepReadonly<TrackDefinition>;
+type ReadonlyConcept = DeepReadonly<Pick<ConceptMeta, "id" | "stageId" | "publicationStatus" | "requiredness" | "targetDepth" | "trackIds">> & { readonly title?: string };
+type ReadonlyProject = ProgressProjectDefinition & { readonly title?: string };
+type ReadonlyTrack = Pick<TrackDefinition, "id" | "kind" | "defaultGoal"> & { readonly title?: string };
 
 interface StageReadinessContext {
+  readonly now: string;
   readonly stages: readonly ReadonlyStage[];
   readonly concepts: readonly ReadonlyConcept[];
   readonly projects: readonly ReadonlyProject[];
   readonly tracks: readonly ReadonlyTrack[];
-  readonly state: LearningStateV2;
+  readonly state: LearningStateV3;
   readonly stagesById: ReadonlyMap<string, ReadonlyStage>;
   readonly projectsById: ReadonlyMap<string, ReadonlyProject>;
   readonly tracksById: ReadonlyMap<string, ReadonlyTrack>;
@@ -213,17 +223,6 @@ function evaluateEntryGate(
   };
 }
 
-function hasValidRetest(
-  initiallyEligibleAt: string | undefined,
-  retestedAt: string | undefined,
-  retestAfterDays: number,
-) {
-  if (!initiallyEligibleAt || !retestedAt) return false;
-  const eligibleAt = Date.parse(initiallyEligibleAt);
-  const retestAt = Date.parse(retestedAt);
-  return retestAt >= eligibleAt + retestAfterDays * 24 * 60 * 60 * 1_000;
-}
-
 function evaluateStage(
   stage: ReadonlyStage,
   context: StageReadinessContext,
@@ -235,6 +234,7 @@ function evaluateStage(
   // synthetic or corrupted catalogs without inventing a second recovery rule.
   if (context.evaluating.has(stage.id)) {
     return {
+      nonRetestReady: false, currentEligibilityValid: false, retestRequired: stage.retestAfterDays !== undefined, temporalRetestValid: false,
       ready: false,
       blocked: true,
       entryReady: false,
@@ -291,7 +291,7 @@ function evaluateStage(
     conceptBlockers.push({
       code: "concept-status",
       conceptId: concept.id,
-      conceptTitle: concept.title,
+      conceptTitle: concept.title ?? concept.id,
       requiredStatus,
     });
   }
@@ -338,7 +338,7 @@ function evaluateStage(
       projectBlockers.push({
         code: "project-requirement",
         projectId,
-        projectTitle: project.title,
+        projectTitle: project.title ?? project.id,
         conceptId: requirement.conceptId,
         conceptTitle: concept?.title ?? requirement.conceptId,
         requiredStatus: requirement.minimumStatus,
@@ -351,7 +351,7 @@ function evaluateStage(
     (criterion) =>
       criterion.required &&
       isConditionActive(context, criterion.when) &&
-      (checkpoint?.criterionEvidence[criterion.id]?.length ?? 0) === 0,
+      !criterionSatisfied(checkpoint?.criteria[criterion.id], context.state, context, context.now),
   );
   const unmetExitCriterionIds = unmetExitCriteria.map(({ id }) => id);
   const exitBlockers: StageReadinessBlocker[] = unmetExitCriteria.map(
@@ -363,21 +363,49 @@ function evaluateStage(
   );
 
   const baseReady =
+    stage.contentStatus === "available" &&
     entryReady &&
     unmetMasterConceptIds.length === 0 &&
     unmetUnderstandConceptIds.length === 0 &&
     unmetProjectRequirementConceptIds.length === 0 &&
     incompleteProjectIds.length === 0 &&
     unmetExitCriterionIds.length === 0;
-  const retestDue =
-    baseReady &&
-    stage.retestAfterDays !== undefined &&
-    !hasValidRetest(
-      checkpoint?.initiallyEligibleAt,
-      checkpoint?.retestedAt,
-      stage.retestAfterDays,
-    );
-  const ready = baseReady && !retestDue;
+  const requiredCriteria = stage.exitCriteria.filter(c => c.required && isConditionActive(context, c.when)).toSorted((a,b) => a.id.localeCompare(b.id));
+  const criterionBasis = requiredCriteria.map(c => [c.id, checkpoint?.criteria[c.id]]);
+  const floors = requiredCriteria.map(c => checkpoint?.criteria[c.id]?.confirmedAt).filter((t): t is string => !!t);
+  function conceptRequirementBasis(id: string, required: RequiredConceptStatus) {
+    const progress = context.state.conceptProgress[id];
+    // understoodAt is only a known lower bound, not the latest reacquisition.
+    // lastMasteredAt is the existing explicit mastery transition; notes do not change it.
+    const transition = required === "mastered" ? progress?.lastMasteredAt : progress?.understoodAt;
+    if (transition) floors.push(transition);
+    return [id, required, getConceptStatus(context.state.conceptProgress, id), transition];
+  }
+  const conceptBasis = context.concepts.filter(c => c.stageId === stage.id && c.publicationStatus === "published" && c.requiredness === "required").map(c => conceptRequirementBasis(c.id, getRouteRequiredStatus(c, context.tracks, context.state.preferences))).sort((a,b) => String(a[0]).localeCompare(String(b[0])));
+  const projectBasis = effectiveProjectGates.map(g => {
+    const project = context.projectsById.get(g.projectId);
+    const scoped = project && resolveProjectMilestone(project, g.milestoneId);
+    const progress = getProjectScopeProgress(context.state, g.projectId, g.milestoneId);
+    return [g.projectId, g.milestoneId, progress?.status, progress?.completedAt, progress?.completionConfirmation, scoped?.conceptRequirements.filter(r => r.kind === "hard").map(r => conceptRequirementBasis(r.conceptId, r.minimumStatus))];
+  });
+  for (const gate of effectiveProjectGates) {
+    const projectProgress = getProjectScopeProgress(context.state, gate.projectId, gate.milestoneId);
+    const time = projectProgress?.completedAt;
+    if (time) floors.push(time);
+    if (projectProgress?.completionConfirmation?.confirmedAt) floors.push(projectProgress.completionConfirmation.confirmedAt);
+  }
+  // Status snapshots cover prerequisites without a reliable latest transition date.
+  // Never guess first qualification from Concept updatedAt (also changed by notes).
+  const qualificationBasis = baseReady ? {
+    fingerprint: stableSnapshot([stage.id, stage.entryGate, conceptBasis, projectBasis, criterionBasis, Object.entries(context.state.preferences.trackGoals).sort(([a],[b]) => a.localeCompare(b))]),
+    notBefore: floors.sort().at(-1) ?? "1970-01-01T00:00:00.000Z",
+  } : undefined;
+  const candidate = activeCycle(checkpoint, context.now);
+  const eligibility = candidate && qualificationBasis && JSON.stringify(candidate.qualificationBasis) === JSON.stringify(qualificationBasis) && Date.parse(candidate.eligibleAt) >= Date.parse(qualificationBasis.notBefore) ? candidate : undefined;
+  const completion = undefined;
+  const temporalRetestValid = false;
+  const ready = historicalStageCompleted(stage, checkpoint, context.now);
+  const retestDue = baseReady && stage.retestAfterDays !== undefined && !ready;
   const blockers: StageReadinessBlocker[] = [
     ...(entryGate && !entryReady
       ? [
@@ -396,14 +424,21 @@ function evaluateStage(
           {
             code: "retest" as const,
             retestAfterDays: stage.retestAfterDays,
-            initiallyEligibleAt: checkpoint?.initiallyEligibleAt,
-            retestedAt: checkpoint?.retestedAt,
+            initiallyEligibleAt: eligibility?.eligibleAt,
+            retestedAt: undefined,
           },
         ]
       : []),
   ];
 
   const result: StageReadiness = {
+    nonRetestReady: baseReady,
+    currentEligibilityValid: !!eligibility,
+    qualificationBasis,
+    activeEligibility: baseReady ? eligibility : undefined,
+    historicalCompletion: ready ? completion : undefined,
+    retestRequired: stage.retestAfterDays !== undefined,
+    temporalRetestValid,
     ready,
     blocked: !ready,
     entryReady,
@@ -429,12 +464,14 @@ function evaluateStage(
 export function getStageReadiness(
   stage: DeepReadonly<StageDefinition>,
   stages: readonly DeepReadonly<StageDefinition>[],
-  concepts: readonly DeepReadonly<ConceptMeta>[],
-  projects: readonly DeepReadonly<ProjectMeta>[],
-  tracks: readonly DeepReadonly<TrackDefinition>[],
-  state: LearningStateV2,
+  concepts: readonly ReadonlyConcept[],
+  projects: readonly ReadonlyProject[],
+  tracks: readonly ReadonlyTrack[],
+  state: LearningStateV3,
+  now: string = new Date().toISOString(),
 ): StageReadiness {
   const context: StageReadinessContext = {
+    now,
     stages,
     concepts,
     projects,

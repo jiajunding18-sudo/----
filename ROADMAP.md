@@ -285,7 +285,7 @@ Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computin
 - 面对陌生图片，先检查路径、形状、类型、通道、范围和方向，再选择处理方法。
 - 能解释至少三类常见错误：BGR/RGB 混淆、`uint8` 溢出、宽高/行列/坐标混淆。
 - 能把交互式试验整理为批处理程序，参数、输入、输出和失败均可追踪。
-- `project.classical-inspection` 在未见过的测试图片上运行，并保留成功与失败样例。
+- `project.classical-inspection` 在未见过图片上的成功/失败材料属于后续 Classical Inspection / Stage 3 的候选桥接材料，不是 Stage 2 当前第三项隐藏出口门槛。Stage 2 正式出口保持 catalog 的 data-contract、batch-pipeline 两项，加 Pixel Lab image-computing milestone gate 与复测。
 - 能明确区分“视觉上看起来不错”和“用指标或规则验证过”。
 
 ---
@@ -818,9 +818,9 @@ Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computin
 2. checkpoint 内所有已发布必修节点均达到有效目标；项目 `minimumStatus` 可以再提高相关节点门槛，A 节点只有在被当前必做项目提升时才参与；
 3. 第 1.5 节在当前 Track 目标下生效的 `projectGates` 均通过核心验收；“关联项目”本身不构成门槛；
 4. 当前 Track 目标下生效的每项必需出口标准均有通过证据。未通过标记只用于显示阻塞，不能满足完成条件；Stage 9/10 的 U/M 共同标准始终生效，主修级标准只在对应 Track 目标为 `master` 时生效；
-5. 若 checkpoint 配置 `retestAfterDays`，复测时间必须不早于首次同时满足前四项的 `initiallyEligibleAt + retestAfterDays`。第 1.5 节中 `categoryExitForTrackIds` 非空的分类出口统一配置为 7 天；只有该字段为空的中间 checkpoint 才可省略或另行配置复测。
+5. 若 checkpoint 配置 `retestAfterDays`，复测须绑定有效资格轮次，时间不早于该轮次 `eligibleAt + retestAfterDays × 24h` 且不晚于当前时间。第 1.5 节中 `categoryExitForTrackIds` 非空的分类出口统一配置为连续 168 小时；只有该字段为空的中间 checkpoint 才可省略或另行配置复测。
 
-任一前四项后来失效时，当前 `initiallyEligibleAt` 失效并在再次全部满足时重记；旧复测历史可以保留，但不能满足新一轮间隔。页面进度严格采用 `PRODUCT_SPEC.md` 定义的覆盖、理解、掌握三类比例，对当前路线已发布的必修节点按稳定 ID 去重后计算，不做主观加权。阶段是否通过是独立判定，因此 U 节点已达标时掌握进度不必为 `100%`。
+最终完成前，任一前四项失效会保留并失效当前资格轮次；再次全部满足时创建新轮次重新计时，不能复用旧复测。当前资格与历史完成分开：正式完成后的历史成果不因知识回退自动撤销，后续 checkpoint gate 消费历史完成。Phase 9E-B1 只提供出口证据与资格管理，复测提交和最终完成动作尚未开放。页面进度仍采用 `PRODUCT_SPEC.md` 的覆盖、理解、掌握三类比例，对已发布必修节点按稳定 ID 去重；U 节点达标时掌握比例不必为 `100%`。
 
 ### 17.3 每四周复盘
 

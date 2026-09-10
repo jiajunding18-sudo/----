@@ -2,14 +2,14 @@ import { migratePersistedEnvelope } from "./migrations";
 import {
   LEARNING_STATE_RECOVERY_KEY_PREFIX,
   LEARNING_STATE_STORAGE_KEY,
-  persistedEnvelopeV2Schema,
-  type PersistedEnvelopeV2,
+  persistedEnvelopeV3Schema,
+  type PersistedEnvelopeV3,
 } from "./learning-state";
 
 export type StorageLoadResult =
   | {
       readonly ok: true;
-      readonly value: PersistedEnvelopeV2 | null;
+      readonly value: PersistedEnvelopeV3 | null;
       readonly raw?: string;
     }
   | {
@@ -21,8 +21,8 @@ export type StorageLoadResult =
 
 export interface LearningStateStorageAdapter {
   load(): Promise<StorageLoadResult>;
-  save(value: PersistedEnvelopeV2): Promise<void>;
-  saveRecovery(value: PersistedEnvelopeV2): Promise<string>;
+  save(value: PersistedEnvelopeV3): Promise<void>;
+  saveRecovery(value: PersistedEnvelopeV3): Promise<string>;
   saveRawRecovery(raw: string, timestamp: string): Promise<string>;
   clear(): Promise<void>;
 }
@@ -126,10 +126,10 @@ export class LocalStorageLearningStateAdapter
 
     const migrated = migratePersistedEnvelope(input);
     const inputVersion = typeof input === "object" && input !== null && "schemaVersion" in input ? input.schemaVersion : "unknown";
-    if (!migrated.ok || inputVersion === 1) {
+    if (!migrated.ok || inputVersion === 1 || inputVersion === 2) {
       try {
-        // Preserve exact v1 bytes before any subsequent v2 save. A failed backup blocks writes.
-        await this.saveRawSnapshot(raw, migrated.ok ? "migration:v1-to-v2" : `load:${String(inputVersion)}:${migrated.reason}:${migrated.message}`);
+        // Preserve exact v1/v2 bytes before any v3 save. A failed backup blocks writes.
+        await this.saveRawSnapshot(raw, migrated.ok ? `migration:v${String(inputVersion)}-to-v3` : `load:${String(inputVersion)}:${migrated.reason}:${migrated.message}`);
       } catch (error) {
         return { ok: false, reason: "corrupt", raw, message: `迁移前备份失败，保留旧数据：${error instanceof Error ? error.message : String(error)}` };
       }
@@ -139,8 +139,8 @@ export class LocalStorageLearningStateAdapter
       : { ...migrated, raw };
   }
 
-  async save(value: PersistedEnvelopeV2): Promise<void> {
-    const parsed = persistedEnvelopeV2Schema.safeParse(value);
+  async save(value: PersistedEnvelopeV3): Promise<void> {
+    const parsed = persistedEnvelopeV3Schema.safeParse(value);
     if (!parsed.success) {
       throw new LearningStateStorageError(
         `拒绝保存未通过校验的学习数据：${parsed.error.message}`,
@@ -165,8 +165,8 @@ export class LocalStorageLearningStateAdapter
     }
   }
 
-  async saveRecovery(value: PersistedEnvelopeV2): Promise<string> {
-    const parsed = persistedEnvelopeV2Schema.safeParse(value);
+  async saveRecovery(value: PersistedEnvelopeV3): Promise<string> {
+    const parsed = persistedEnvelopeV3Schema.safeParse(value);
     if (!parsed.success) {
       throw new LearningStateStorageError(
         `拒绝备份未通过校验的学习数据：${parsed.error.message}`,

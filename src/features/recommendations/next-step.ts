@@ -13,7 +13,7 @@ import type { DeepReadonly } from "@/lib/content/manifest-types";
 import { getProjectScopeProgress, isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
 import type {
   ConceptMeta,
-  LearningStateV2,
+  LearningStateV3,
   ProjectMeta,
   StageDefinition,
   TrackDefinition,
@@ -66,7 +66,14 @@ export interface ProjectMilestoneNextStep {
   readonly contractPublished: boolean;
   readonly reasonText: string;
 }
-export type NextStep = ConceptNextStep | EmptyNextStep | ProjectMilestoneNextStep;
+export interface StageExitNextStep {
+  readonly kind: "stage-exit" | "eligibility-pending";
+  readonly stageId: string;
+  readonly title: string;
+  readonly criterionIds: readonly string[];
+  readonly reasonText: string;
+}
+export type NextStep = ConceptNextStep | EmptyNextStep | ProjectMilestoneNextStep | StageExitNextStep;
 
 export interface NextStepCatalog {
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
@@ -77,12 +84,14 @@ export interface NextStepCatalog {
 
 export interface GetNextStepInput {
   readonly catalog: NextStepCatalog;
-  readonly state: LearningStateV2;
+  readonly state: LearningStateV3;
+  readonly now?: string;
 }
 
 interface RecommendationContext {
+  readonly now: string;
   readonly catalog: NextStepCatalog;
-  readonly state: LearningStateV2;
+  readonly state: LearningStateV3;
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
   readonly conceptsById: ReadonlyMap<string, DeepReadonly<ConceptMeta>>;
   readonly stagesById: ReadonlyMap<string, DeepReadonly<StageDefinition>>;
@@ -117,7 +126,8 @@ function isCurrentPublishedConcept(
 
 function createContext(
   catalog: NextStepCatalog,
-  state: LearningStateV2,
+  state: LearningStateV3,
+  now: string,
 ): RecommendationContext {
   const stageOrder = new Map(catalog.stages.map((stage) => [stage.id, stage.order]));
   const availableStageIds = new Set(
@@ -141,6 +151,7 @@ function createContext(
     .toSorted(compareConcepts);
 
   return {
+    now,
     catalog,
     state,
     concepts,
@@ -167,6 +178,7 @@ function isConceptStageEntryReady(
       context.catalog.projects,
       context.catalog.tracks,
       context.state,
+      context.now,
     );
     context.stageReadiness.set(stage.id, readiness);
   }
@@ -449,12 +461,13 @@ function getProjectGapStep(
 
 function getNextUnlockedConceptStep(
   context: RecommendationContext,
+  onlyNotStarted = true,
 ): ConceptNextStep | undefined {
   const concept = context.concepts.find(
     (candidate) =>
       candidate.requiredness === "required" &&
-      getConceptStatus(context.state.conceptProgress, candidate.id) ===
-        "not_started" &&
+      (!onlyNotStarted || getConceptStatus(context.state.conceptProgress, candidate.id) === "not_started") &&
+      !hasReachedRequiredStatus(getConceptStatus(context.state.conceptProgress, candidate.id), getRouteRequiredStatus(candidate, context.catalog.tracks, context.state.preferences)) &&
       isConceptStageEntryReady(context, candidate) &&
       getConceptReadiness(
         candidate,
@@ -492,8 +505,9 @@ function hasCompletedPublishedRoute(context: RecommendationContext) {
 function getPendingMilestoneStep(context: RecommendationContext): ProjectMilestoneNextStep | undefined {
   const stages = [...context.catalog.stages].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   for (const stage of stages) {
+    if (stage.contentStatus !== "available") continue;
     if (context.state.preferences.activeStageId && context.state.preferences.activeStageId !== stage.id) continue;
-    const readiness = getStageReadiness(stage, context.catalog.stages, context.catalog.concepts, context.catalog.projects, context.catalog.tracks, context.state);
+    const readiness = getStageReadiness(stage, context.catalog.stages, context.catalog.concepts, context.catalog.projects, context.catalog.tracks, context.state, context.now);
     if (!readiness.entryReady || readiness.unmetMasterConceptIds.length || readiness.unmetUnderstandConceptIds.length || readiness.unmetProjectRequirementConceptIds.length) continue;
     for (const gate of stage.projectGates) {
       if (!gate.milestoneId || !readiness.effectiveRequiredProjectIds.includes(gate.projectId)) continue;
@@ -509,14 +523,50 @@ function getPendingMilestoneStep(context: RecommendationContext): ProjectMilesto
   return undefined;
 }
 
-export function getNextStep({ catalog, state }: GetNextStepInput): NextStep {
-  const context = createContext(catalog, state);
+function getStageExitStep(context: RecommendationContext): StageExitNextStep | undefined {
+  for (const stage of [...context.catalog.stages].sort((a,b) => a.order - b.order || a.id.localeCompare(b.id))) {
+    if (stage.contentStatus !== "available" || (context.state.preferences.activeStageId && context.state.preferences.activeStageId !== stage.id)) continue;
+    const r = getStageReadiness(stage, context.catalog.stages, context.catalog.concepts, context.catalog.projects, context.catalog.tracks, context.state, context.now);
+    if (r.ready || !r.entryReady || r.unmetMasterConceptIds.length || r.unmetUnderstandConceptIds.length || r.unmetProjectRequirementConceptIds.length || r.incompleteProjectIds.length) continue;
+    return { kind: r.nonRetestReady ? "eligibility-pending" : "stage-exit", stageId: stage.id, title: stage.title,
+      criterionIds: r.unmetExitCriterionIds,
+      reasonText: r.nonRetestReady ? (r.currentEligibilityValid ? (r.retestRequired ? "首次出口条件与资格已核验；请在规定间隔后完成保留复测。当前资格不等于阶段完成。" : "出口条件与资格已核验；没有额外复测等待天数，仍需最终出口确认。") : "非复测条件已满足，但当前轮次需要核验；请查看出口证据与资格。") : "Concept 与项目门槛已满足；请逐条登记出口证据、解释并显式确认。项目完成不会自动通过出口标准。" };
+  }
+}
+
+export function getNextStep({ catalog, state, now = new Date().toISOString() }: GetNextStepInput): NextStep {
+  const context = createContext(catalog, state, now);
+  const projectFocus = state.preferences.primaryProjectId ? getCurrentPublishedProject(context)?.conceptRequirements.find(r => r.kind === "hard" && !hasReachedRequiredStatus(getConceptStatus(state.conceptProgress, r.conceptId), r.minimumStatus)) : undefined;
+  const focusId = state.preferences.activeStageId ?? context.conceptsById.get(state.preferences.currentConceptId ?? "")?.stageId ?? context.conceptsById.get(projectFocus?.conceptId ?? "")?.stageId;
+  const focus = context.stagesById.get(focusId ?? "");
+  if (focus?.contentStatus === "available") {
+    const r = getStageReadiness(focus, catalog.stages, catalog.concepts, catalog.projects, catalog.tracks, state, now);
+    if (r.entryReady) {
+      const missing = new Set([...r.unmetMasterConceptIds, ...r.unmetUnderstandConceptIds, ...r.unmetProjectRequirementConceptIds]);
+      for (const concept of context.concepts.filter(c => missing.has(c.id))) {
+        if (!isConceptStageEntryReady(context, concept)) continue;
+        let requiredStatus = getRouteRequiredStatus(concept, catalog.tracks, state.preferences);
+        for (const gate of focus.projectGates.filter(g => r.effectiveRequiredProjectIds.includes(g.projectId))) {
+          const project = catalog.projects.find(p => p.id === gate.projectId);
+          if (project && resolveProjectMilestone(project, gate.milestoneId)?.conceptRequirements.some(req => req.kind === "hard" && req.conceptId === concept.id && req.minimumStatus === "mastered")) requiredStatus = "mastered";
+        }
+        if (getConceptReadiness(concept, state.conceptProgress).ready) return createConceptStep(context, concept, requiredStatus, "next-unlocked", "先补齐当前检查点的知识目标，再处理出口。", undefined);
+        const prerequisite = findFirstExecutableHardPrerequisite(context, concept);
+        if (prerequisite) return createHardPrerequisiteStep(context, prerequisite, { blockedConcept: concept });
+      }
+      const scoped = { ...context, state: { ...state, preferences: { ...state.preferences, activeStageId: focus.id } } };
+      const task = getPendingMilestoneStep(scoped) ?? getStageExitStep(scoped);
+      if (task) return task;
+    }
+  }
 
   return (
     getContinueLearningStep(context) ??
     getProjectGapStep(context) ??
     getPendingMilestoneStep(context) ??
+    getStageExitStep(context) ??
     getNextUnlockedConceptStep(context) ??
+    getNextUnlockedConceptStep(context, false) ??
     (hasCompletedPublishedRoute(context)
       ? {
           kind: "empty",

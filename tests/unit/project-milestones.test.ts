@@ -11,7 +11,7 @@ import { getProgressCatalog } from "@/lib/content/site-content";
 import { inspectLearningStateAgainstCatalog } from "@/features/progress/progress-domain";
 import { createLearningStore } from "@/features/progress/learning-store";
 import { projectMetaSchema } from "@/lib/validation/content-schemas";
-import { learningStateV2Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
 import { plannedMilestoneProject } from "../fixtures/project-milestones";
 
 function migrated() {
@@ -30,7 +30,7 @@ function stateForGate() {
       masteryConfirmation: { confirmedAt: historyTime, criterionIds: ids, evidenceIds: [evidenceId], statementVersion: 1 },
     };
   }
-  return learningStateV2Schema.parse(state);
+  return learningStateV3Schema.parse(state);
 }
 const stage = contentManifest.stages.find(({ id }) => id === "stage.image-computing")!;
 function readiness(state = stateForGate(), project = pixelLab) {
@@ -135,7 +135,7 @@ describe("Phase 9E-A1 milestone contract and migration", () => {
     for (const prerequisite of ["tooling.dev-environment", "tooling.python-core", "math.vectors-matrices"]) {
       state.conceptProgress[prerequisite] = { status: "understood", note: "", favorite: false, updatedAt: historyTime, evidence: [] };
     }
-    expect(getNextStep({ catalog: { ...contentManifest, projects: [project] }, state })).toMatchObject({ kind: "recommendation", targetId: "python.numpy-arrays", reasonCode: "project-gap" });
+    expect(getNextStep({ catalog: { ...contentManifest, projects: [project] }, state })).toMatchObject({ kind: "recommendation", targetId: "python.numpy-arrays", reasonCode: "next-unlocked" }); // Current checkpoint target precedes its project task.
   });
   it("migration → persist → hydrate is idempotent and backs up original bytes", async () => {
     const data = new Map<string, string>([[LEARNING_STATE_STORAGE_KEY, JSON.stringify(legacyEnvelope())]]);

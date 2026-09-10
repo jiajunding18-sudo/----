@@ -545,7 +545,7 @@ Stage 9/10 的出口标准与项目门槛也使用同一 Track 目标：副修 `
 - 尚未发布验收契约的 milestone 只显示计划身份，不允许开始或完成。Pixel Lab Stage 2 已在 Phase 9E-1 发布可执行契约；这仅改变内容可用性，不授予任何历史用户该增量的完成状态。
 - Project/milestone 完成不自动改变 Concept progress。界面整体状态从增量派生，不以历史 project-level completed 充当当前 gate。
 - 用户数据经版本化迁移，旧 Pixel Lab 可验证记录只归入 Stage 0 增量，完整保留验收、交付物、确认和时间；未知历史进入恢复流程，不猜测、不清空。
-- 本轮不实现 Stage exit evidence、initiallyEligibleAt 或 retest 写入流程；这些属于 Phase 9E-B。
+- Project 完成不代写 Stage evidence；Phase 9E-B1 的证据与资格按第 10.4 节单独管理，复测与最终完成 action 留给 B2。
 
 项目完成必须同时满足：
 
@@ -554,6 +554,20 @@ Stage 9/10 的出口标准与项目门槛也使用同一 Track 目标：副修 `
 3. 用户手动确认项目完成。
 
 项目完成状态不因知识点降级而自动撤销；系统改为显示“当前知识准备度已变化”。项目完成也不自动改变任何知识状态。
+
+### 10.4 Phase 9E-B1：Stage 出口证据与当前资格
+
+Phase 9E-B1-R1：`nonRetestReady` 只判断可执行 checkpoint 的非复测课程条件；`currentEligibilityValid` 另行验证轮次、时间和资格依据。B1 保留的 historicalCompletion 不具权威性，不能满足 ready 或后续入口 gate。来源失效须持久化撤销当前确认；同 ID 恢复也需重新确认。轮次保存可核对的课程/项目/路线/确认依据，无法验证的旧 anchor 保留为失效历史，在当前核验后重新计时；合法导入保留原轮次。移除的 criterion 保留为孤立历史，不阻塞新课程条件。单 store 写入串行执行，失败不使队列永久阻塞。
+
+当前收口 checkpoint 按正式 focus/route 选择，依次处理本阶段 Concept 目标、Project gate、出口确认与资格，再处理其他学习内容。这一顺序优先于第 9.3 节跨阶段 learning 候选。
+
+- nonRetestReady 是当前入口、已发布必修 Concept 有效目标、生效 Project gate 及 hard requirements、必需出口确认的合取；currentEligibilityValid 还要求合法 active cycle 及依据。historical completion 是未来完整生命周期产生的历史成果；B1 不授予该状态，后续 gate 不消费裸 eligibility 或预留快照。
+- Stage criterion 使用可解析的 Project deliverable 或 Concept passed evidence 引用，加 learner explicit self-confirmation。系统只检查结构与引用，用户负责判断证据是否证明该标准；Project completion/evidenceConceptIds 不自动通过 Stage 出口。
+- 编辑证据撤销该项确认。当前资格首次成立创建带稳定 ID 的 eligibility cycle；失效保留轮次并记录 invalidatedAt，恢复创建新轮次，不重用旧 anchor。相关状态 mutation 后集中协调，selector 无写入副作用，Study Log/笔记不触发资格写入。
+- 复测的 7 天明确为 elapsed 168h，UTC 保存、本地显示；所有时间判断使用注入 now，未来或倒序时间不得授予资格。这是本地时钟下的学习支持，不是可信时间认证。
+- v3 保留结构化 criterion、cycle history，以及未来 retest/completion snapshot 的模型。B1 不提供 retest submission 或 final completion action；资格成立不表示 Stage completed。
+- v2 Stage ready 仅是派生结果，不存在可靠 persisted completion。v2→v3 完整保留旧字段为 legacy needs-review，不制造 confirmed evidence、active cycle 或 completedAt；不以未来时间和悬空 ID 洗成有效资格。
+- Stage 2 仍只有两个 catalog 出口标准及 Pixel Lab 指定 milestone gate；Classical Inspection 未见图材料属于后续桥接，不是隐藏第三门槛。出口可以复用既有交付物，不上传或复制文件；data-contract 确认还需说明 uint8 溢出等未必由项目单独覆盖的能力。
 
 ## 11. 搜索范围与边界
 

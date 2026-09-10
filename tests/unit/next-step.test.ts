@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stageHistory } from "../fixtures/stage-history";
 
 import { contentManifest } from "../../.generated/content-manifest";
 import {
@@ -9,7 +10,7 @@ import { createInitialLearningState } from "@/lib/storage";
 import type {
   ConceptMeta,
   ConceptProgress,
-  LearningStateV2,
+  LearningStateV3,
   ProjectMeta,
   StageDefinition,
   TrackDefinition,
@@ -204,7 +205,7 @@ function conceptProgress(
 
 function state(
   progress: Readonly<Record<string, ConceptProgress>> = {},
-): LearningStateV2 {
+): LearningStateV3 {
   return {
     ...createInitialLearningState([commonTrack], timestamp),
     conceptProgress: { ...progress },
@@ -412,11 +413,7 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
       }),
     });
 
-    expect(result).toEqual({
-      kind: "empty",
-      reasonCode: "published-route-complete",
-      reasonText: "当前已发布内容已全部完成，后续路线尚未正式展开。",
-    });
+    expect(result).toMatchObject({ kind: "stage-exit", stageId: "stage.available" });
   });
 
   it("reasonCode 与确定性理由模板一致", () => {
@@ -481,7 +478,7 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
     ).toEqual(baseline);
   });
 
-  it("Stage entryGate 未满足时不推荐其 Concept，满足后即可推荐", () => {
+  it("Stage entryGate 不消费 B1 reserved history，不越过门槛", () => {
     const sourceStage = stage("stage.source", 0);
     const gatedStage = stage("stage.gated", 10, "available", {
       kind: "checkpoint",
@@ -501,19 +498,12 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
         catalog: catalog([source, gated], [], [sourceStage, gatedStage]),
         state: sourceUnderstood,
       }),
-    ).toMatchObject({ kind: "empty", reasonCode: "no-actionable-concept" });
+    ).toMatchObject({ kind: "stage-exit", stageId: sourceStage.id });
 
-    const gateSatisfied: LearningStateV2 = {
+    const gateSatisfied: LearningStateV3 = {
       ...sourceUnderstood,
       stageCheckpoints: {
-        [sourceStage.id]: {
-          criterionEvidence: {
-            [`stage-criterion.${sourceStage.id}.complete`]: [
-              "evidence.stage-source.complete",
-            ],
-          },
-          updatedAt: timestamp,
-        },
+        [sourceStage.id]: stageHistory(sourceStage.id, timestamp),
       },
     };
     expect(
@@ -522,9 +512,8 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
         state: gateSatisfied,
       }),
     ).toMatchObject({
-      kind: "recommendation",
-      targetId: gated.id,
-      reasonCode: "next-unlocked",
+      kind: "stage-exit",
+      stageId: sourceStage.id,
     });
   });
 
@@ -551,10 +540,7 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
       }),
     });
 
-    expect(result).toMatchObject({
-      kind: "empty",
-      reasonCode: "no-actionable-concept",
-    });
+    expect(result).toMatchObject({ kind: "stage-exit", stageId: sourceStage.id });
     expect(result).not.toMatchObject({ targetId: gated.id });
   });
 
@@ -584,7 +570,7 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
     expect(result).not.toMatchObject({ targetId: gated.id });
   });
 
-  it("全部 published Concept 达到路线目标且无 Project gap 时返回明确 empty state", () => {
+  it("全部 published Concept 达标后仍须处理出口证据", () => {
     const first = concept("concept.first", { order: 10 });
     const second = concept("concept.second", { order: 20 });
     const result = getNextStep({
@@ -598,11 +584,7 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
       }),
     });
 
-    expect(result).toEqual({
-      kind: "empty",
-      reasonCode: "published-route-complete",
-      reasonText: "当前已发布内容已全部完成，后续路线尚未正式展开。",
-    });
+    expect(result).toMatchObject({ kind: "stage-exit", stageId: "stage.available" });
   });
 
   it("当前仓库初始状态确定性推荐 Pixel Lab 的首个 Stage 0 缺口", () => {

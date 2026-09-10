@@ -1,6 +1,6 @@
 import type { ProgressProjectDefinition } from "@/features/progress/progress-domain";
 import type {
-  LearningStateV2,
+  LearningStateV3,
   ProjectProgress,
 } from "@/types";
 import { projectProgressSchema } from "@/lib/validation/progress-schemas";
@@ -52,7 +52,7 @@ export type ProjectProgressMutationResult =
 
 export function startProjectProgress(
   project: ProgressProjectDefinition,
-  state: LearningStateV2,
+  state: LearningStateV3,
   input: StartProjectInput,
   timestamp: string,
 ): ProjectProgressMutationResult {

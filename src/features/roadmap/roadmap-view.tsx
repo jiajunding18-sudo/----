@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { ContentState } from "@/components/content/content-state";
 import { ConceptStatusLabel } from "@/features/progress/concept-status-label";
+import { StageExitPanel } from "@/features/progress/stage-exit-panel";
+import { getProgressCatalog } from "@/lib/content/site-content";
 
 import type { RoadmapStageView, RoadmapView } from "./roadmap-model";
 import { RoadmapOverview } from "./roadmap-overview";
@@ -364,6 +366,7 @@ export function RoadmapViewContent({ roadmap }: { readonly roadmap: RoadmapView 
                 <ConceptRoute stage={stage} />
                 <StageProjects stage={stage} />
                 <StageExit stage={stage} />
+                <StageExitPanel stage={stage.stage} catalog={getProgressCatalog()} />
               </div>
             </details>
             </article>

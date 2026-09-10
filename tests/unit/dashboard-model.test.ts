@@ -11,7 +11,7 @@ import {
   getNextStepCatalog,
   getProgressCatalog,
 } from "@/lib/content/site-content";
-import type { ConceptProgress, LearningStateV2, StudyLog } from "@/types";
+import type { ConceptProgress, LearningStateV3, StudyLog } from "@/types";
 
 const timestamp = "2026-08-29T08:00:00.000Z";
 
@@ -114,7 +114,7 @@ describe("Dashboard 只读聚合 selector", () => {
       },
     };
 
-    const changed: LearningStateV2 = {
+    const changed: LearningStateV3 = {
       ...state,
       conceptProgress: {
         [laterConcept!.id]: learningProgress("2026-08-29T10:00:00.000Z"),
@@ -141,7 +141,7 @@ describe("Dashboard 只读聚合 selector", () => {
     const path = project!.executionPaths[0];
     expect(path).toBeDefined();
 
-    const changed: LearningStateV2 = {
+    const changed: LearningStateV3 = {
       ...state,
       preferences: {
         ...state.preferences,
@@ -176,7 +176,7 @@ describe("Dashboard 只读聚合 selector", () => {
 
   it("今日、本周、最近日志与最近学习日期全部来自 Study Log selector", () => {
     const { catalog, state } = setup();
-    const changed: LearningStateV2 = {
+    const changed: LearningStateV3 = {
       ...state,
       studyLogs: [
         studyLog("study-log.previous-week", "2026-08-23", 99, "2026-08-23T08:00:00.000Z"),

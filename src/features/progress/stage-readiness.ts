@@ -5,14 +5,16 @@ import {
   type RequiredConceptStatus,
 } from "@/features/progress/progress-domain";
 import { getProjectScopeProgress, isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
-import { activeCycle, criterionSatisfied, historicalStageCompleted, stableSnapshot } from "./stage-evidence";
+import { activeCycle, criterionSatisfied, stableSnapshot } from "./stage-evidence";
 import type { ProgressProjectDefinition } from "./progress-domain";
-import type { EligibilityCycle, StageProgress } from "@/lib/validation/stage-progress-schemas";
+import type { EligibilityCycle } from "@/lib/validation/stage-progress-schemas";
+import type { StageProgressV4 as StageProgress } from "@/lib/validation/stage-completion-schemas";
+import { getHistoricalStageCompletion } from "./stage-history";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type {
   CheckpointGate,
   ConceptMeta,
-  LearningStateV3,
+  LearningStateV4,
   StageDefinition,
   TrackDefinition,
   TrackGoal,
@@ -82,6 +84,7 @@ export type StageReadinessBlocker =
     };
 
 export interface StageReadiness {
+  readonly historicallyCompleted: boolean;
   readonly nonRetestReady: boolean;
   readonly currentEligibilityValid: boolean;
   readonly qualificationBasis?: NonNullable<EligibilityCycle["qualificationBasis"]>;
@@ -115,7 +118,7 @@ interface StageReadinessContext {
   readonly concepts: readonly ReadonlyConcept[];
   readonly projects: readonly ReadonlyProject[];
   readonly tracks: readonly ReadonlyTrack[];
-  readonly state: LearningStateV3;
+  readonly state: LearningStateV4;
   readonly stagesById: ReadonlyMap<string, ReadonlyStage>;
   readonly projectsById: ReadonlyMap<string, ReadonlyProject>;
   readonly tracksById: ReadonlyMap<string, ReadonlyTrack>;
@@ -177,7 +180,7 @@ function evaluateEntryGate(
   if (gate.kind === "checkpoint") {
     const referencedStage = context.stagesById.get(gate.stageId);
     const ready = referencedStage
-      ? evaluateStage(referencedStage, context).ready
+      ? evaluateStage(referencedStage, context).historicallyCompleted
       : false;
     return {
       kind: "checkpoint",
@@ -192,7 +195,7 @@ function evaluateEntryGate(
     const track = context.tracksById.get(gate.trackId);
     const actualTrackGoal = getEffectiveTrackGoal(context, gate.trackId);
     const checkpointReady = referencedStage
-      ? evaluateStage(referencedStage, context).ready
+      ? evaluateStage(referencedStage, context).historicallyCompleted
       : false;
     const trackGoalReady = meetsTrackGoal(
       actualTrackGoal,
@@ -234,7 +237,7 @@ function evaluateStage(
   // synthetic or corrupted catalogs without inventing a second recovery rule.
   if (context.evaluating.has(stage.id)) {
     return {
-      nonRetestReady: false, currentEligibilityValid: false, retestRequired: stage.retestAfterDays !== undefined, temporalRetestValid: false,
+      historicallyCompleted:false, nonRetestReady: false, currentEligibilityValid: false, retestRequired: stage.retestAfterDays !== undefined, temporalRetestValid: false,
       ready: false,
       blocked: true,
       entryReady: false,
@@ -402,9 +405,9 @@ function evaluateStage(
   } : undefined;
   const candidate = activeCycle(checkpoint, context.now);
   const eligibility = candidate && qualificationBasis && JSON.stringify(candidate.qualificationBasis) === JSON.stringify(qualificationBasis) && Date.parse(candidate.eligibleAt) >= Date.parse(qualificationBasis.notBefore) ? candidate : undefined;
-  const completion = undefined;
-  const temporalRetestValid = false;
-  const ready = historicalStageCompleted(stage, checkpoint, context.now);
+  const completion = getHistoricalStageCompletion(stage.id,context.state,context.now);
+  const temporalRetestValid = completion?.method==='retention-retest';
+  const ready = !!completion; // Compatibility alias: historical gate only.
   const retestDue = baseReady && stage.retestAfterDays !== undefined && !ready;
   const blockers: StageReadinessBlocker[] = [
     ...(entryGate && !entryReady
@@ -432,6 +435,7 @@ function evaluateStage(
   ];
 
   const result: StageReadiness = {
+    historicallyCompleted:ready,
     nonRetestReady: baseReady,
     currentEligibilityValid: !!eligibility,
     qualificationBasis,
@@ -467,7 +471,7 @@ export function getStageReadiness(
   concepts: readonly ReadonlyConcept[],
   projects: readonly ReadonlyProject[],
   tracks: readonly ReadonlyTrack[],
-  state: LearningStateV3,
+  state: LearningStateV4,
   now: string = new Date().toISOString(),
 ): StageReadiness {
   const context: StageReadinessContext = {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { migrateLearningStateV3ToV4 } from "@/lib/storage/stage-completion-migration";
 import { contentManifest } from "../../.generated/content-manifest";
 import { imageStage, stageCatalog, stageNow, stageReadyInput, stageRef, stageTime } from "../fixtures/stage-lifecycle";
 import { milestone2, pixelLab } from "../fixtures/project-milestones";
@@ -13,20 +14,20 @@ import { mergeStageCheckpoints } from "@/lib/storage/stage-checkpoint-merge";
 import { createExportEnvelope, createInitialLearningState, createPersistedEnvelope, LEARNING_STATE_STORAGE_KEY, LocalStorageLearningStateAdapter } from "@/lib/storage";
 import { prepareLearningStateImport } from "@/lib/storage/learning-backup";
 import { createLearningStore } from "@/features/progress/learning-store";
-import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV4Schema } from "@/lib/validation/progress-schemas";
 import { stageEvidenceRefSchema } from "@/lib/validation/stage-progress-schemas";
-import type { LearningStateV3 } from "@/types";
+import type { LearningStateV4 } from "@/types";
 
 const [first, second] = imageStage.exitCriteria;
-function read(state: LearningStateV3, now = stageNow) { return getStageReadiness(imageStage, contentManifest.stages, contentManifest.concepts, contentManifest.projects, contentManifest.tracks, state, now); }
-function edit(state: LearningStateV3, id: string = first.id, now = stageTime) { return mutateStageCriterion(state, stageCatalog, imageStage.id, id, { kind: "evidence", evidenceRefs: [stageRef], explanation: "报告核对 dtype / actual range、uint8 溢出、ROI 坐标与 batch 身份" }, now); }
-function confirm(state: LearningStateV3, id: string = first.id, now = stageTime) { return mutateStageCriterion(state, stageCatalog, imageStage.id, id, { kind: "confirm", confirmed: true }, now); }
+function read(state: LearningStateV4, now = stageNow) { return getStageReadiness(imageStage, contentManifest.stages, contentManifest.concepts, contentManifest.projects, contentManifest.tracks, state, now); }
+function edit(state: LearningStateV4, id: string = first.id, now = stageTime) { return mutateStageCriterion(state, stageCatalog, imageStage.id, id, { kind: "evidence", evidenceRefs: [stageRef], explanation: "报告核对 dtype / actual range、uint8 溢出、ROI 坐标与 batch 身份" }, now); }
+function confirm(state: LearningStateV4, id: string = first.id, now = stageTime) { return mutateStageCriterion(state, stageCatalog, imageStage.id, id, { kind: "confirm", confirmed: true }, now); }
 function eligible() {
   let state = stageReadyInput();
   for (const criterion of imageStage.exitCriteria) state = confirm(edit(state, criterion.id), criterion.id);
   return state;
 }
-function importState(incoming: LearningStateV3, currentState = createInitialLearningState(contentManifest.tracks, stageTime)) {
+function importState(incoming: LearningStateV4, currentState = createInitialLearningState(contentManifest.tracks, stageTime)) {
   return prepareLearningStateImport({ raw: JSON.stringify(createExportEnvelope(incoming, "test", 1, stageTime, stageNow)), currentState, catalog: stageCatalog, mode: "merge", now: stageNow });
 }
 
@@ -103,22 +104,22 @@ describe("Phase 9E-B1 Stage evidence and qualification", () => {
     if (kind === "cycle") Object.values(p.cycles)[0].eligibleAt = "2099-01-01T00:00:00.000Z";
     if (kind === "criterion") p.criteria[first.id].confirmedAt = "2099-01-01T00:00:00.000Z";
     if (kind === "invalidation") Object.values(p.cycles)[0].invalidatedAt = "2099-01-01T00:00:00.000Z";
-    if (kind === "completion") p.historicalCompletion = { eligibilityCycleId: Object.keys(p.cycles)[0], completedAt: "2099-01-01T00:00:00.000Z", evidenceSnapshot: p.criteria };
+    if (kind === "completion") p.legacyV3Completions[0] = { eligibilityCycleId: Object.keys(p.cycles)[0], completedAt: "2099-01-01T00:00:00.000Z", evidenceSnapshot: p.criteria };
     expect(importState(state).ok).toBe(false);
   });
   it("invalidated cycle cannot be reused by a completion snapshot", () => {
     const state = eligible(); const p = state.stageCheckpoints[imageStage.id]; const cycle = Object.values(p.cycles)[0];
     cycle.invalidatedAt = stageNow;
-    p.historicalCompletion = { eligibilityCycleId: cycle.id, completedAt: stageNow, evidenceSnapshot: p.criteria };
+    p.legacyV3Completions[0] = { eligibilityCycleId: cycle.id, completedAt: stageNow, evidenceSnapshot: p.criteria };
     expect(historicalStageCompleted(imageStage, p, stageNow)).toBe(false);
   });
   it("B1 reserved history grants nothing and does not disable current lifecycle", () => {
     const state = eligible(); const p = state.stageCheckpoints[imageStage.id]; const cycle = Object.values(p.cycles)[0];
-    p.historicalCompletion = { eligibilityCycleId: cycle.id, completedAt: stageNow, evidenceSnapshot: structuredClone(p.criteria), retest: { eligibilityCycleId: cycle.id, retestedAt: stageNow, confirmedAt: stageNow, explanation: "reserved future lifecycle snapshot", evidenceRefs: [stageRef] } };
+    p.legacyV3Completions[0] = { eligibilityCycleId: cycle.id, completedAt: stageNow, evidenceSnapshot: structuredClone(p.criteria), retest: { eligibilityCycleId: cycle.id, retestedAt: stageNow, confirmedAt: stageNow, explanation: "reserved future lifecycle snapshot", evidenceRefs: [stageRef] } };
     state.conceptProgress["python.numpy-arrays"].status = "understood";
     const next = reconcileStageEligibility(state, stageCatalog, stageNow);
     expect(read(next)).toMatchObject({ ready: false, nonRetestReady: false });
-    expect(next.stageCheckpoints[imageStage.id].historicalCompletion).toEqual(p.historicalCompletion);
+    expect(next.stageCheckpoints[imageStage.id].legacyV3Completions[0]).toEqual(p.legacyV3Completions[0]);
     expect(activeCycle(next.stageCheckpoints[imageStage.id], stageNow)).toBeUndefined();
     expect(() => edit(next, first.id, stageNow)).not.toThrow();
   });
@@ -126,7 +127,7 @@ describe("Phase 9E-B1 Stage evidence and qualification", () => {
     const initial = stageReadyInput();
     const checkpoint = { criterionEvidence: { [first.id]: ["evidence.nonexistent"] }, initiallyEligibleAt: "2099-01-02T00:00:00.000Z", retestedAt: "2099-01-01T00:00:00.000Z", updatedAt: "2099-01-03T00:00:00.000Z" };
     const old = { ...initial, schemaVersion: 2, stageCheckpoints: { [imageStage.id]: checkpoint } };
-    const migrated = migrateLearningStateV2ToV3(old);
+    const migrated = migrateLearningStateV3ToV4(migrateLearningStateV2ToV3(old));
     expect(migrated.stageCheckpoints[imageStage.id]).toMatchObject({ criteria: {}, cycles: {}, legacy: [{ provenance: "v2-needs-review", checkpoint }] });
     expect(stageInspectionErrors(migrated, stageCatalog, stageNow)).toEqual([]);
     expect(legacyReviewReasons(migrated.stageCheckpoints[imageStage.id], stageNow).join()).toContain("早于");
@@ -161,7 +162,7 @@ describe("Phase 9E-B1 Stage evidence and qualification", () => {
   it("NextStep distinguishes Concept, Project, exit and eligibility pending", () => {
     const state = stageReadyInput();
     expect(getNextStep({ catalog: contentManifest, state, now: stageNow }).kind).toBe("stage-exit");
-    expect(getNextStep({ catalog: contentManifest, state: eligible(), now: stageNow }).kind).toBe("eligibility-pending");
+    expect(getNextStep({ catalog: contentManifest, state: eligible(), now: stageNow }).kind).toBe("stage-retest");
     state.projectProgress[pixelLab.id].milestones![milestone2].status = "in_progress";
     expect(getNextStep({ catalog: contentManifest, state, now: stageNow }).kind).toBe("project-milestone");
     state.conceptProgress["python.numpy-arrays"].status = "not_started";
@@ -195,7 +196,7 @@ describe("Phase 9E-B1 Stage evidence and qualification", () => {
     await store.getState().hydrate();
     expect(store.getState().persistenceStatus).toBe("ready");
     expect(store.getState().learningState.stageCheckpoints).toEqual(state.stageCheckpoints);
-    expect(learningStateV3Schema.safeParse(store.getState().learningState).success).toBe(true);
+    expect(learningStateV4Schema.safeParse(store.getState().learningState).success).toBe(true);
     const reload = createLearningStore({ catalog: stageCatalog, contentVersion: "test", adapter, now: () => stageNow });
     await reload.getState().hydrate();
     expect(reload.getState().learningState).toEqual(store.getState().learningState);

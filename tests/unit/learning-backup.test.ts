@@ -9,7 +9,7 @@ import {
   createExportEnvelope,
   createInitialLearningState,
   createLearningBackup,
-  exportEnvelopeV3Schema,
+  exportEnvelopeV4Schema,
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_RECOVERY_KEY_PREFIX,
   LEARNING_STATE_STORAGE_KEY,
@@ -18,7 +18,7 @@ import {
   prepareLearningStateImport,
   type StringStorage,
 } from "@/lib/storage";
-import type { LearningStateV3 } from "@/types";
+import type { LearningStateV4 } from "@/types";
 
 const early = "2026-08-28T01:00:00.000Z";
 const later = "2026-08-28T02:00:00.000Z";
@@ -131,7 +131,7 @@ function learningStateWithConcept(timestamp = early) {
   };
 }
 
-function backupJson(state: LearningStateV3 = learningStateWithConcept()) {
+function backupJson(state: LearningStateV4 = learningStateWithConcept()) {
   return createLearningBackup({
     state,
     contentVersion: "2026.08.28",
@@ -151,12 +151,12 @@ describe("Learning OS JSON 备份", () => {
       exportedAt: later,
     });
 
-    expect(exportEnvelopeV3Schema.parse(JSON.parse(backup.json))).toEqual(
+    expect(exportEnvelopeV4Schema.parse(JSON.parse(backup.json))).toEqual(
       backup.envelope,
     );
     expect(backup.envelope).toMatchObject({
       app: LEARNING_STATE_APP_ID,
-      schemaVersion: 3,
+      schemaVersion: 4,
       revision: 3,
       savedAt: early,
       exportedAt: later,
@@ -566,7 +566,7 @@ describe("Learning OS JSON 备份", () => {
         },
       },
       stageCheckpoints: {
-        "stage.retired": { criteria: {}, cycles: {}, legacy: [], updatedAt: early },
+        "stage.retired": { criteria: {}, cycles: {}, legacy: [], attempts:{}, legacyV3Completions:[], updatedAt: early },
       },
       studyLogs: [
         {

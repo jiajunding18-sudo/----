@@ -6,7 +6,7 @@ import { migratePersistedEnvelope } from "@/lib/storage/migrations";
 import { getMilestoneCompletionEligibility, getMilestoneReadiness, resolveProjectMilestone } from "@/features/projects/project-milestones";
 import { mutateProjectMilestone, type MilestoneAction } from "@/features/projects/project-milestone-progress";
 import { getStageReadiness } from "@/features/progress/stage-readiness";
-import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV4Schema } from "@/lib/validation/progress-schemas";
 
 const hardIds = ["python.numpy-arrays", "python.numpy-dtypes", "image.digital-representation", "opencv.io-color", "opencv.roi-masks", "pipeline.batch-images"];
 const scoped = resolveProjectMilestone(pixelLab, milestone2)!;
@@ -97,7 +97,7 @@ describe("Phase 9E-1 real Pixel Lab Stage 2 contract", () => {
       };
     }
     const before = structuredClone(state);
-    expect(learningStateV3Schema.safeParse(state).success).toBe(true);
+    expect(learningStateV4Schema.safeParse(state).success).toBe(true);
     const stage = contentManifest.stages.find(({ id }) => id === "stage.image-computing")!;
     const gate = () => getStageReadiness(stage, contentManifest.stages, contentManifest.concepts, contentManifest.projects, contentManifest.tracks, state);
     expect(gate().incompleteProjectIds).toContain(pixelLab.id);

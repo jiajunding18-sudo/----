@@ -820,9 +820,11 @@ Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computin
 4. 当前 Track 目标下生效的每项必需出口标准均有通过证据。未通过标记只用于显示阻塞，不能满足完成条件；Stage 9/10 的 U/M 共同标准始终生效，主修级标准只在对应 Track 目标为 `master` 时生效；
 5. 若 checkpoint 配置 `retestAfterDays`，复测须绑定有效资格轮次，时间不早于该轮次 `eligibleAt + retestAfterDays × 24h` 且不晚于当前时间。第 1.5 节中 `categoryExitForTrackIds` 非空的分类出口统一配置为连续 168 小时；只有该字段为空的中间 checkpoint 才可省略或另行配置复测。
 
-最终完成前，任一前四项失效会保留并失效当前资格轮次；再次全部满足时创建新轮次重新计时，不能复用旧复测。当前资格与历史完成分开：正式完成后的历史成果不因知识回退自动撤销，后续 checkpoint gate 消费历史完成。Phase 9E-B1 只提供出口证据与资格管理，复测提交和最终完成动作尚未开放。页面进度仍采用 `PRODUCT_SPEC.md` 的覆盖、理解、掌握三类比例，对已发布必修节点按稳定 ID 去重；U 节点达标时掌握比例不必为 `100%`。
+最终完成前，任一前四项失效会保留并失效当前资格轮次；再次全部满足时创建新轮次重新计时，不能复用旧复测。当前资格与历史完成分开：正式完成后的历史成果不因知识回退自动撤销，后续 checkpoint gate 消费历史完成。【历史说明：Phase 9E-B1 当时只提供出口证据与资格管理，尚未开放复测提交和最终完成动作；当前已由 Phase 9E-B2 retention retest lifecycle 接续，正式行为见第 17.3 节及 PRODUCT_SPEC。】页面进度仍采用 `PRODUCT_SPEC.md` 的覆盖、理解、掌握三类比例，对已发布必修节点按稳定 ID 去重；U 节点达标时掌握比例不必为 `100%`。
 
 ### 17.3 每四周复盘
+
+Phase 9E-B2 将保留复测作为独立 Stage-level retention layer：Stage 0/2 发布紧凑 probes，其余有复测策略的 checkpoint 保留 planned definition；不重做全部 Concept 或 Project。168h 到期仅开放复测，显式确认后才形成 sticky 历史完成；无复测 checkpoint 显式完成。历史与当前资格分离，Stage 3 仍按自身依赖学习，不添加 Stage 2 等待 gate。具体记录与迁移采用 PRODUCT_SPEC / ARCHITECTURE 的 v4 契约。
 
 - 删除或推迟未服务当前项目的旁支资料。
 - 检查过去四周是否至少留下一个可运行、可测量或可解释的证据。

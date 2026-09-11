@@ -1,8 +1,8 @@
 import type { ProgressProjectDefinition } from "@/features/progress/progress-domain";
-import type { LearningStateV3, ProjectProgress } from "@/types";
+import type { LearningStateV4, ProjectProgress } from "@/types";
 import { getProjectCompletionEligibility, getProjectReadiness } from "./project-readiness";
 
-export function getMilestoneReadiness(project: ProgressProjectDefinition, state: LearningStateV3, milestoneId: string) {
+export function getMilestoneReadiness(project: ProgressProjectDefinition, state: LearningStateV4, milestoneId: string) {
   const scoped = resolveProjectMilestone(project, milestoneId);
   return scoped ? { contractPublished: true, ...getProjectReadiness(scoped, scopeProjectState(state, project.id, milestoneId)) } : {
     contractPublished: false, knowledgeReady: false, environmentReady: null,
@@ -10,7 +10,7 @@ export function getMilestoneReadiness(project: ProgressProjectDefinition, state:
   };
 }
 
-export function getMilestoneCompletionEligibility(project: ProgressProjectDefinition, state: LearningStateV3, milestoneId: string) {
+export function getMilestoneCompletionEligibility(project: ProgressProjectDefinition, state: LearningStateV4, milestoneId: string) {
   const scoped = resolveProjectMilestone(project, milestoneId);
   return scoped ? { contractPublished: true, ...getProjectCompletionEligibility(scoped, getProjectScopeProgress(state, project.id, milestoneId)) } : {
     contractPublished: false, eligible: false, missingAcceptanceCriterionIds: [], hasDeliverable: false,
@@ -29,23 +29,23 @@ export function resolveProjectMilestone<P extends ProgressProjectDefinition>(pro
   };
 }
 
-export function getProjectScopeProgress(state: LearningStateV3, projectId: string, milestoneId?: string) {
+export function getProjectScopeProgress(state: LearningStateV4, projectId: string, milestoneId?: string) {
   const record = state.projectProgress[projectId];
   return milestoneId ? record?.milestones?.[milestoneId] : record;
 }
 
-export function isProjectGateCompleted(project: ProgressProjectDefinition, state: LearningStateV3, milestoneId?: string): boolean {
+export function isProjectGateCompleted(project: ProgressProjectDefinition, state: LearningStateV4, milestoneId?: string): boolean {
   if (project.publicationStatus !== "published") return false;
   if (milestoneId) return !!resolveProjectMilestone(project, milestoneId) && getProjectScopeProgress(state, project.id, milestoneId)?.status === "completed";
   return state.projectProgress[project.id]?.status === "completed";
 }
 
 /** UI aggregate only. Never substitutes for a legacy projectId-only gate. */
-export function areAllProjectMilestonesCompleted(project: ProgressProjectDefinition, state: LearningStateV3): boolean {
+export function areAllProjectMilestonesCompleted(project: ProgressProjectDefinition, state: LearningStateV4): boolean {
   return !!project.milestones?.length && project.milestones.every(({ id }) => isProjectGateCompleted(project, state, id));
 }
 
-export function getProjectAggregateStatus(project: ProgressProjectDefinition, state: LearningStateV3): ProjectProgress["status"] {
+export function getProjectAggregateStatus(project: ProgressProjectDefinition, state: LearningStateV4): ProjectProgress["status"] {
   if (!project.milestones?.length) return state.projectProgress[project.id]?.status ?? "not_started";
   if (areAllProjectMilestonesCompleted(project, state)) return "completed";
   const records = project.milestones.map(({ id }) => getProjectScopeProgress(state, project.id, id));
@@ -53,7 +53,7 @@ export function getProjectAggregateStatus(project: ProgressProjectDefinition, st
   return records.some((record) => record?.status === "paused") ? "paused" : "not_started";
 }
 
-export function scopeProjectState(state: LearningStateV3, projectId: string, milestoneId?: string): LearningStateV3 {
+export function scopeProjectState(state: LearningStateV4, projectId: string, milestoneId?: string): LearningStateV4 {
   if (!milestoneId) return state;
   const record = getProjectScopeProgress(state, projectId, milestoneId);
   const projectProgress = { ...state.projectProgress };

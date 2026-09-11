@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useDerivedClock } from "@/features/progress/derived-clock";
 
 import { getNextStep, type NextStepCatalog } from "./next-step";
 import { ConceptStatusLabel } from "@/features/progress/concept-status-label";
@@ -16,10 +17,11 @@ export function DashboardNextStep({
   readonly catalog: NextStepCatalog;
 }) {
   const hydrated = useLearningStore(({ hydrated }) => hydrated);
+  const now=useDerivedClock();
   const learningState = useLearningStore(({ learningState }) => learningState);
   const nextStep = useMemo(
-    () => (hydrated ? getNextStep({ catalog, state: learningState }) : undefined),
-    [catalog, hydrated, learningState],
+    () => (hydrated ? getNextStep({ catalog, state: learningState, now }) : undefined),
+    [catalog, hydrated, learningState, now],
   );
 
   if (!nextStep) {

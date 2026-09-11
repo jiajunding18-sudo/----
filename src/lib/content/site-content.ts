@@ -182,6 +182,7 @@ export function getPublishedProjectSlugs() {
 export function getProgressCatalog(): ProgressCatalog {
   return {
     stages: contentManifest.stages,
+    stageRetests: contentManifest.stageRetests,
     concepts: contentManifest.concepts.map((concept) => {
       const stage = contentManifest.stages.find(({ id }) => id === concept.stageId);
       if (!stage) {
@@ -252,6 +253,7 @@ export function getNextStepCatalog(): NextStepCatalog {
     concepts: contentManifest.concepts,
     projects: contentManifest.projects,
     stages: contentManifest.stages,
+    stageRetests: contentManifest.stageRetests,
     tracks: contentManifest.tracks,
   };
 }

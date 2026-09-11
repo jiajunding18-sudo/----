@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { stageRetests } from "../../../content/catalog/stage-retests";
 
 import {
   resources as repositoryResources,
@@ -35,7 +36,7 @@ export async function loadRepositoryContent({
     resources: repositoryResources,
   });
 
-  const input = { concepts, projects, ...catalog };
+  const input = { concepts, projects, ...catalog, stageRetests };
   return { input, manifest: buildContentManifest(input) } as const;
 }
 

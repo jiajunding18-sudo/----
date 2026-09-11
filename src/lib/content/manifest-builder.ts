@@ -1,4 +1,5 @@
 import { deriveDependencies } from "@/lib/validation";
+import { validateStageRetests } from "./retest-validator";
 
 import { validateContentCatalog } from "./catalog-validator";
 import { extractMdxHeadings } from "./mdx-headings.mjs";
@@ -70,9 +71,11 @@ export function buildContentManifest(
   );
 
   validateContentCatalog(input, dependencies);
+  if (input.stageRetests) validateStageRetests(input.stageRetests, input.stages);
 
   return {
     schemaVersion: 1,
+    stageRetests: input.stageRetests ?? [],
     concepts,
     projects,
     tracks,

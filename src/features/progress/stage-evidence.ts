@@ -1,8 +1,9 @@
-import type { LearningStateV3, StageDefinition, TrackDefinition } from "@/types";
+import type { LearningStateV4, StageDefinition, TrackDefinition } from "@/types";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import type { ProgressProjectDefinition } from "./progress-domain";
 import { getProjectScopeProgress, resolveProjectMilestone } from "@/features/projects/project-milestones";
-import type { StageCriterionProgress, StageEvidenceRef, StageProgress } from "@/lib/validation/stage-progress-schemas";
+import type { StageCriterionProgress, StageEvidenceRef } from "@/lib/validation/stage-progress-schemas";
+import type { StageProgressV4 as StageProgress } from "@/lib/validation/stage-completion-schemas";
 
 export interface StageReferenceCatalog {
   readonly concepts: readonly { readonly id: string }[];
@@ -20,13 +21,13 @@ export function stableSnapshot(value: unknown): string {
     ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a.localeCompare(b))) : part);
 }
 /** Existing record identity/version only; never a filesystem/content inspection. */
-export function evidenceBasis(refs: readonly StageEvidenceRef[], state: LearningStateV3, catalog: StageReferenceCatalog): string[] | undefined {
+export function evidenceBasis(refs: readonly StageEvidenceRef[], state: LearningStateV4, catalog: StageReferenceCatalog): string[] | undefined {
   if (refs.some(ref => !resolveStageEvidence(ref, state, catalog))) return undefined;
   return refs.map(ref => stableSnapshot([ref, ref.kind === "concept-evidence"
     ? state.conceptProgress[ref.conceptId]?.evidence.find(e => e.id === ref.evidenceId)
     : getProjectScopeProgress(state, ref.projectId, ref.milestoneId)?.deliverables.find(d => d.id === ref.deliverableId)]));
 }
-export function resolveStageEvidence(ref: StageEvidenceRef, state: LearningStateV3, catalog: StageReferenceCatalog): string | undefined {
+export function resolveStageEvidence(ref: StageEvidenceRef, state: LearningStateV4, catalog: StageReferenceCatalog): string | undefined {
   if (ref.kind === "concept-evidence") {
     if (!catalog.concepts.some(({ id }) => id === ref.conceptId)) return undefined;
     const evidence = state.conceptProgress[ref.conceptId]?.evidence.find(({ id, conceptId, result }) => id === ref.evidenceId && conceptId === ref.conceptId && result === "passed");
@@ -37,10 +38,10 @@ export function resolveStageEvidence(ref: StageEvidenceRef, state: LearningState
   const record = getProjectScopeProgress(state, project.id, ref.milestoneId)?.deliverables.find(({ id }) => id === ref.deliverableId);
   return record ? `${record.title}${record.reference ? ` · ${record.reference}` : ""}` : undefined;
 }
-export function criterionSatisfied(record: StageCriterionProgress | undefined, state: LearningStateV3, catalog: StageReferenceCatalog, now: string): boolean {
+export function criterionSatisfied(record: StageCriterionProgress | undefined, state: LearningStateV4, catalog: StageReferenceCatalog, now: string): boolean {
   return !!record && !record.confirmationInvalidatedAt && !!record.evidenceBasis && record.explanation.trim().length > 0 && validPast(record.confirmedAt, now) && validPast(record.updatedAt, now) && Date.parse(record.confirmedAt!) >= Date.parse(record.updatedAt) && record.evidenceRefs.length > 0 && new Set(record.evidenceRefs.map(refKey)).size === record.evidenceRefs.length && JSON.stringify(record.evidenceBasis) === JSON.stringify(evidenceBasis(record.evidenceRefs, state, catalog));
 }
-export function conditionActive(condition: DeepReadonly<StageDefinition["exitCriteria"][number]["when"]>, tracks: readonly Pick<TrackDefinition, "id" | "kind" | "defaultGoal">[], state: LearningStateV3) {
+export function conditionActive(condition: DeepReadonly<StageDefinition["exitCriteria"][number]["when"]>, tracks: readonly Pick<TrackDefinition, "id" | "kind" | "defaultGoal">[], state: LearningStateV4) {
   if (condition.kind === "always") return true;
   const track = tracks.find(({ id }) => id === condition.trackId);
   const goal = track?.kind === "common" ? "master" : state.preferences.trackGoals[condition.trackId] ?? track?.defaultGoal;
@@ -53,7 +54,7 @@ export function activeCycle(progress: StageProgress | undefined, now: string) {
 }
 /** B1 has no authoritative completion producer. Reserved snapshots are inert. */
 export function historicalStageCompleted(...reserved: [DeepReadonly<StageDefinition>, StageProgress | undefined, string]): boolean { void reserved; return false; }
-export function emptyStageProgress(now: string): StageProgress { return { criteria: {}, cycles: {}, legacy: [], updatedAt: now }; }
+export function emptyStageProgress(now: string): StageProgress { return { criteria: {}, cycles: {}, legacy: [], attempts:{}, legacyV3Completions:[], updatedAt: now }; }
 export function stageTemporalErrors(progress: StageProgress, now: string): string[] {
   const errors: string[] = [];
   // Raw legacy dates are review material, never a qualification clock.

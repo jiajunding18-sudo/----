@@ -1,4 +1,5 @@
-import type { LearningStateV3 } from "@/types";
+import type { LearningStateV4 } from "@/types";
+import { getHistoricalStageCompletion } from "./stage-history";
 import type { ProgressCatalog } from "./progress-domain";
 import { getStageReadiness } from "./stage-readiness";
 import { activeCycle, conditionActive, criterionSatisfied, emptyStageProgress, evidenceBasis, resolveStageEvidence, stageTemporalErrors, validPast } from "./stage-evidence";
@@ -8,16 +9,22 @@ export type StageAction =
   | { kind: "evidence"; evidenceRefs: StageEvidenceRef[]; explanation: string }
   | { kind: "confirm"; confirmed: boolean }
   | { kind: "revoke" };
-export function stageInspectionErrors(state: LearningStateV3, catalog: ProgressCatalog, now: string, strictReferences = false): string[] {
+export function stageInspectionErrors(state: LearningStateV4, catalog: ProgressCatalog, now: string, strictReferences = false): string[] {
   const errors: string[] = [];
   if (!Number.isFinite(Date.parse(now))) return ["无效的 now"];
   for (const [id, progress] of Object.entries(state.stageCheckpoints)) {
+    if(progress.historicalCompletion && !getHistoricalStageCompletion(id,state,now)) errors.push(`${id}: historical completion 内部校验失败`);
+    for(const [key,a] of Object.entries(progress.attempts)) {
+      const cycle=progress.cycles[a.eligibilityCycleId];
+      if(key!==a.id || a.stageId!==id || !cycle || Date.parse(a.createdAt)<Date.parse(cycle.eligibleAt)+a.retestDelayDays*86400000 || !validPast(a.createdAt,a.updatedAt) || !validPast(a.updatedAt,now) || (a.closedAt && (!validPast(a.closedAt,now)||a.closedAt<a.createdAt)) || (a.confirmedAt && (!validPast(a.confirmedAt,now)||!progress.historicalCompletion || progress.historicalCompletion.successfulAttemptId!==a.id))) errors.push(`${id}: retest attempt 时间或身份无效`);
+      if(Object.entries(a.probeResults).some(([probeId,p])=>probeId!==p.probeId || !a.requiredProbeIds.includes(probeId) || !validPast(p.updatedAt,a.updatedAt) || p.updatedAt<a.createdAt)) errors.push(`${id}: probe 时间或身份无效`);
+    }
     const stage = catalog.stages?.find(s => s.id === id);
     if (!stage) continue; // Preserve orphan data; never derive qualification from it.
     errors.push(...stageTemporalErrors(progress, now).map(e => `${id}: ${e}`));
     for (const [criterionId, r] of Object.entries(progress.criteria)) {
       if (!stage.exitCriteria.some(c => c.id === criterionId)) continue; // Archived orphan, never remapped.
-      if (strictReferences && !r.confirmationInvalidatedAt && r.evidenceRefs.some(ref => !resolveStageEvidence(ref, state, catalog))) errors.push(`${criterionId}: dangling evidence reference`);
+      if (strictReferences && !getHistoricalStageCompletion(id,state,now) && !r.confirmationInvalidatedAt && r.evidenceRefs.some(ref => !resolveStageEvidence(ref, state, catalog))) errors.push(`${criterionId}: dangling evidence reference`);
       if (r.confirmedAt && (!r.evidenceRefs.length || !r.explanation.trim())) errors.push(`${criterionId}: empty confirmation`);
     }
     // Reserved completion is inert preservation data, not an executable contract.
@@ -25,7 +32,7 @@ export function stageInspectionErrors(state: LearningStateV3, catalog: ProgressC
   return errors;
 }
 /** Pure, deterministic reconciliation. Call only on qualification-changing paths. */
-export function reconcileStageEligibility(state: LearningStateV3, catalog: ProgressCatalog, now: string): LearningStateV3 {
+export function reconcileStageEligibility(state: LearningStateV4, catalog: ProgressCatalog, now: string): LearningStateV4 {
   const errors = stageInspectionErrors(state, catalog, now);
   if (errors.length) throw new Error(errors.join("；"));
   const next = structuredClone(state);
@@ -50,7 +57,7 @@ export function reconcileStageEligibility(state: LearningStateV3, catalog: Progr
       existing.cycles[cycle.id] = { ...cycle, invalidatedAt: now };
       existing.updatedAt = now;
     }
-    if (readiness.nonRetestReady && !readiness.currentEligibilityValid && readiness.qualificationBasis) {
+    if (!readiness.historicallyCompleted && readiness.nonRetestReady && !readiness.currentEligibilityValid && readiness.qualificationBasis) {
       if (!validPast(readiness.qualificationBasis.notBefore, now)) throw new Error("资格依据时间位于未来");
       const progress = existing ?? emptyStageProgress(now);
       const id = `eligibility.${stage.id}.${Date.parse(now)}.${Object.keys(progress.cycles).length + 1}`;
@@ -62,7 +69,7 @@ export function reconcileStageEligibility(state: LearningStateV3, catalog: Progr
   }
   return next;
 }
-export function mutateStageCriterion(state: LearningStateV3, catalog: ProgressCatalog, stageId: string, criterionId: string, action: StageAction, now: string): LearningStateV3 {
+export function mutateStageCriterion(state: LearningStateV4, catalog: ProgressCatalog, stageId: string, criterionId: string, action: StageAction, now: string): LearningStateV4 {
   const stage = catalog.stages?.find(s => s.id === stageId);
   const criterion = stage?.exitCriteria.find(c => c.id === criterionId);
   if (!stage || stage.contentStatus !== "available" || !criterion || !conditionActive(criterion.when, catalog.tracks, state)) throw new Error("criterion 不存在、未发布或当前不生效");

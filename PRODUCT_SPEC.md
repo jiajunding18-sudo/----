@@ -545,7 +545,7 @@ Stage 9/10 的出口标准与项目门槛也使用同一 Track 目标：副修 `
 - 尚未发布验收契约的 milestone 只显示计划身份，不允许开始或完成。Pixel Lab Stage 2 已在 Phase 9E-1 发布可执行契约；这仅改变内容可用性，不授予任何历史用户该增量的完成状态。
 - Project/milestone 完成不自动改变 Concept progress。界面整体状态从增量派生，不以历史 project-level completed 充当当前 gate。
 - 用户数据经版本化迁移，旧 Pixel Lab 可验证记录只归入 Stage 0 增量，完整保留验收、交付物、确认和时间；未知历史进入恢复流程，不猜测、不清空。
-- Project 完成不代写 Stage evidence；Phase 9E-B1 的证据与资格按第 10.4 节单独管理，复测与最终完成 action 留给 B2。
+- Project 完成不代写 Stage evidence；证据与资格按第 10.4 节单独管理，复测与最终完成按第 10.5 节执行。
 
 项目完成必须同时满足：
 
@@ -568,6 +568,20 @@ Phase 9E-B1-R1：`nonRetestReady` 只判断可执行 checkpoint 的非复测课�
 - v3 保留结构化 criterion、cycle history，以及未来 retest/completion snapshot 的模型。B1 不提供 retest submission 或 final completion action；资格成立不表示 Stage completed。
 - v2 Stage ready 仅是派生结果，不存在可靠 persisted completion。v2→v3 完整保留旧字段为 legacy needs-review，不制造 confirmed evidence、active cycle 或 completedAt；不以未来时间和悬空 ID 洗成有效资格。
 - Stage 2 仍只有两个 catalog 出口标准及 Pixel Lab 指定 milestone gate；Classical Inspection 未见图材料属于后续桥接，不是隐藏第三门槛。出口可以复用既有交付物，不上传或复制文件；data-contract 确认还需说明 uint8 溢出等未必由项目单独覆盖的能力。
+
+### 10.5 Phase 9E-B2：保留复测与历史完成（v4）
+
+在 B1 当前资格模型之上，v4 提供显式历史完成：有复测的 checkpoint 必须在当前合法 cycle 的规定间隔（当前为连续 168 小时）到期后新建 attempt、实际完成 Stage-level probes 并自我确认；一次原子保存冻结成功 attempt 与完成快照。时间、导入和 reconciliation 均不自动完成。无复测 checkpoint 也必须显式确认完成。
+
+Stage 0/2 发布紧凑复测定义，其余 11 个配置复测的 checkpoint 保留 planned definition。Stage 2 两个 probe 为陌生图片数据契约及 3–5 文件小批执行，建议 20–40 分钟；Stage 0 为运行、诊断与版本交接，20–35 分钟。预计时间包含简短记录，不作为限时考试标准。不是重做项目。Stage 3 无 Stage 2 等待 gate。
+
+历史完成冻结当时契约、来源确认及复测结果，后续 live evidence、课程、路线或项目变化不撤销历史；downstream checkpoint gate 读取合法历史完成。当前资格继续独立显示，完成后不重新启动毕业轮次。机器校验结构、时间和引用，学习者负责实际能力判断；不提供自动评分或认证。采用 best-effort 本地时钟，不能防止整体修改系统时钟和备份。
+
+v3→v4 保留全部当前记录及 legacy；旧 historicalCompletion placeholder 只归档、不升级 authority。旧迁移冻结。历史快照校验只依赖冻结结构，不依赖今天的 catalog 或来源仍存在。冲突导入保留恢复路径，提交保存失败不产生半完成。合并时已关闭复测优先于同一尝试的新旧开放草稿，完整保留关闭记录；不一致的关闭终态拒绝合并，不能通过合并备份重新打开已关闭尝试。
+
+上述终态单调性与历史完成 sticky 适用于持续状态链中的普通 mutation、reconciliation、持久化及 merge-style import。显式选择完整替换（replace restore）是例外：用户确认后，用经过迁移、schema、时间及内部完整性校验的完整备份恢复当前 LearningState，允许回到旧 open attempt 或 completion 尚未发生的状态。不得把当前 closedAt/completion 混入备份；恢复后仍按现有当前资格协调与提交 guard 判断，不伪造历史时间。替换前必须备份当前状态，备份失败则取消替换；普通导入默认合并，不自动执行回滚。
+
+当前 focus 的 NextStep 在 Concept、Project 和出口标准之后，分别显示等待、复测、内容未提供或无复测的显式完成；历史完成后跳过该检查点的毕业流程。共享时钟约每分钟（页面可见时）、恢复焦点/可见性及手动刷新，不写 LearningState。草稿可保存、关闭保留或重试；资格失效/定义版本变更后，旧结果不能迁移到新轮次。所有 required probes 的新解释与自检通过仅使最终确认可用，不自动完成。
 
 ## 11. 搜索范围与边界
 

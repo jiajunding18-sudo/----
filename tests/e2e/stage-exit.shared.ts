@@ -74,7 +74,7 @@ export async function auditStageExit(page: Page) {
   await expect(panel).toContainText("已失效：");
   await expect(panel.getByRole("heading", { name: "Legacy needs-review" })).toBeVisible();
   const stored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).payload, LEARNING_STATE_STORAGE_KEY);
-  expect(stored.schemaVersion).toBe(3);
+  expect(stored.schemaVersion).toBe(4);
   expect(stored.stageCheckpoints[imageStage.id].historicalCompletion).toBeUndefined();
   await page.goto("/settings/data/");
   const downloadPromise = page.waitForEvent("download");

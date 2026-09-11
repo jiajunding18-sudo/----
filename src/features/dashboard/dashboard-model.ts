@@ -8,7 +8,7 @@ import {
 } from "@/features/progress/progress-domain";
 import type { NextStepCatalog } from "@/features/recommendations";
 import { selectStudyLogSummary } from "@/features/study-log/study-log-domain";
-import type { LearningStateV3 } from "@/types";
+import type { LearningStateV4 } from "@/types";
 
 export interface DashboardConcept {
   readonly id: string;
@@ -80,7 +80,7 @@ function sortConceptsByRoute(catalog: DashboardCatalog) {
 
 export function selectDashboardLearningConcepts(
   catalog: DashboardCatalog,
-  state: LearningStateV3,
+  state: LearningStateV4,
 ) {
   const routeConcepts = sortConceptsByRoute(catalog);
   const learningIds = new Set(
@@ -96,7 +96,7 @@ export function selectDashboardLearningConcepts(
 
 export function selectDashboardCurrentProject(
   catalog: DashboardCatalog,
-  state: LearningStateV3,
+  state: LearningStateV4,
 ) {
   const candidates = catalog.projects.flatMap((project) => {
     const scopes = project.milestones?.length ? project.milestones.map(({ id }) => id) : [undefined];
@@ -114,7 +114,7 @@ export function selectDashboardCurrentProject(
 
 export function selectDashboardSnapshot(
   catalog: DashboardCatalog,
-  state: LearningStateV3,
+  state: LearningStateV4,
   todayLocalDate: string,
 ) {
   return {

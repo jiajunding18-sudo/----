@@ -8,6 +8,7 @@ import type {
 } from "@/types";
 
 import type { ContentHeading } from "./mdx-headings.mjs";
+import type { RetestDefinition } from "../validation/retest-schemas";
 
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
@@ -25,6 +26,7 @@ export type ProjectManifestEntry = DeepReadonly<
 >;
 
 export interface ContentManifest {
+  readonly stageRetests?: readonly DeepReadonly<RetestDefinition>[];
   readonly schemaVersion: 1;
   readonly concepts: readonly ConceptManifestEntry[];
   readonly projects: readonly ProjectManifestEntry[];
@@ -48,6 +50,7 @@ export type LoadedConcept = LoadedMdxEntity<ConceptMeta>;
 export type LoadedProject = LoadedMdxEntity<ProjectMeta>;
 
 export interface ContentCatalogInput {
+  readonly stageRetests?: readonly RetestDefinition[];
   readonly concepts: readonly LoadedConcept[];
   readonly projects: readonly LoadedProject[];
   readonly tracks: readonly TrackDefinition[];

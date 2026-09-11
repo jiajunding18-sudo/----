@@ -11,9 +11,10 @@ import {
 } from "@/features/progress/stage-readiness";
 import type { DeepReadonly } from "@/lib/content/manifest-types";
 import { getProjectScopeProgress, isProjectGateCompleted, resolveProjectMilestone } from "@/features/projects/project-milestones";
+import { getRetestLifecycle } from "@/features/progress/stage-retest";
 import type {
   ConceptMeta,
-  LearningStateV3,
+  LearningStateV4,
   ProjectMeta,
   StageDefinition,
   TrackDefinition,
@@ -67,7 +68,7 @@ export interface ProjectMilestoneNextStep {
   readonly reasonText: string;
 }
 export interface StageExitNextStep {
-  readonly kind: "stage-exit" | "eligibility-pending";
+  readonly kind: "stage-exit" | "eligibility-pending" | "stage-wait" | "stage-retest" | "stage-complete" | "retest-unavailable";
   readonly stageId: string;
   readonly title: string;
   readonly criterionIds: readonly string[];
@@ -76,6 +77,7 @@ export interface StageExitNextStep {
 export type NextStep = ConceptNextStep | EmptyNextStep | ProjectMilestoneNextStep | StageExitNextStep;
 
 export interface NextStepCatalog {
+  readonly stageRetests?: readonly DeepReadonly<import("@/lib/validation/retest-schemas").RetestDefinition>[];
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
   readonly projects: readonly DeepReadonly<ProjectMeta>[];
   readonly stages: readonly DeepReadonly<StageDefinition>[];
@@ -84,14 +86,14 @@ export interface NextStepCatalog {
 
 export interface GetNextStepInput {
   readonly catalog: NextStepCatalog;
-  readonly state: LearningStateV3;
+  readonly state: LearningStateV4;
   readonly now?: string;
 }
 
 interface RecommendationContext {
   readonly now: string;
   readonly catalog: NextStepCatalog;
-  readonly state: LearningStateV3;
+  readonly state: LearningStateV4;
   readonly concepts: readonly DeepReadonly<ConceptMeta>[];
   readonly conceptsById: ReadonlyMap<string, DeepReadonly<ConceptMeta>>;
   readonly stagesById: ReadonlyMap<string, DeepReadonly<StageDefinition>>;
@@ -126,7 +128,7 @@ function isCurrentPublishedConcept(
 
 function createContext(
   catalog: NextStepCatalog,
-  state: LearningStateV3,
+  state: LearningStateV4,
   now: string,
 ): RecommendationContext {
   const stageOrder = new Map(catalog.stages.map((stage) => [stage.id, stage.order]));
@@ -508,6 +510,7 @@ function getPendingMilestoneStep(context: RecommendationContext): ProjectMilesto
     if (stage.contentStatus !== "available") continue;
     if (context.state.preferences.activeStageId && context.state.preferences.activeStageId !== stage.id) continue;
     const readiness = getStageReadiness(stage, context.catalog.stages, context.catalog.concepts, context.catalog.projects, context.catalog.tracks, context.state, context.now);
+    if(readiness.historicallyCompleted) continue;
     if (!readiness.entryReady || readiness.unmetMasterConceptIds.length || readiness.unmetUnderstandConceptIds.length || readiness.unmetProjectRequirementConceptIds.length) continue;
     for (const gate of stage.projectGates) {
       if (!gate.milestoneId || !readiness.effectiveRequiredProjectIds.includes(gate.projectId)) continue;
@@ -528,9 +531,11 @@ function getStageExitStep(context: RecommendationContext): StageExitNextStep | u
     if (stage.contentStatus !== "available" || (context.state.preferences.activeStageId && context.state.preferences.activeStageId !== stage.id)) continue;
     const r = getStageReadiness(stage, context.catalog.stages, context.catalog.concepts, context.catalog.projects, context.catalog.tracks, context.state, context.now);
     if (r.ready || !r.entryReady || r.unmetMasterConceptIds.length || r.unmetUnderstandConceptIds.length || r.unmetProjectRequirementConceptIds.length || r.incompleteProjectIds.length) continue;
-    return { kind: r.nonRetestReady ? "eligibility-pending" : "stage-exit", stageId: stage.id, title: stage.title,
+    const life=getRetestLifecycle(stage.id,context.state,{...context.catalog,concepts:context.catalog.concepts.map(c=>({...c,stageCategoryOrder:context.stagesById.get(c.stageId)?.categoryOrder ?? 0})),stageIds:context.catalog.stages.map(s=>s.id)},context.now);
+    const kind= !r.nonRetestReady ? 'stage-exit' : life.status==='wait' ? 'stage-wait' : life.status==='due' ? 'stage-retest' : life.status==='no-retest' ? 'stage-complete' : life.status==='unavailable' ? 'retest-unavailable' : 'eligibility-pending';
+    return { kind, stageId: stage.id, title: stage.title,
       criterionIds: r.unmetExitCriterionIds,
-      reasonText: r.nonRetestReady ? (r.currentEligibilityValid ? (r.retestRequired ? "首次出口条件与资格已核验；请在规定间隔后完成保留复测。当前资格不等于阶段完成。" : "出口条件与资格已核验；没有额外复测等待天数，仍需最终出口确认。") : "非复测条件已满足，但当前轮次需要核验；请查看出口证据与资格。") : "Concept 与项目门槛已满足；请逐条登记出口证据、解释并显式确认。项目完成不会自动通过出口标准。" };
+      reasonText: kind==='stage-wait' ? `资格建立：${life.cycle?.eligibleAt}；最早复测：${life.earliestRetestAt}；剩余约 ${Math.max(0,Math.ceil((Date.parse(life.earliestRetestAt!)-Date.parse(context.now))/60000))} 分钟。等待用于检查延迟后的保留能力，期间可以继续其他已解锁内容。` : kind==='stage-retest' ? '复测已到期，请完成本次保留检查并显式确认。' : kind==='stage-complete' ? '没有复测等待；请核对并明确确认完成此检查点。' : kind==='retest-unavailable' ? '当前复测内容尚未提供，不能提交。' : '请核对当前出口证据与资格；项目完成不会自动通过出口标准。' };
   }
 }
 
@@ -541,7 +546,7 @@ export function getNextStep({ catalog, state, now = new Date().toISOString() }: 
   const focus = context.stagesById.get(focusId ?? "");
   if (focus?.contentStatus === "available") {
     const r = getStageReadiness(focus, catalog.stages, catalog.concepts, catalog.projects, catalog.tracks, state, now);
-    if (r.entryReady) {
+    if (r.entryReady && !r.historicallyCompleted) {
       const missing = new Set([...r.unmetMasterConceptIds, ...r.unmetUnderstandConceptIds, ...r.unmetProjectRequirementConceptIds]);
       for (const concept of context.concepts.filter(c => missing.has(c.id))) {
         if (!isConceptStageEntryReady(context, concept)) continue;

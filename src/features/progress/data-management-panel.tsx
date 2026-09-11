@@ -361,8 +361,8 @@ export function DataManagementPanel() {
             </ul>
             <p className="mt-4 text-sm font-semibold leading-6">
               {preparedImport.preview.mode === "replace"
-                ? "确认后，当前浏览器中的学习状态将被备份文件替换；操作前会先创建独立恢复快照。"
-                : "确认后，备份将按稳定 ID 与 updatedAt 合并；当前较新的主动回退不会被旧备份覆盖。"}
+                ? "完整替换会将当前学习状态回滚到该备份快照。备份之后产生的学习进度、复测尝试和阶段完成记录不会保留在恢复后的当前状态中；执行前会先保存当前状态的恢复备份。"
+                : "确认后，备份按稳定 ID 与正式合并规则处理；关闭尝试和历史完成不会被开放草稿覆盖，无法安全判断的冲突会拒绝导入。"}
             </p>
             <label className="mt-4 flex gap-3 text-sm leading-6">
               <input

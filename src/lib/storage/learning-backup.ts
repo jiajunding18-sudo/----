@@ -1,16 +1,16 @@
 import { z } from "zod";
 import { mergeStageCheckpoints } from "./stage-checkpoint-merge";
-import type { StageProgress } from "@/lib/validation/stage-progress-schemas";
+import type { StageProgressV4 as StageProgress } from "@/lib/validation/stage-completion-schemas";
 import { reconcileStageEligibility, stageInspectionErrors } from "@/features/progress/stage-lifecycle";
 
 import {
   inspectLearningStateAgainstCatalog,
   type ProgressCatalog,
 } from "@/features/progress/progress-domain";
-import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV4Schema } from "@/lib/validation/progress-schemas";
 import type {
   ConceptProgress,
-  LearningStateV3,
+  LearningStateV4,
   ProjectProgress,
   StudyLog,
 } from "@/types";
@@ -19,7 +19,7 @@ import {
   createExportEnvelope,
   LEARNING_STATE_APP_ID,
   LEARNING_STATE_SCHEMA_VERSION,
-  type ExportEnvelopeV3,
+  type ExportEnvelopeV4,
 } from "./learning-state";
 import { migrateExportEnvelope } from "./migrations";
 
@@ -51,8 +51,8 @@ export interface ImportPreview {
 }
 
 export interface PreparedLearningStateImport {
-  readonly envelope: ExportEnvelopeV3;
-  readonly nextState: LearningStateV3;
+  readonly envelope: ExportEnvelopeV4;
+  readonly nextState: LearningStateV4;
   readonly preview: ImportPreview;
 }
 
@@ -134,10 +134,10 @@ function mergeRecord<Value extends { readonly updatedAt: string }>(
 }
 
 export function mergeLearningStates(
-  current: LearningStateV3,
-  incoming: LearningStateV3,
-): LearningStateV3 {
-  return learningStateV3Schema.parse({
+  current: LearningStateV4,
+  incoming: LearningStateV4,
+): LearningStateV4 {
+  return learningStateV4Schema.parse({
     schemaVersion: LEARNING_STATE_SCHEMA_VERSION,
     preferences: chooseNewer(current.preferences, incoming.preferences),
     conceptProgress: mergeRecord<ConceptProgress>(
@@ -193,12 +193,12 @@ function summarizeStudyLogChanges(
 }
 
 export function createLearningBackup(options: {
-  readonly state: LearningStateV3;
+  readonly state: LearningStateV4;
   readonly contentVersion: string;
   readonly revision: number;
   readonly savedAt: string;
   readonly exportedAt: string;
-}): { readonly envelope: ExportEnvelopeV3; readonly json: string } {
+}): { readonly envelope: ExportEnvelopeV4; readonly json: string } {
   const envelope = createExportEnvelope(
     options.state,
     options.contentVersion,
@@ -216,7 +216,7 @@ export function getLearningBackupFileName(localDate: string) {
 export function prepareLearningStateImport(options: {
   readonly now?: string;
   readonly raw: string;
-  readonly currentState: LearningStateV3;
+  readonly currentState: LearningStateV4;
   readonly catalog: ProgressCatalog;
   readonly mode: ImportMode;
 }): PrepareImportResult {
@@ -280,14 +280,15 @@ export function prepareLearningStateImport(options: {
     };
   }
 
-  let nextState: LearningStateV3;
+  let nextState: LearningStateV4;
   try {
     const timestamp = options.now ?? new Date().toISOString();
     const stageErrors = stageInspectionErrors(migrated.value.payload, options.catalog, timestamp, true);
+    if(options.mode==='merge') stageErrors.push(...stageInspectionErrors(options.currentState,options.catalog,timestamp));
     if (stageErrors.length) throw new Error(stageErrors.join("；"));
     nextState = reconcileStageEligibility(options.mode === "merge"
       ? mergeLearningStates(options.currentState, migrated.value.payload)
-      : learningStateV3Schema.parse(migrated.value.payload), options.catalog, timestamp);
+      : learningStateV4Schema.parse(migrated.value.payload), options.catalog, timestamp);
   } catch (error) {
     return { ok: false, code: "catalog-conflict", message: error instanceof Error ? error.message : String(error) };
   }

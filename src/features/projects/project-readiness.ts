@@ -4,7 +4,7 @@ import {
 } from "@/features/progress/progress-domain";
 import type {
   ConceptProgress,
-  LearningStateV3,
+  LearningStateV4,
   LearningStatus,
   ProjectProgress,
 } from "@/types";
@@ -131,7 +131,7 @@ export function getProjectPathReadiness(
 
 export function getProjectReadiness(
   project: ProjectReadinessDefinition,
-  state: LearningStateV3,
+  state: LearningStateV4,
 ): ProjectReadiness {
   const knowledge = getProjectKnowledgeReadiness(
     project,

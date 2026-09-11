@@ -10,7 +10,7 @@ import { createInitialLearningState } from "@/lib/storage";
 import type {
   ConceptMeta,
   ConceptProgress,
-  LearningStateV3,
+  LearningStateV4,
   ProjectMeta,
   StageDefinition,
   TrackDefinition,
@@ -205,7 +205,7 @@ function conceptProgress(
 
 function state(
   progress: Readonly<Record<string, ConceptProgress>> = {},
-): LearningStateV3 {
+): LearningStateV4 {
   return {
     ...createInitialLearningState([commonTrack], timestamp),
     conceptProgress: { ...progress },
@@ -500,7 +500,7 @@ describe("Phase 4C-1 确定性 Next Step 推荐", () => {
       }),
     ).toMatchObject({ kind: "stage-exit", stageId: sourceStage.id });
 
-    const gateSatisfied: LearningStateV3 = {
+    const gateSatisfied: LearningStateV4 = {
       ...sourceUnderstood,
       stageCheckpoints: {
         [sourceStage.id]: stageHistory(sourceStage.id, timestamp),

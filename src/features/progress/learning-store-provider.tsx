@@ -15,6 +15,7 @@ import {
   type LearningStoreState,
 } from "./learning-store";
 import type { ProgressCatalog } from "./progress-domain";
+import { refreshDerivedClock } from "./derived-clock";
 
 const LearningStoreContext = createContext<LearningStoreApi | null>(null);
 
@@ -32,7 +33,13 @@ export function LearningStoreProvider({
   );
 
   useEffect(() => {
+    // A successful write may be newer than the minute tick. Refresh the derived
+    // clock, never weaken future-date validation or persist a timer value.
+    const unsubscribe=store.subscribe((state,previous)=>{
+      if(state.learningState!==previous.learningState) refreshDerivedClock();
+    });
     void store.getState().hydrate();
+    return unsubscribe;
   }, [store]);
 
   return (

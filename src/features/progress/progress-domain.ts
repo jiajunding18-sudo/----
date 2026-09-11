@@ -1,7 +1,7 @@
 import {
   masteryEvidenceSchema,
   type ConceptProgress,
-  type LearningStateV3,
+  type LearningStateV4,
   type MasteryEvidence,
   type UserDifficulty,
 } from "@/lib/validation/progress-schemas";
@@ -40,6 +40,7 @@ export interface ProgressConceptDefinition extends DependencyConceptDefinition {
 }
 
 export interface ProgressCatalog {
+  readonly stageRetests?: readonly DeepReadonly<import("@/lib/validation/retest-schemas").RetestDefinition>[];
   readonly stages?: readonly DeepReadonly<import("@/types").StageDefinition>[];
   readonly concepts: readonly ProgressConceptDefinition[];
   readonly projects: readonly ProgressProjectDefinition[];
@@ -566,7 +567,7 @@ export interface LearningStateCatalogInspection {
 }
 
 export function inspectLearningStateAgainstCatalog(
-  state: LearningStateV3,
+  state: LearningStateV4,
   catalog: ProgressCatalog,
 ): LearningStateCatalogInspection {
   const conceptsById = new Map(catalog.concepts.map((concept) => [concept.id, concept]));

@@ -25,6 +25,7 @@ export type {
   EvidenceKind,
   LearningStateV2,
   LearningStateV3,
+  LearningStateV4,
   MasteryConfirmation,
   MasteryEvidence,
   ProjectProgress,

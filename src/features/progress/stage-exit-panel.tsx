@@ -8,26 +8,27 @@ import type { ProgressCatalog } from "./progress-domain";
 import { useLearningStore } from "./learning-store-provider";
 import { conditionActive, criterionSatisfied, legacyReviewReasons, refKey, resolveStageEvidence } from "./stage-evidence";
 import { getStageReadiness } from "./stage-readiness";
+import { useDerivedClock } from "./derived-clock";
+import { StageRetestPanel } from "./stage-retest-panel";
 
 const control = "max-w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm";
 const localTime = (timestamp: string) => new Date(timestamp).toLocaleString("zh-CN", { timeZoneName: "short" });
 interface EvidenceOption { ref: StageEvidenceRef; label: string }
 
-function CriterionEditor({ stageId, criterion, record, options, satisfied, disabled }: {
+function CriterionEditor({ stageId, criterion, record, options, satisfied, disabled, onMessage }: {
   stageId: string; criterion: DeepReadonly<StageDefinition["exitCriteria"][number]>;
-  record?: StageCriterionProgress; options: EvidenceOption[]; satisfied: boolean; disabled: boolean;
+  record?: StageCriterionProgress; options: EvidenceOption[]; satisfied: boolean; disabled: boolean; onMessage:(text:string)=>void;
 }) {
   const mutate = useLearningStore(s => s.mutateStage);
   const [refs, setRefs] = useState(record?.evidenceRefs ?? []);
   const [explanation, setExplanation] = useState(record?.explanation ?? "");
   const [confirmed, setConfirmed] = useState(false);
-  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const dirty = explanation !== (record?.explanation ?? "") || JSON.stringify(refs) !== JSON.stringify(record?.evidenceRefs ?? []);
   const run = async (kind: "evidence" | "confirm" | "revoke") => {
     setBusy(true);
     const result = await mutate(stageId, criterion.id, kind === "evidence" ? { kind, evidenceRefs: refs, explanation } : kind === "confirm" ? { kind, confirmed } : { kind });
-    setMessage(result.ok ? (kind === "confirm" ? "该出口标准已确认。" : kind === "revoke" ? "确认已撤销，需要再次核对并确认。" : "证据已更新，请重新确认。") : result.message);
+    onMessage(result.ok ? (kind === "confirm" ? "该出口标准已确认。" : kind === "revoke" ? "确认已撤销，需要再次核对并确认。" : "证据已更新，请重新确认。") : result.message);
     setBusy(false);
   };
   return <fieldset disabled={disabled || busy} className="min-w-0 space-y-3 border-t border-[var(--color-border)] py-5" data-stage-criterion={criterion.id}>
@@ -50,11 +51,12 @@ function CriterionEditor({ stageId, criterion, record, options, satisfied, disab
     <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />我已核对证据，明确确认本条标准；不是系统自动验收。</label>
     <button className={control} type="button" disabled={!confirmed || dirty || !refs.length || !explanation.trim()} onClick={() => void run("confirm")}>确认本条标准</button>
     {dirty ? <p className="text-sm">先保存修改，再确认。任何证据修改都会清除原确认。</p> : null}
-    <p role="status" className="break-words text-sm">{message}</p>
   </fieldset>;
 }
 
 export function StageExitPanel({ stage, catalog }: { stage: DeepReadonly<StageDefinition>; catalog: ProgressCatalog }) {
+  const now=useDerivedClock();
+  const [message,setMessage]=useState('');
   const hydrated = useLearningStore(s => s.hydrated);
   const state = useLearningStore(s => s.learningState);
   const persistenceStatus = useLearningStore(s => s.persistenceStatus);
@@ -71,7 +73,6 @@ export function StageExitPanel({ stage, catalog }: { stage: DeepReadonly<StageDe
     return () => window.removeEventListener("hashchange", reveal);
   }, [id]);
   if (!hydrated) return <div id={id} className="mt-6" role="status">正在恢复出口证据…</div>;
-  const now = new Date().toISOString();
   const progress = state.stageCheckpoints[stage.id];
   const concepts = catalog.concepts.map(c => ({ ...c, targetDepth: c.targetDepth ?? "master" as const }));
   const readiness = getStageReadiness(stage, catalog.stages ?? [], concepts, catalog.projects, catalog.tracks, state, now);
@@ -92,18 +93,22 @@ export function StageExitPanel({ stage, catalog }: { stage: DeepReadonly<StageDe
   }
   return <section id={id} aria-label={`${stage.title} 出口证据登记`} className="mt-6 min-w-0 space-y-4 break-words" data-stage-exit={stage.id}>
     <h4 className="text-lg font-semibold">出口证据与当前资格</h4>
-    <p>当前非复测条件：{readiness.nonRetestReady ? "已满足" : "尚未满足"}。历史完成：{readiness.ready ? "已记录" : "尚无"}。</p>
+    <StageRetestPanel stageId={stage.id} catalog={catalog} now={now}/>
+    <h5>当前证据（独立于完成时快照）</h5>
+    <p role="status">{message}</p>
+    <p>当前非复测条件：{readiness.nonRetestReady ? "已满足" : "尚未满足"}。历史完成：{readiness.historicallyCompleted ? "已记录" : "尚无"}。</p>
     <p className="text-sm">自我确认不是自动文件审查。Project 完成不会自动确认这些标准，也不会自动完成 Stage。</p>
+    {progress?.legacyV3Completions.length ? <aside aria-label="旧完成占位记录" className="space-y-2 text-sm"><p>保留了 {progress.legacyV3Completions.length} 条旧版本完成占位记录；仅供追溯，不授予当前资格或历史完成。</p><details><summary>查看旧完成记录</summary><pre className="max-w-full overflow-auto text-xs">{JSON.stringify(progress.legacyV3Completions,null,2)}</pre></details></aside>:null}
     {progress?.legacy.length ? <aside className="space-y-2 border-l-2 border-[var(--color-border)] pl-3" aria-label="旧数据待复核">
       <h5 className="font-semibold">Legacy needs-review</h5>
       {legacyReviewReasons(progress, now).map((reason, i) => <p key={i} className="text-sm">{reason}</p>)}
       <details><summary className="cursor-pointer">查看保留的旧 ID 与时间</summary><pre className="max-w-full overflow-auto text-xs">{JSON.stringify(progress.legacy, null, 2)}</pre></details>
     </aside> : null}
-    {stage.exitCriteria.filter(c => conditionActive(c.when, catalog.tracks, state)).map(criterion => <CriterionEditor key={`${criterion.id}:${progress?.criteria[criterion.id]?.updatedAt ?? "new"}:${progress?.criteria[criterion.id]?.confirmedAt ?? "none"}`} stageId={stage.id} criterion={criterion} record={progress?.criteria[criterion.id]} options={options} satisfied={criterionSatisfied(progress?.criteria[criterion.id], state, catalog, now)} disabled={!["ready", "error"].includes(persistenceStatus) || stage.contentStatus !== "available"} />)}
+    {stage.exitCriteria.filter(c => conditionActive(c.when, catalog.tracks, state)).map(criterion => <CriterionEditor onMessage={setMessage} key={`${criterion.id}:${progress?.criteria[criterion.id]?.updatedAt ?? "new"}:${progress?.criteria[criterion.id]?.confirmedAt ?? "none"}`} stageId={stage.id} criterion={criterion} record={progress?.criteria[criterion.id]} options={options} satisfied={criterionSatisfied(progress?.criteria[criterion.id], state, catalog, now)} disabled={!["ready", "error"].includes(persistenceStatus) || stage.contentStatus !== "available"} />)}
     {Object.keys(progress?.criteria ?? {}).filter(id => !stage.exitCriteria.some(c => c.id === id)).map(id => <p className="break-all text-sm" key={id}>已归档标准：{id}。原记录保留，不参与当前出口。</p>)}
     <p className="text-sm">当前资格：{readiness.currentEligibilityValid ? "有效" : "尚未建立或需复核"}。导入后新建的轮次表示本次核验建立资格，不是历史首次达标时间。</p>
     <p className="text-sm">资格轮次：{readiness.activeEligibility ? `${readiness.activeEligibility.id} · ${localTime(readiness.activeEligibility.eligibleAt)}` : "无有效轮次"}</p>
     <ul className="space-y-2 text-sm">{Object.values(progress?.cycles ?? {}).filter(c => c.invalidatedAt).map(c => <li key={c.id}>已失效：{c.id} · {localTime(c.invalidatedAt!)}。恢复条件后从新轮次重新计时。</li>)}</ul>
-    <p className="text-sm">{stage.retestAfterDays === undefined ? "本阶段没有额外复测等待天数，仍需最终出口确认。" : `首次出口条件满足后，需要在连续 ${stage.retestAfterDays * 24} 小时后完成保留复测；未来时间不能满足等待要求。`}当前资格不等于 Stage completed。</p>
+    {!readiness.historicallyCompleted?<p className="text-sm">{stage.retestAfterDays === undefined ? "本阶段没有额外复测等待天数，仍需最终出口确认。" : `首次出口条件满足后，需要在连续 ${stage.retestAfterDays * 24} 小时后完成保留复测；未来时间不能满足等待要求。`}当前资格不等于 Stage completed。</p>:<p className="text-sm">当前证据可重新核对；不会撤销历史完成，也不会重新启动毕业轮次。</p>}
   </section>;
 }

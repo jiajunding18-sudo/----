@@ -11,7 +11,7 @@ import { getProgressCatalog } from "@/lib/content/site-content";
 import { inspectLearningStateAgainstCatalog } from "@/features/progress/progress-domain";
 import { createLearningStore } from "@/features/progress/learning-store";
 import { projectMetaSchema } from "@/lib/validation/content-schemas";
-import { learningStateV3Schema } from "@/lib/validation/progress-schemas";
+import { learningStateV4Schema } from "@/lib/validation/progress-schemas";
 import { plannedMilestoneProject } from "../fixtures/project-milestones";
 
 function migrated() {
@@ -30,7 +30,7 @@ function stateForGate() {
       masteryConfirmation: { confirmedAt: historyTime, criterionIds: ids, evidenceIds: [evidenceId], statementVersion: 1 },
     };
   }
-  return learningStateV3Schema.parse(state);
+  return learningStateV4Schema.parse(state);
 }
 const stage = contentManifest.stages.find(({ id }) => id === "stage.image-computing")!;
 function readiness(state = stateForGate(), project = pixelLab) {

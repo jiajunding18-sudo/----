@@ -9,11 +9,11 @@ import { createExportEnvelope, createPersistedEnvelope } from "@/lib/storage/lea
 import { prepareLearningStateImport } from "@/lib/storage/learning-backup";
 import { mergeStageCheckpoints } from "@/lib/storage/stage-checkpoint-merge";
 import { getNextStep } from "@/features/recommendations/next-step";
-import type { LearningStateV3 } from "@/types";
+import type { LearningStateV4 } from "@/types";
 
 const [first, second] = imageStage.exitCriteria;
 const action = { kind: "evidence" as const, evidenceRefs: [stageRef], explanation: "逐项核对报告" };
-const read = (s: LearningStateV3) => getStageReadiness(imageStage, contentManifest.stages, contentManifest.concepts, contentManifest.projects, contentManifest.tracks, s, stageNow);
+const read = (s: LearningStateV4) => getStageReadiness(imageStage, contentManifest.stages, contentManifest.concepts, contentManifest.projects, contentManifest.tracks, s, stageNow);
 function eligible(time = stageTime) {
   let s = stageReadyInput();
   for (const c of imageStage.exitCriteria) {
@@ -22,14 +22,14 @@ function eligible(time = stageTime) {
   }
   return s;
 }
-function imported(s: LearningStateV3) {
+function imported(s: LearningStateV4) {
   const result = prepareLearningStateImport({ raw: JSON.stringify(createExportEnvelope(s, "test", 1, stageNow, stageNow)), currentState: stageReadyInput(), catalog: stageCatalog, mode: "replace", now: stageNow });
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.message);
   return result.value.nextState;
 }
 function storeFor(s = stageReadyInput(), failOnce = false) {
-  const writes: LearningStateV3[] = [];
+  const writes: LearningStateV4[] = [];
   const adapter = {
     load: async () => ({ ok: true as const, value: createPersistedEnvelope(s, "test", 1, stageTime) }),
     save: async (e: ReturnType<typeof createPersistedEnvelope>) => {
@@ -45,7 +45,7 @@ function storeFor(s = stageReadyInput(), failOnce = false) {
 describe("B1-R1 lifecycle integrity counterexamples", () => {
   it("partial/future reserved completion is inert across import, runtime and downstream gate", () => {
     const s = eligible(); const p = s.stageCheckpoints[imageStage.id]; const cycle = Object.values(p.cycles)[0];
-    p.historicalCompletion = { eligibilityCycleId: cycle.id, completedAt: "2099-01-01T00:00:00.000Z", evidenceSnapshot: { [first.id]: p.criteria[first.id] } };
+    p.legacyV3Completions[0] = { eligibilityCycleId: cycle.id, completedAt: "2099-01-01T00:00:00.000Z", evidenceSnapshot: { [first.id]: p.criteria[first.id] } };
     const restored = imported(s);
     expect(read(restored)).toMatchObject({ nonRetestReady: true, currentEligibilityValid: true, ready: false, historicalCompletion: undefined });
     const downstream = { ...imageStage, id: "stage.test-next", entryGate: { kind: "checkpoint" as const, stageId: imageStage.id } };

@@ -670,12 +670,12 @@ interface StageCheckpoint {
   updatedAt: string;
 }
 
-interface LearningStateV3 {
-  schemaVersion: 3;
+interface LearningStateV4 {
+  schemaVersion: 4;
   preferences: UserPreferences;
   conceptProgress: Record<ConceptId, ConceptProgress>;
   projectProgress: Record<ProjectId, ProjectProgress>;
-  stageCheckpoints: Record<StageId, StageProgress>; // structured model in §7.5
+  stageCheckpoints: Record<StageId, StageProgressV4>; // structured model in §7.5
   studyLogs: StudyLog[];
 }
 ```
@@ -690,7 +690,7 @@ interface LearningStateV3 {
 - `projectGate(projectId)` 始终读取 legacy project-level completion，即使 Project 后来新增 milestones 也不改变含义；`projectGate(projectId, milestoneId)` 只读指定增量。`areAllProjectMilestonesCompleted` 是独立 UI aggregate selector，不复用 legacy gate。
 - 所有 executable contracts 逐个验证必需验收和交付物，包含 `kind: project` 所引用的顶层契约；planned 仅有身份、不参与执行校验，不能借合法 sibling 通过空契约。
 - NextStep 候选保留 milestoneId 和 scoped progress，以增量 status/updatedAt 判断进行中优先级。Project 页面用 `#milestone=<encoded ID>` 定位，先校验归属，未知 ID 回退首个增量；URL 不参与授权或完成判断。
-- NextStep 保留 milestone 待办兼容：历史 completed 不隐藏其知识缺口或待验收增量；planned contract 只能展示发布状态，不推荐假执行任务。Stage 出口处理按第 7.5 节，retest action 留给 B2。
+- NextStep 保留 milestone 待办兼容：历史 completed 不隐藏其知识缺口或待验收增量；planned contract 只能展示发布状态，不推荐假执行任务。Stage 出口及复测处理按第 7.5 节。
 
 - `not_started → learning → understood → mastered` 是推荐顺序，但用户可以手动回退。
 - 首次进入 `learning` 时记录 `startedAt`；首次达到 `understood` 时记录 `understoodAt`。
@@ -711,13 +711,15 @@ interface LearningStateV3 {
 
 ### 7.5 Phase 9E-B1 Stage lifecycle
 
+B2 扩展（不改变 B1 当前资格原则）：progress v4 在冻结 v3 之后顺序迁移，新增 attempts 与版本化历史完成。复测正文由 stage-retests catalog 经 manifest 提供，delay 仍唯一来自 StageDefinition。domain action 在串行 store 中重新验证 currentEligibilityValid、cycle、到期时间、definition version 与全部 required probes；冻结 attempt/completion 后一次 persist 成功才更新内存。无复测使用独立显式确认。历史 predicate 校验冻结快照的身份、时间、引用和确定性 fingerprint，而不重算 live catalog。ready 兼容别名仅指 historicallyCompleted。共享 derived clock 驱动 wait/due，时间刷新不写学习数据。Project 架构及原迁移不变。
+
 R1 契约：B1 的 historicalCompletion 为 inert 保留数据，ready 恒不授予完成，入口不消费预留快照。nonRetestReady 是基础条件；currentEligibilityValid 验证可执行性、完整时间检查和 qualificationBasis。basis 保存确定性课程目标、项目 gate、当前路线和 criterion 确认/来源依据快照，以及已知可靠确认时间下界；不猜测首次满足时间。旧 cycle 缺依据、依据不符或 anchor 早于确认时，保留并失效，当前条件成立后按 injected now 重建。future/倒序时间仍拒绝。正常 export/import 的一致依据保留 anchor。
 
 criterion evidenceBasis 使用现有来源记录（包括 updatedAt）身份，不读取磁盘或 hash 文件。来源失效/变化持久化 confirmationInvalidatedAt，保留 confirmedAt 供追溯；恢复不自动确认。实质 criterion 编辑清除确认，重新确认替换依据。removed criterion 保留为 orphan，不用于当前条件；新增必需项使旧资格失效。same-ID 课程语义变化暂无正式版本机制，留给后续 contract versioning，不声称能够自动识别。
 
-LearningStore 对所有异步写入 action 排队，在获得队列位置后读取最新状态；单次失败不丢此前状态、不阻塞后续队列。NextStep 当前 focus checkpoint 的 Concept/Project/exit/qualification 优先于其他阶段 learning。B2 timer、复测提交、正式完成快照仍不实现。
+LearningStore 对所有异步写入 action 排队，在获得队列位置后读取最新状态；单次失败不丢此前状态、不阻塞后续队列。NextStep 当前 focus checkpoint 的 Concept/Project/exit/qualification 优先于其他阶段 learning。B2 增加共享时钟及串行 mutateRetest；原子持久化成功后才更新内存。
 
-当前应用持久化升级为 v3；冻结 v1→v2 Project migration 不变，再顺序执行 v2→v3。旧 StageCheckpoint 完整保存在 legacy provenance 中并显示 needs-review，不作为确认、资格或历史完成。
+当前应用持久化为 v4；冻结 v1→v2 与 v2→v3 migration，顺序执行 v3→v4。旧 StageCheckpoint 完整保存在 legacy provenance；v3 预留 completion 进入 legacyV3Completions，不作为确认、资格或历史完成。
 
 Stage criterion 记录 evidenceRefs、说明、confirmedAt 与 updatedAt；引用解析检查 Project/milestone 下真实 deliverable 或 Concept 下真实 passed evidence。实质编辑清除确认；确认需要用户显式提交。当前资格由纯 selector 合取入口、Concept 目标、项目与项目 hard 要求、当前生效的必需出口确认。
 
@@ -727,13 +729,19 @@ Stage criterion 记录 evidenceRefs、说明、confirmedAt 与 updatedAt；引�
 
 eligibility cycle 使用稳定 ID、eligibleAt、可选 invalidatedAt；集中 reconciliation 在相关 mutation、加载/导入协调后建立或失效轮次，重复执行幂等。它不放入通用 persist，不让 Study Log/笔记变更 anchor。历史轮次不删除；恢复创建新 ID。复测模型绑定 cycle ID，历史完成预留完整时间与证据快照，B1 没有创建它们的 action。
 
-historical completion 与 nonRetestReady 独立；未来 B2 定义权威完成及 sticky 历史快照，B1 checkpoint entry gate 不读取预留快照。复测间隔为 elapsed 168h；current eligibility selector 校验轮次时间与依据，倒序 fail closed。`retestDue` 保留兼容名称，指未完成的复测要求，不表示今天已到期。没有服务端可信时钟，不承诺防改时钟作弊；B2 才增加时钟刷新和复测 action。
+historical completion 与 nonRetestReady 独立；B2 checkpoint entry gate 显式读取 historicallyCompleted，不读取旧预留快照。复测间隔为 elapsed 168h；current eligibility selector 校验轮次时间与依据，倒序 fail closed。`retestDue` 保留兼容名称，指未完成的复测要求，不表示今天已到期；真实 wait/due 由 getRetestLifecycle 与注入 now 决定。没有服务端可信时钟，不承诺防改时钟作弊。
 
 Stage merge 按 criterion 合并，不以整个 checkpoint 覆盖；cycle、legacy 和 completion 历史必须保留。同 ID 同时间不同内容等无法安全判断的冲突拒绝导入并保留恢复路径。迁移先备份原始数据，失败不覆盖主 key；旧版本回滚使用对应原始备份，不手改版本号。
 
-B1 UI 仅支持 evidence selection、confirm/revoke 与资格/legacy review；NextStep 显示 stage-exit 或 eligibility-pending，不伪称 Stage completed。复测表单、复测 evidence action 和完成 action 留给 B2。
+B1 UI 的 evidence selection、confirm/revoke 与资格/legacy review 保留。B2 UI 另呈现 wait/due、probe 草稿、自检、最终确认和 frozen history；当前证据区域独立，反馈置于稳定父层。NextStep 使用 stage-wait / stage-retest / stage-complete / retest-unavailable，完成后跳过该生命周期。
+
+v4 的 `stage-completion-schemas.ts` 保存 attempts、历史 completion 和 inert v3 history。attempt 固定 stage/cycle/definition/version、创建时间和 required probe IDs；delayDays 仅为当时策略快照，执行仍读正式 StageDefinition。successful attempt 与 completion 同一次 mutation 冻结；no-retest 不创建假 attempt。completion modelVersion=1 冻结 routeGoals、Concept targets、Project gates、criterion confirmations、cycle basis 及成功 attempt。fingerprint 为稳定序列化，不是签名；内部交叉校验 B1 basis 身份及时间、required probe 完整性和 attempt/cycle 绑定，不访问 live catalog。它不能抵御用户协调改写整个本地备份。
+
+导入独立验证完整 incoming/current completion 后再 merge，禁止拼接局部记录制造 authority；同一完成记录相同内容去重，不同内容拒绝。较旧草稿与对应 finalized attempt 合并保留后者，当前 criterion 按既有规则独立合并。closed attempt 与同身份、同绑定的开放草稿合并时，不论草稿新旧均完整保留 closed 记录及其结果；不得拼接草稿结果或重新打开。两个 closed 记录语义一致则去重，不一致、绑定冲突或 closed/confirmed 冲突均拒绝；重新尝试必须创建新 attempt。合法 frozen history 不要求当前来源仍存在；当前确认仍按 reconciliation 标记失效。无复测或复测完成后均不再创建毕业轮次。
 
 ## 8. 派生服务接口
+
+Phase 9E-B2-R2 恢复边界：`mode=merge` 在同一持续状态链中保持 terminal history 单调，冲突拒绝；`mode=replace` 是显式 whole-state snapshot rollback，不调用 merge，也不继承当前 terminal 字段。经迁移、schema 与内部完整性/时间校验，再按现有 current-validity reconciliation 协调的备份成为当前状态；因此可以恢复历史 open attempt 或尚无 completion 的快照。这不是普通 closed→open mutation。sticky completion 只承诺前向生命周期与 catalog/current-state 变化下保留，不抵抗用户明确选择的完整回滚。LearningStore 在确认后重新校验，先保存 pre-replace recovery backup，再原子保存；备份或保存失败不更新当前内存状态。恢复不绕过 submit 的资格、cycle、168h、definition/version、probe 与显式确认检查，不新增 schema/migration。
 
 组件不得自行重复实现业务判断。至少提供以下纯函数：
 
@@ -791,7 +799,7 @@ interface ProjectExecutionPathReadiness {
 
 function getProjectReadiness(
   project: ProjectMeta,
-  state: LearningStateV3,
+  state: LearningStateV4,
 ): ProjectReadiness;
 
 interface ProjectCompletionEligibility {
@@ -862,7 +870,7 @@ function getStageReadiness(
   concepts: ConceptMeta[],
   projects: ProjectMeta[],
   tracks: TrackDefinition[],
-  state: LearningStateV3,
+  state: LearningStateV4,
 ): StageReadiness;
 
 interface RecommendationTaskBase {
@@ -908,11 +916,11 @@ Study Log 的日期排序、今日/本周分钟数、最近记录、最近学习
 
 使用一个逻辑 Learning Store，按 feature 文件拆分 actions 和 selectors。持久化数据与瞬时 UI 状态分开：
 
-- 持久化：`LearningStateV3`；冻结的 `LearningStateV1` / `LearningStateV2` 用于连续迁移前校验。
+- 持久化：`LearningStateV4`；冻结的 `LearningStateV1` / `LearningStateV2` / `LearningStateV3` 用于连续迁移前校验。
 - 不持久化：action、selector、hydration 状态、当前弹窗、搜索输入、临时错误。
 - UI 只能调用 `startConcept`、`markUnderstood`、`confirmMastery`、`addEvidence`、`updateNote`、`createStudyLog`、`updateStudyLog`、`deleteStudyLog` 等领域 action。
 - action 必须先验证不变量，再一次性提交新状态；组件不能直接写任意 status。
-- Study Log action 只替换 `LearningStateV3.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、Stage 资格、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
+- Study Log action 只替换 `LearningStateV4.studyLogs`，不得写入 `conceptProgress`、`projectProgress`、Stage 资格、静态 Meta 或推荐状态。新关联只接受当前 `published` Concept/Project；旧日志中的 draft、retired 或已删除 ID 原样保留并在 UI 标记，编辑时可以保留或显式移除，但不能作为新关联添加。
 
 Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 hydration（如 `skipHydration`），在根部的窄 Client Provider 挂载后调用 `rehydrate()`。hydration 完成前，进度相关 UI 显示中性占位，不得先渲染错误的 0%。
 
@@ -921,23 +929,23 @@ Next.js 预渲染期间没有 LocalStorage。Zustand persist 必须使用手动 
 ```ts
 const LEARNING_STATE_STORAGE_KEY = "mv-learning-os:learning-state";
 
-interface PersistedEnvelopeV3 {
+interface PersistedEnvelopeV4 {
   app: "machine-vision-learning-os";
-  schemaVersion: 3;
+  schemaVersion: 4;
   contentVersion: string;
   revision: number;
   savedAt: string;
-  payload: LearningStateV3;
+  payload: LearningStateV4;
 }
 
-interface ExportEnvelopeV3 {
+interface ExportEnvelopeV4 {
   app: "machine-vision-learning-os";
-  schemaVersion: 3;
+  schemaVersion: 4;
   contentVersion: string;
   revision: number;
   savedAt: string;
   exportedAt: string;
-  payload: LearningStateV3;
+  payload: LearningStateV4;
 }
 
 type ImportMode = "merge" | "replace";
@@ -960,7 +968,7 @@ interface ImportReport {
 }
 
 type StorageLoadResult =
-  | { ok: true; value: PersistedEnvelopeV2 | null }
+  | { ok: true; value: PersistedEnvelopeV4 | null }
   | {
       ok: false;
       reason: "unavailable" | "corrupt" | "unsupported-newer-version";
@@ -970,7 +978,7 @@ type StorageLoadResult =
 
 interface LearningStateStorageAdapter {
   load(): Promise<StorageLoadResult>;
-  save(value: PersistedEnvelopeV2): Promise<void>;
+  save(value: PersistedEnvelopeV4): Promise<void>;
   clear(): Promise<void>;
 }
 ```
@@ -980,8 +988,8 @@ LocalStorage 实现是 v1 默认实现。Store 不依赖 `window.localStorage` �
 ### 9.3 schema 版本和迁移
 
 - v1 → v2 通过正式 persisted/export migration chain 执行。冻结的 Pixel Lab v1 contract ID 集合只用于历史迁移，不读取未来 MDX 推测旧验收。可验证 completed/partial/not_started 记录完整归入 `milestone.pixel-lab.tooling-foundations`，保留所有字段与原始时间；Stage 2 不创建进度记录。
-- 未知验收、路径、环境或损坏确认导致 Project migration 失败并进入 blocked/recovery。无 Pixel Lab 记录及 unrelated Project 原样保留。当前 v3 hydrate 不重跑旧 migration，避免重复记录或改写历史时间。
-- LocalStorage adapter 在允许后续 v3 写入前保留原始 v1/v2 字符串到 recovery key；备份失败即阻塞。协调有实际资格变化才保存新状态。回滚使用保留的原始备份与对应旧应用，不能仅改版本号。没有资格变化的读取不覆盖主 key。
+- 未知验收、路径、环境或损坏确认导致 Project migration 失败并进入 blocked/recovery。无 Pixel Lab 记录及 unrelated Project 原样保留。当前 v4 hydrate 不重跑旧 migration，避免重复记录或改写历史时间。
+- LocalStorage adapter 在允许后续 v4 写入前保留原始 v1/v2/v3 字符串到 recovery key；备份失败即阻塞。协调有实际资格变化才保存新状态。回滚使用保留的原始备份与对应旧应用，不能仅改版本号。没有资格变化的读取不覆盖主 key。
 - 原始 recovery 按来源 storage key、迁移/恢复原因与完整 raw 字节去重；重复 load/hydrate 复用相同快照，payload 或原因不同则保留新快照。不删除旧备份、不覆盖不同 payload，不依赖时间或哈希相等来断言内容相等。损坏输入同样尝试保留原始快照；备份失败继续 blocked，主 key 保留。
 - merge 对 milestone map 按稳定 ID 和各记录 updatedAt 合并，并保留各自 deliverables/confirmation；顶层历史完成不是合并时授予新 milestone 的依据。
 

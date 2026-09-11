@@ -31,7 +31,7 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
   await page.getByRole("button", { name: "导出 JSON 备份" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(
-    /^machine-vision-learning-os-backup-\d{4}-\d{2}-\d{2}-v3\.json$/,
+    /^machine-vision-learning-os-backup-\d{4}-\d{2}-\d{2}-v4\.json$/,
   );
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
@@ -44,7 +44,7 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
   };
   expect(exported).toMatchObject({
     app: "machine-vision-learning-os",
-    schemaVersion: 3,
+    schemaVersion: 4,
     payload: {
       conceptProgress: { "tooling.python-core": { status: "learning" } },
     },
@@ -77,7 +77,10 @@ test("Settings/Data 可导出、预览、取消、替换恢复并在刷新后保
   });
   const preview = page.locator("[data-import-preview]");
   await expect(preview).toContainText("1 个 Concept 的学习记录");
-  await expect(preview).toContainText("当前浏览器中的学习状态将被备份文件替换");
+  await expect(preview).toContainText("完整替换会将当前学习状态回滚到该备份快照");
+  await expect(preview).toContainText("复测尝试和阶段完成记录不会保留");
+  await expect(preview).toContainText("先保存当前状态的恢复备份");
+  await expect(preview.getByRole("button", { name: "确认替换并恢复" })).toBeDisabled();
 
   await preview.getByRole("button", { name: "取消导入" }).click();
   await expect(preview).toHaveCount(0);

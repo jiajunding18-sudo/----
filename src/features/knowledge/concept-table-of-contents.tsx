@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import type { ContentHeading } from "@/lib/content/mdx-headings.mjs";
+import { useLearningStore } from "@/features/progress/learning-store-provider";
 
 interface ConceptTableOfContentsProps {
   readonly headings: readonly ContentHeading[];
@@ -62,6 +63,30 @@ export function ConceptTableOfContents({
   const [activeAnchor, setActiveAnchor] = useState(headings[0]?.anchor);
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
+  const hydrated = useLearningStore(({ hydrated }) => hydrated);
+
+  useEffect(() => {
+    // SSR placeholders above the article change height on hydration. Native
+    // history restoration can otherwise apply that displacement twice.
+    if (!hydrated || (window.matchMedia("(min-width: 1280px)").matches !== (variant === "desktop"))) return;
+    const anchor = readHashAnchor();
+    if (!headings.some(heading => heading.anchor === anchor)) return;
+    let cancelled = false;
+    const restore = async () => {
+      await document.fonts.ready;
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        if (!cancelled && readHashAnchor() === anchor) {
+          document.getElementById(anchor)?.scrollIntoView({ block: "start", behavior: "instant" });
+        }
+      }));
+    };
+    if (document.readyState === "complete") void restore();
+    else window.addEventListener("load", restore, { once: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener("load", restore);
+    };
+  }, [headings, hydrated, variant]);
 
   useEffect(() => {
     const elements = headings

@@ -1,0 +1,282 @@
+---
+schemaVersion: 1
+id: dip.noise-models
+slug: dip-noise-models
+title: 高斯、散粒、脉冲与读出噪声
+englishTitle: Gaussian, Shot, Impulse, and Read Noise Models
+aliases: [噪声模型, Noise Models, salt-and-pepper]
+searchKeywords: [Gaussian, Poisson, random seed, signal-dependent, clipping, noise statistics]
+summary: 在同一灰度图上模拟加性高斯、信号相关与脉冲扰动，用分区统计和 clipping 对照检验假设，不把合成噪声等同真实传感器噪声。
+why: 看起来有颗粒不足以判断噪声来源；先分清模型、数据表示与统计变化，后续才能有依据地选择处理方法。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 30
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 5, max: 7 }
+dependencies:
+  - conceptId: math.probability-statistics
+    kind: hard
+    reason: 需要先区分随机模型与样本，能解释均值、方差和标准差。
+  - conceptId: image.digital-representation
+    kind: hard
+    reason: 需要明确灰度数组、像素位置、dtype 与强度范围，才能解释随机扰动的单位和数据契约。
+tags: [Noise, Gaussian, Poisson, Reproducibility]
+learningOutcomes:
+  - 能固定输入与随机性，比较加性高斯、信号相关和脉冲模型的假设及统计特征。
+  - 能在 float 域保留原始扰动，用数值解释 clipping 与 dtype 错误，并说明合成模型不能证明真实来源。
+masteryCriteria:
+  - id: criterion.dip-noise-models.controlled-comparison
+    description: 独立完成同一输入的受控噪声对照，改变高斯 sigma、比较信号相关分区与脉冲替换比例，先预测再解释统计结果。
+    evidenceHint: 一份短实验记录包含输入、seed、NumPy 版本、参数、分区残差 mean/std、替换比例与固定显示范围；不要求完整相机噪声理论。
+    required: true
+  - id: criterion.dip-noise-models.clipping-boundary
+    description: 独立构造 clipping 改变残差统计的对照，安全处理 dtype/range，并诊断一次类型或范围错误。
+    evidenceHint: 保留 raw 与 clipped 数据、同区域前后统计、source 断言和五项失败卡；解释统计相似不能证明来源相同。
+    required: true
+resourceIds: [resource.numpy-random-generator]
+publicationStatus: published
+contentVersion: 2026.09.12.1
+---
+
+# 高斯、散粒、脉冲与读出噪声（Noise Models）
+
+## 1. 这是什么：颗粒感不是来源证明
+
+两张灰卡图都出现亮暗小点：一张几乎每个像素略有变化，另一张绝大多数位置没动、少数点突然变黑或白。仅凭“都有颗粒”，能把它们都叫高斯噪声吗？不能。需要先问扰动如何产生、随亮度是否变化、数值是否已被裁剪。
+
+**噪声模型（noise model）**是一组简化假设，用来生成或解释随机扰动；模型不是相机的完整复制品。本页先预测，再用已知 clean（干净参考图）和 noisy（受扰图）的差值检查这些假设。
+
+## 2. 为什么现在学 / 学到什么程度
+
+Stage 2 已让你安全操作图像；这里开始解释数据为何变化。后续 `dip.spatial-filtering` 需要根据噪声假设比较方法，`dip.enhancement` 要警惕放大噪声，`dip.quality-metrics` 再讨论任务评价。这些节点仍 planned，本篇不提前去噪、不做增强或逆问题。
+
+master 只表示能独立完成限定实验、预测、统计检查和常见错误诊断，允许查 API。当前不学完整 shot/read noise 相机方程、传感器标定、硬件 SNR 测量、光子转移曲线、暗电流/固定模式系统分析、贝叶斯推断或高级去噪。
+
+## 3. 前置与教学分工
+
+hard 是 [概率统计](/knowledge/probability-and-statistics/)与[数字图像表示](/knowledge/digital-image-representation/)。复用均值、标准差和 H×W 灰度语义，不重讲概率课程。
+
+需要回看操作时可查 [dtype 安全](/knowledge/numpy-dtypes/)与[可信显示](/knowledge/image-plots/)，它们不是新增 hard edge。采样/卷积也不是本篇前置：可以联系“表示和局部操作会改变数据”，但本页不调用滤波器。
+
+ROADMAP 推荐的 `sensor.noise-snr` 尚未发布，推荐关系保留在路线和此处，待正式实体发布后再加入 DAG；它不是开始本篇的条件。
+
+## 4. 最小模型与直觉
+
+### 随机性如何复现
+
+随机数生成器（Generator）按内部状态生成伪随机样本。`np.random.default_rng(seed)` 创建生成器，seed 是非负整数种子；相同环境、输入、调用顺序与 seed 可以复现本次实验，不是让现实噪声变得确定。
+
+同一个生成器连续调用会继续前进，不会每次返回同一张噪声图。重建相同 seed 的生成器才用于本页的复现核对。记录 NumPy 版本和参数；不承诺跨所有版本逐项相同。固定 seed 便于排除随机样本变化，却不证明这个 seed 具有代表性。
+
+### 加性高斯（additive Gaussian）
+
+设 X 是 clean，Y 是 noisy，N 是噪声：
+
+$$
+Y=X+N,\qquad N\sim\mathcal{N}(0,\sigma^2).
+$$
+
+波浪符号表示“按该分布抽样”；这里均值为 0，sigma（σ）是标准差，不是方差。直觉是大多数扰动靠近 0，较大正负扰动较少。sigma 越大，波动通常越大；有限样本均值不必恰好为零。
+
+本实验还假设各像素独立抽样、处处使用同一个 sigma，且扰动分布不随 clean 亮度变化。这是**信号无关（signal-independent）**假设。仅仅直方图像钟形，不能证明独立性或真实来源。
+
+空间相关性在这里指“相邻位置的扰动是否倾向于一起变化，而不是彼此完全独立”；两个噪声图即使 histogram、mean、std 相似，空间排列仍可能不同。这里只作概念判断，不要求计算相关函数。
+
+读出噪声（read noise）指信号读出过程中引入的随机波动；某些条件下可用近似信号无关的加性模型描述，但不能反过来说“高斯分布就是读出噪声”。这里不拟合真实相机参数。
+
+### 信号相关与散粒直觉（signal-dependent / shot-like）
+
+想象相同时间窗里随机到达的计数：平均计数越多，绝对波动可能越大。散粒噪声（shot noise）的计数直觉可用简化 Poisson 模型演示：
+
+$$
+K\sim\operatorname{Poisson}(qX),\qquad Y=K/q.
+$$
+
+K 是非负整数计数，q 是本页选定的正数计数尺度，不是已标定的相机增益。Poisson 的当前用途只需知道：计数均值和方差均为 qX；换回本页强度后，Y 的均值为 X、方差为 X/q。因此亮区的绝对 std 预计更大，但相对亮度的波动未必更大。无需推导概率质量函数。
+
+这个公式只适用于声明的非负输入和计数假设，不包含真实传感器的全部读出、处理和相关性。`rng.poisson(lam)` 的 lam 是平均计数，可以逐像素不同；返回的是计数，不是直接可以加到 X 上的零均值噪声。本页直接用 K/q 作为 noisy，再计算 Y−X。
+
+对本篇 clean level > 0 的均匀灰度块，可用 `residual std / clean level` 比较相对波动：暗块亮度 D、残差标准差 s_D，亮块为 B、s_B，就比较 `s_D / D` 与 `s_B / B`，而不是只比较 s_D 与 s_B。这只是受控实验中的简单归一化比较，不是正式 SNR、相机表征或通用图像质量指标；Practice 2 沿用这个口径。
+
+### 脉冲（impulse）不是连续小扰动
+
+本页用盐椒（salt-and-pepper）作为一种教学模型：以小概率把像素替换为 0 或 1，其余保持不变。它不是所有脉冲噪声的唯一形式，也不能凭黑白点断言硬件损坏。
+
+比较模型要看**残差（residual）** `noisy - clean`：直接统计混合亮暗块的 noisy std，会把场景本身的亮度差异也算进去。真实图片通常没有 clean 真值，本页的差值便利不能直接套到未知照片上；那时需要另行设计受控观测。
+
+## 5. Worked Example：同一输入，三种假设
+
+问题：颗粒感相似时，哪些统计能支持不同假设？复用现有 NumPy/Matplotlib 环境，以下五个 checkpoint 在同一脚本依次运行。无需图片下载、相机或大型 Notebook。
+
+### Checkpoint 1：固定输入，预测高斯 sigma 的作用
+
+输入是 128×192 的 float64 灰度图，三个等宽块为 0.1、0.5、0.9，约定强度单位为 0–1。`np.empty` 创建后立即填满所有列；original 是对照副本，不是自动不可变保护。
+
+先预测：同一标准噪声 Z 乘 0.04 和 0.08，std 应变成两倍；均值应靠近 0，但不要求正好为 0。`normal(loc, scale, size)` 分别指定均值、标准差和输出 shape。`std(ddof=0)` 描述本次生成数组，以元素数为分母，不是未知总体的无偏方差估计。
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+seed = 72
+clean = np.empty((128, 192), dtype=np.float64)
+for index, level in enumerate((0.1, 0.5, 0.9)):
+    clean[:, index * 64:(index + 1) * 64] = level
+original = clean.copy()
+z = np.random.default_rng(seed).normal(0, 1, clean.shape)
+repeated = np.random.default_rng(seed).normal(0, 1, clean.shape)
+assert np.array_equal(z, repeated)
+noise_small, noise_large = 0.04 * z, 0.08 * z
+gaussian = clean + noise_large
+assert np.isclose(noise_large.std(), 2 * noise_small.std())
+assert abs(noise_large.mean()) < 0.003
+assert 0.075 < noise_large.std() < 0.085
+print("NumPy / seed:", np.__version__, seed)
+print("noise mean/std:", noise_large.mean(), noise_large.std())
+print("raw range:", gaussian.min(), gaussian.max())
+```
+
+核验环境 NumPy 2.4.6 下，mean 约 0.00041，std 约 0.08005，raw range 约 −0.195 到 1.183。代码检查性质和合理区间，不绑定整段随机序列。超出 0–1 是当前加性模型的可能输出；先保留它，不能立刻 clip 后还声称统计的是原始高斯扰动。
+
+### Checkpoint 2：分区比较信号相关性
+
+先预测：q=100 时，三个块残差 std 大约为 0.032、0.071、0.095；固定 sigma 的高斯各块则都应接近 0.08。这里统计等亮块内差值，避免把场景对比度误认为噪声。
+
+```python
+q = 100.0
+poisson_like = np.random.default_rng(seed + 1).poisson(clean * q) / q
+poisson_residual = poisson_like - clean
+for start in (0, 64, 128):
+    region = poisson_residual[:, start:start + 64]
+    gaussian_region = noise_large[:, start:start + 64]
+    level = clean[0, start]
+    predicted_std = np.sqrt(level / q)
+    print("level / mean / std / Gaussian std:",
+          level, region.mean(), region.std(), gaussian_region.std())
+    assert abs(region.mean()) < 0.005
+    assert np.isclose(region.std(), predicted_std, rtol=0.08)
+```
+
+实际 Poisson-like std 约 0.0319、0.0699、0.0941；高斯约 0.0801、0.0809、0.0791。两者假设不同：前者波动规模跟随输入亮度，后者指定相同 sigma。这个结果支持我们生成器的设计，不证明真实相机就是 Poisson；均值接近 clean 也不等于没有噪声。
+
+### Checkpoint 3：少量位置替换成极端值
+
+先预测：p=0.04 表示约 4% 位置被替换，不保证有限样本恰好 4%。`random(shape)` 产生 0（含）到 1（不含）的均匀样本；把这个区间前 p/2 分给黑点，下一段 p/2 分给白点。bool mask 的 mean 把 True 当 1，给出选择比例。
+
+```python
+p = 0.04
+draws = np.random.default_rng(seed + 2).random(clean.shape)
+pepper = draws < p / 2
+salt = (draws >= p / 2) & (draws < p)
+selected = pepper | salt
+impulse = clean.copy()
+impulse[pepper] = 0.0
+impulse[salt] = 1.0
+replacement_fraction = selected.mean()
+assert 0.03 < replacement_fraction < 0.05
+assert np.array_equal(impulse[~selected], clean[~selected])
+assert np.all((impulse[selected] == 0) | (impulse[selected] == 1))
+print("replaced fraction:", replacement_fraction)
+```
+
+实测替换比例约 0.03947。clean 本来没有 0/1，所以此例极端值计数等于替换数；若原图已有黑白像素，仅数极端值就不能反推噪声比例，应保留 selected。高斯一般在许多位置产生小扰动，盐椒保留大多数值、少量跳到极端；均值/std 不能单独概括这种差异。
+
+### Checkpoint 4：clipping 改变了观察到的模型
+
+先预测：亮块靠近上界，超过 1 的正扰动被压回，负扰动大多保留，因此有效残差均值会向负方向移动、std 也会变化。不是随机数生成器突然改变，而是后处理改变了数据。
+
+```python
+clipped = np.clip(gaussian, 0.0, 1.0)
+before = (gaussian - clean)[:, 128:]
+after = (clipped - clean)[:, 128:]
+clipped_fraction = np.mean(gaussian[:, 128:] > 1)
+print("bright clipped fraction:", clipped_fraction)
+print("before mean/std:", before.mean(), before.std())
+print("after mean/std:", after.mean(), after.std())
+assert clipped_fraction > 0.05
+assert after.mean() < before.mean()
+assert after.std() < before.std()
+assert np.array_equal(clean, original)
+
+# 真正的 uint8 数组运算反例，不是 Python 整数 250 + 20。
+wrong = np.array([250], dtype=np.uint8) + np.array([20], dtype=np.uint8)
+safe_raw = np.array([250], dtype=np.float64) + 20.0
+assert wrong[0] == 14 and safe_raw[0] == 270
+encoded = np.rint(clipped * 255).astype(np.uint8)
+decoded = encoded.astype(np.float64) / 255
+assert np.max(np.abs(decoded - clipped)) <= 0.5 / 255 + 1e-12
+```
+
+亮块约 10.25% 的值超过 1；残差 mean 从约 0.00037 变为 −0.00345，std 从约 0.0791 变为 0.0724。clip 后在端点堆积的分布不再等于生成器原本的高斯。dtype 反例则是回绕，不是 clipping：错误的 14 看似仍合法，却不代表正确亮度。
+
+计算保留 float32/float64；保存本页 0–1 表示时才用 `clip → ×255 → rint → astype(uint8)`。astype 不自动做合理裁剪/舍入，量化还会增加误差；encoded 不能替代 raw 统计。float 标签也不自动保证 0–1。
+
+### Checkpoint 5：显示必须使用同一把尺子
+
+图像均为二维 scalar，统一灰度范围 0–1；这里只为显示生成裁剪副本，原始数组仍保留。histogram（直方图）改看残差，统一 bins（分箱边界）；它只反映数值分布，不保留空间位置。不能各自自动拉伸对比度再比较“哪个更吵”。
+
+```python
+models = [("Gaussian", gaussian), ("Poisson-like", poisson_like),
+          ("salt-pepper", impulse)]
+fig, axes = plt.subplots(2, 3, figsize=(10, 6))
+bins = np.linspace(-1, 1, 61)
+for col, (name, data) in enumerate(models):
+    axes[0, col].imshow(np.clip(data, 0, 1), cmap="gray",
+                        vmin=0, vmax=1, interpolation="nearest")
+    axes[0, col].set_title(name + " / display clipped 0-1")
+    axes[0, col].set_xlabel("column")
+    axes[0, col].set_ylabel("row")
+    residual = (data - clean).ravel()
+    counts, _ = np.histogram(residual, bins=bins)
+    assert counts.sum() == clean.size  # 本组参数下 bins 没漏掉尾部
+    axes[1, col].hist(residual, bins=bins)
+    axes[1, col].set_xlim(-1, 1)
+    axes[1, col].set_ylim(0, clean.size)
+    axes[1, col].set_xlabel("raw residual / unit intensity")
+    axes[1, col].set_ylabel("pixel count")
+assert np.array_equal(clean, original)
+plt.tight_layout()
+plt.show()
+```
+
+三模型共用输入、统计方法和显示尺子，不表示参数被调成等强度，也不用于排名去噪效果。改变 sigma 后若分箱漏掉尾部，应扩大所有 histogram 的共同范围，不删除检查掩盖问题。
+
+本篇 residual std 只描述当前残差的波动尺度；std 更大不自动意味着图像质量、可见性或检测等下游任务表现更差。判断还取决于噪声结构、信号内容、任务目标和评价方式，这里不展开质量指标课程。
+
+## 6. Active Recall
+
+- 两图都有颗粒，为什么不能判断来源相同？分区 std、极端值、空间相关性与处理历史能分别补什么信息？
+- uint8 图直接加扰动出现异常黑点，先检查 dtype、raw range 还是换 seed？为什么 Python 整数运算不能验证数组回绕？
+- 固定 seed 为什么有助于对照，却不能证明现实噪声可重复？在同一生成器上多调用一次会怎样影响后续结果？
+- 亮区 std 大于暗区支持什么假设？若只统计整幅 noisy 图而没有 clean/均匀区域，可能混入什么？
+- 高亮块 clip 后 mean 偏负，如何区分生成器偏置与后处理造成的偏置？
+- 原图已有纯黑/白位置时，极端值比例为什么不能直接当脉冲概率？
+
+## 7. Practice：改变一项，解释证据
+
+1. **sigma 对照**：沿同一 Z 把 0.04 改为 0.02，另一项保持 0.08。先预测 std 比为 4，再用 `isclose` 核对；记录 raw range，不先 clip。
+2. **分区对照**：把 q 改成 200，比较暗块与亮块 residual mean/std。完成标准：预期 std 接近 `sqrt(level/200)`，各区相对偏差不超过 10%；说明绝对与相对波动的区别，不能据此辨认相机。
+3. **clipping 诊断**：把亮块从 0.9 改为 0.98，保留同一 Z 与 sigma。先预测上界截断比例增加，再报告 before/after mean/std 与比例，证明 clean 未改。不要只贴前后截图。
+4. **脉冲边界**：保留 selected，把 clean 的一部分预先设为 0。比较极端值计数与 selected 计数；完成标准：指出二者为何不再相等，且未选择位置不变。
+5. **来源判断与失败卡**：有人说“直方图像高斯，所以是读出噪声”。给出尚缺的采集/处理条件。另记录 dtype 反例：input=uint8 [250]+[20]，expected=raw 270，actual=14，reason=回绕，correction=先转 float、保留 raw，再按保存契约裁剪。
+
+## 8. Mastery Evidence
+
+两项 required，可以放进同一份短实验记录，不另写长报告：
+
+1. **Controlled noise comparison**：独立重建小灰度输入和三种基础模型，保存 seed、版本、参数；至少对照高斯与信号相关模型的分区 mean/std，并记录脉冲替换比例。改变一次 sigma 或 q，先预测后核对，图像统一显示范围。能查 API，但必须解释自己的参数结果。
+2. **Clipping / model-boundary diagnosis**：独立完成亮块 raw/clipped 统计对照、安全编码与 source 断言；提交一次 dtype/range 失败卡，说明统计相似不等于来源相同。不要把“示例断言全通过”当作真实相机模型已验证。
+
+## 9. 后续用途与 Project / Capability / Application
+
+本篇建立“提出噪声假设、控制变量、用统计检查、限制外推”的能力。ROADMAP 中 draft `project.classical-inspection` 将把受控噪声加入方案对照；draft `project.imaging-quality-lab` 将比较采集条件与仿真结果。本轮不发布这些项目、不新增 requirement，也不宣称能完成真实检测或相机标定。
+
+`sensor.noise-snr` 后续连接光子、读出与受控观测，`sensor.dynamic-range` 讨论饱和；本篇的 clipping 只是数据边界实验。空域滤波再解决“怎么去噪”，质量指标再解决“任务效果如何评价”，不是在这里提前比较算法。
+
+## 10. 精选 Resource
+
+- **NumPy Random Generator**：正文是主教材；必看 default_rng 的 seed 示例、normal 的 loc/scale/size、poisson 的 lam 与计数返回值、random 的 0–1 抽样。选看版本兼容提醒。跳过其他分布、BitGenerator 实现、并行随机流、性能、推断和完整概率推导。达到能核对本页调用、复现参数并解释输出即可停止。
+
+不借用明确跳过 random 的 Stage 2 NumPy beginner scope；也不新增一整门传感器噪声课。

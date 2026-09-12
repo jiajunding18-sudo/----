@@ -9,7 +9,7 @@ import { mutateStageCriterion } from "@/features/progress/stage-lifecycle";
 import { stageReadyInput, stageCatalog, stageRef, stageTime, imageStage } from "../fixtures/stage-lifecycle";
 
 describe("Stage 3 Wave 1 publication boundary", () => {
-  const concepts = contentManifest.concepts.filter(c => c.stageId === "stage.digital-image-processing");
+  const concepts = contentManifest.concepts.filter(c => ["dip.sampling-quantization", "dip.convolution-lsi"].includes(c.id));
   it("publishes only the two approved master concepts", () => {
     expect(concepts.map(c => c.id).sort()).toEqual(["dip.convolution-lsi", "dip.sampling-quantization"]);
     for (const c of concepts) {

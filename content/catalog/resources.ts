@@ -2,6 +2,26 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.numpy-random-generator",
+    title: "NumPy Random Generator",
+    authorOrOrganization: "NumPy",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "在中文噪声模型实验之后核对 seed、抽样参数与返回数组，不把随机数 API 当成真实传感器模型的证明。",
+    recommendedParts: [
+      "必看：default_rng 的 seed 与复现 Examples；normal 条目的 loc/scale/size，poisson 条目的 lam/计数返回值，random 的 [0,1) 范围；仅复现噪声正文用到的调用。",
+      "选看：Generator 的 No Compatibility Guarantee；记录版本、参数和调用顺序，不要求跨任意版本逐像素一致。",
+      "跳过：其他分布、BitGenerator 实现、并行随机流、性能、统计推断与概率公式证明；本资源不改变 Stage 2 beginner scope。",
+    ],
+    aliases: ["NumPy 随机数生成器", "default_rng"],
+    verification: "verified",
+    url: "https://numpy.org/doc/stable/reference/random/generator.html",
+    verifiedAt: "2026-09-12",
+    lastCheckedAt: "2026-09-12",
+  },
+  {
     id: "resource.skimage-rescale-example",
     title: "Rescale, resize, and downscale",
     authorOrOrganization: "scikit-image developers",

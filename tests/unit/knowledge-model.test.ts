@@ -57,10 +57,11 @@ describe("Knowledge manifest 派生视图", () => {
         ...stageTwoConceptIds,
         "dip.sampling-quantization",
         "dip.convolution-lsi",
+        "dip.noise-models",
       ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      Array.from({ length: 31 }, (_, index) => index + 1),
+      Array.from({ length: 32 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -109,7 +110,7 @@ describe("Knowledge manifest 派生视图", () => {
     expect(knowledge.availableStageCount).toBe(5);
     expect(knowledge.plannedStageCount).toBe(12);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      31, 0, 0,
+      32, 0, 0,
     ]);
   });
 

@@ -270,7 +270,8 @@ test("Stage 2 图像计算正文渲染代码、表格、TOC、深链接与正式
   await expect(
     page.getByRole("link", { name: "NumPy: the absolute basics for beginners" }),
   ).toHaveAttribute("href", "/resources/numpy-absolute-beginners/");
-  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(1);
+  await expect(page.locator('[data-concept-project-id="project.pixel-lab"]')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
@@ -353,7 +354,8 @@ test("OpenCV I/O 正文呈现失败检查、通道契约、无损往返与正式
   await expect(
     page.getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
   ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
-  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(1);
+  await expect(page.locator('[data-concept-project-id="project.pixel-lab"]')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
@@ -426,7 +428,8 @@ test("ROI/Mask 正文呈现坐标、共享内存、两类输出契约与失败�
       .getByLabel("精选学习资源")
       .getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
   ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
-  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(1);
+  await expect(page.locator('[data-concept-project-id="project.pixel-lab"]')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();
@@ -747,7 +750,8 @@ test("批处理正文呈现确定性 discovery、失败记录、manifest 与 rer
   await expect(
     resources.getByRole("link", { name: "OpenCV-Python Tutorials", exact: true }),
   ).toHaveAttribute("href", "/resources/opencv-python-tutorials/");
-  await expect(page.locator("[data-concept-project-id]")).toHaveCount(0);
+  await expect(page.locator("[data-concept-project-id]")).toHaveCount(1);
+  await expect(page.locator('[data-concept-project-id="project.pixel-lab"]')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   const accessibilityScan = await new AxeBuilder({ page }).analyze();

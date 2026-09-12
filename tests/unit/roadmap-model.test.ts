@@ -30,8 +30,9 @@ describe("Roadmap manifest 派生视图", () => {
       "stage.vision-math-immediate",
       "stage.vision-math-geometry-optimization",
       "stage.image-computing",
+      "stage.digital-image-processing",
     ]);
-    expect(roadmap.plannedStageCount).toBe(13);
+    expect(roadmap.plannedStageCount).toBe(12);
     expect(
       roadmap.tracks.find(({ track }) => track.id === "track.common")?.stages,
     ).toHaveLength(14);

@@ -174,7 +174,7 @@ export const stages: readonly StageDefinition[] = [
     title: "Stage 3：数字图像处理",
     summary:
       "理解数字图像的采样、噪声、卷积与频域机理，根据任务指标选择滤波、增强、分割与形态学方法。",
-    contentStatus: "planned",
+    contentStatus: "available",
     trackIds: ["track.common"],
     categoryExitForTrackIds: ["track.common"],
     outcomes: [

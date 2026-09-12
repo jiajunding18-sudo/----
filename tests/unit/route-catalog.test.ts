@@ -154,7 +154,8 @@ describe("Phase 2B-1 路线 catalog", () => {
           stageId !== "stage.tooling-foundations" &&
           stageId !== "stage.vision-math-immediate" &&
           stageId !== "stage.vision-math-geometry-optimization" &&
-          stageId !== "stage.image-computing",
+          stageId !== "stage.image-computing" &&
+          stageId !== "stage.digital-image-processing",
       ),
     ).toEqual([]);
     expect(getStage("stage.tooling-foundations").contentStatus).toBe(
@@ -167,7 +168,8 @@ describe("Phase 2B-1 路线 catalog", () => {
             id !== "stage.tooling-foundations" &&
             id !== "stage.vision-math-immediate" &&
             id !== "stage.vision-math-geometry-optimization" &&
-            id !== "stage.image-computing",
+            id !== "stage.image-computing" &&
+            id !== "stage.digital-image-processing",
         )
         .every(({ contentStatus }) => contentStatus === "planned"),
     ).toBe(true);

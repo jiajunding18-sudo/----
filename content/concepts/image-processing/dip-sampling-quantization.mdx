@@ -1,0 +1,214 @@
+---
+schemaVersion: 1
+id: dip.sampling-quantization
+slug: dip-sampling-quantization
+title: 采样、量化与混叠
+englishTitle: Sampling, Quantization, Aliasing
+aliases: [数字图像采样, Aliasing]
+searchKeywords: [downsampling, prefilter, quantization levels, 信息损失]
+summary: 用条纹与灰度阶梯实验区分空间采样和数值量化，解释预滤波为何能减少混叠、又为何不能保留全部细节。
+why: 图像尺寸和 dtype 正确不代表信息完整；必须知道细节在哪一步消失，才能避免把重采样伪影当成真实目标。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 10
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 5, max: 7 }
+dependencies:
+  - conceptId: image.digital-representation
+    kind: hard
+    reason: 需要先区分像素网格、空间尺寸、强度范围与 dtype，才能分别改变采样密度和量化级数。
+  - conceptId: math.linear-transforms
+    kind: recommended
+    reason: 缩放的坐标直觉有助于解释网格间距，但不是本页实验的启动门槛。
+tags: [Sampling, Quantization, Aliasing]
+learningOutcomes:
+  - 能预测固定条纹在不同采样相位下的结果，用数值解释混叠和预滤波的代价。
+  - 能固定空间网格比较不同量化级数，安全计算误差并说明不可逆的信息损失。
+masteryCriteria:
+  - id: criterion.dip-sampling-quantization.aliasing-experiment
+    description: 独立完成直接与预滤波降采样对照，先预测再核对相位、shape、关键像素和细节损失。
+    evidenceHint: 保存条纹生成参数、两个采样起点、固定显示范围、输出统计与 source 断言；解释为什么预滤波必须在降采样前，以及不能恢复什么。
+    required: true
+  - id: criterion.dip-sampling-quantization.quantization-experiment
+    description: 独立完成固定网格的两种量化级数对照，解释级数、误差和多对一映射，并诊断一次范围错误。
+    evidenceHint: 提交量化规则、实际级数、float 误差、一个不可区分输入对，以及 input/expected/actual/reason/correction 失败卡。
+    required: true
+resourceIds: [resource.skimage-rescale-example]
+publicationStatus: published
+contentVersion: 2026.09.12.1
+---
+
+# 采样、量化与混叠（Sampling, Quantization, Aliasing）
+
+## 1. 这是什么：先看一个反常现象
+
+一张黑白竖条纹图，每隔一个像素取一次样，可能变成全黑；只把起点右移一个像素，又变成全白。不是物体突然变色，而是新网格分不清原来的快速变化。
+
+先预测：如果输入每行是 `[0,1,0,1,0,1]`，`row[::2]` 和 `row[1::2]` 分别留下什么？答案是全 0 和全 1。**混叠（aliasing）**就是不同原始变化在稀疏采样中变得难以区分，甚至表现为不存在的慢变化或常量。
+
+## 2. 为什么现在学 / 为什么机器视觉需要它
+
+Stage 2 已教会你操作数组；现在要解释为什么合法操作会丢信息。细条纹、小零件边缘、重复纹理经过缩小后，可能产生假结构。后续 `sensor.pixel-sampling` 用它判断欠采样，`sensor.dynamic-range` 继续研究饱和与量化；它们目前仍是计划内容。
+
+这里的 master 只要求能独立运行小实验、预测、解释与防错，不要求证明采样定理。当前不学连续信号重建公式、频谱推导、颜色科学或超分辨率算法。
+
+## 3. 前置知识与分工
+
+hard 是 [数字图像表示](/knowledge/digital-image-representation/)；recommended 是 [线性变换](/knowledge/linear-transforms-basis-rank/)。本页直接使用二维灰度 float 数组，约定 0 为黑、1 为白；不是说所有 float 图像都必须在 0–1。
+
+本页不依赖另一篇卷积课：预滤波先用“相邻两列平均”解释。后续卷积会给这个局部算子更一般的语言。
+
+## 4. 核心概念与直觉
+
+### 空间网格与采样间隔
+
+采样（sampling）决定**在哪里取数值**。二维网格使用 `image[row, column]`，水平每隔 2 列取一次，相当于水平采样间距变为原来的 2 倍。本实验只改变水平方向，height 不变；不把它误写成两轴同时缩小。
+
+空间高频在这里仅指亮暗随位置变化得很快，不指亮度很高。1 像素宽交替条纹在稀疏网格上不能可靠保留。采样相位是取样起点，例如从 column 0 或 1 开始。
+
+### 预滤波为什么要先做
+
+先降低新网格无法表达的快速变化，再减少采样点，可降低混叠。本例先平均每对相邻列：黑白变成 0.5，再取样。它保留本例局部平均亮度，却主动放弃条纹细节。
+
+预滤波不是恢复器；先抽成全黑，再平均全黑，不可能知道原来还有白条纹。两点平均只适用于本页演示，不是任何缩放倍率和任意纹理的万能抗混叠方案。实际应按缩小倍率与细节尺度选择滤波强度；正式滤波选择留给后续节点。
+
+### 量化级数：在哪里采样不变，允许取哪些值改变
+
+量化（quantization）把连续或较细的数值映射到有限级别。对本页合法范围 `[0,1]`，采用包含两端点的均匀 L 级量化：
+
+$$
+Q_L(v)=\frac{\operatorname{round}((L-1)v)}{L-1},\qquad L\geq2.
+$$
+
+L 是整数级数；round 是取最近整数。L=4 只允许 0、1/3、2/3、1。级间距为 1/(L−1)，有效范围内最近邻量化的误差不超过半个间距（浮点核对留容差）。这不是所有编码格式的统一量化规则。
+
+量化不改变 H×W。用 float 保存四个级别仍然是四级量化；dtype 与实际允许级数不是一回事。多种输入会落到同一级，事后换成更大 dtype 也不能恢复原值。
+
+## 5. Worked Example
+
+复用现有 Python / NumPy / Matplotlib 环境，不安装新图像库。以下三个 checkpoint 在同一脚本依次运行；数组全部合成，无外部图片、随机性或下载。
+
+### Checkpoint 1：先预测，再做降采样
+
+`np.tile` 将一段数据重复成指定行列；这里把 `[0,1]` 重复为 8 行、16 列。先在纸上写出两个起点的预测。
+
+下面的成对平均表达等价于：先对原始相邻两列做平均，再为每一对生成一个输出采样值。两个切片共同读取原始数据的两个相位，不是先只保留一个相位，再对已经丢失另一相位的数据做平滑。局部平均先减弱过高空间频率，之后才降低采样密度。
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+source = np.tile(np.array([0., 1.], dtype=np.float32), (8, 8))
+original = source.copy()
+direct = source[:, ::2].copy()
+other_phase = source[:, 1::2].copy()
+# 每一对偶数列、奇数列先平均，再形成稀疏网格上的一个样本。
+filtered_down = (source[:, ::2] + source[:, 1::2]) / 2.0
+assert source.shape == (8, 16)
+assert direct.shape == other_phase.shape == filtered_down.shape == (8, 8)
+assert np.all(direct == 0.)
+assert np.all(other_phase == 1.)
+assert np.all(filtered_down == 0.5)
+print("means:", source.mean(), direct.mean(), other_phase.mean(), filtered_down.mean())
+assert np.array_equal(source, original)
+```
+
+预期均值依次为 `0.5, 0, 1, 0.5`。平均后不再随这两个起点呈现全黑/全白的极端结果，但黑白条纹也不再存在。这里比较的是原场景的平均亮度与可见结构，不把不同 shape 的数组直接相减当“重建误差”。
+
+### Checkpoint 2：只改级数，不改网格
+
+`linspace` 在两端点间均匀取数，`rint` 舍入到最近整数（恰好半整数时取偶数）；`unique` 列出不同数值。先预测 L=4 和 L=16 哪个台阶更粗。
+
+```python
+def quantize_unit(image, levels):
+    if not isinstance(levels, int) or levels < 2:
+        raise ValueError("levels must be an integer >= 2")
+    if not np.isfinite(image).all() or image.min() < 0 or image.max() > 1:
+        raise ValueError("expected finite values in [0,1]")
+    working = image.astype(np.float32)
+    return np.rint(working * (levels - 1)) / (levels - 1)
+
+ramp = np.tile(np.linspace(0., 1., 17, dtype=np.float32), (4, 1))
+q4 = quantize_unit(ramp, 4)
+q16 = quantize_unit(ramp, 16)
+error4 = float(np.max(np.abs(q4 - ramp)))
+error16 = float(np.max(np.abs(q16 - ramp)))
+assert q4.shape == q16.shape == ramp.shape == (4, 17)
+assert len(np.unique(q4)) == 4
+assert len(np.unique(q16)) == 16
+assert np.isclose(error4, 1 / 6)
+assert np.isclose(error16, 1 / 30)
+pair = np.array([0.4, 0.45], dtype=np.float32)
+assert np.allclose(quantize_unit(pair, 4), [1 / 3, 1 / 3])
+print("max errors:", error4, error16)
+```
+
+最大误差约 `0.1667` 与 `0.0333`。误差是在同 shape 的浮点数组间计算，没有 uint8 回绕。0.4 和 0.45 变成同一级，单看输出无法知道原来是哪一个；这就是不可逆边界。
+
+### Checkpoint 3：可信显示与范围失败
+
+每幅标量图固定灰度映射 `0–1`，`nearest` 仅用于显示离散格子，不额外平滑图片。否则各图自动缩放可能掩盖差异。
+
+```python
+fig, axes = plt.subplots(2, 3, figsize=(9, 5))
+for ax, data, title in zip(axes.ravel(),
+        [source, direct, filtered_down, ramp, q4, q16],
+        ["source", "direct", "prefilter + down", "ramp", "4 levels", "16 levels"]):
+    ax.imshow(data, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    ax.set_title(title)
+plt.tight_layout()
+plt.show()
+
+try:
+    quantize_unit(np.array([255.], dtype=np.float32), 4)
+except ValueError as error:
+    print("input: float32 [255]; expected: [0,1]; actual: 255;")
+    print("reason:", error, "; correction: confirm source units, then divide by 255 if it is 0–255 intensity")
+```
+
+函数拒绝范围错误，而不悄悄 clip 掩盖输入契约。只有来源确认为 0–255 强度，才按该约定换算；float32 标签本身不是证据。
+
+## 6. Active Recall
+
+- 缩小后出现假条纹，应先检查采样间隔、起点、预滤波还是 dtype？怎样一次只改变一项排查？
+- 对全黑 direct 再平滑，为何无法找回原来的 0.5 平均亮度？
+- L=4 的图转为 float64，能否区分原来的 0.4 和 0.45？用输出相同说明原因。
+- 同一梯度 shape 没变但出现台阶，是空间采样还是量化？怎样用数值核对而不是凭显示猜测？
+
+## 7. Practice
+
+1. **理解检查**：输入一行 `[0,0,1,1,0,0,1,1]`，先预测两个起点的二倍抽取，再运行。完成标准：均得到 `[0,1,0,1]`；解释相位敏感性取决于纹理和采样关系，不是每次抽取都全黑。
+2. **数值应用**：用同一 ramp 改为 L=8。记录实际级数和最大误差，误差应不超过 `1/14 + 1e-6`；手算输入 0.4 的输出 `3/7`。
+3. **小实验**：将条纹改为每条宽 2 像素，比较直接抽取与两列平均；保存预测、图和均值。不要用“均值一致”证明所有结构正确。
+4. **失败诊断**：传入 `[0,255]` 的浮点强度，解释拒绝原因，确认来源后归一化重跑。交付 input/expected/actual/reason/correction 五项，不以删除断言解决错误。
+
+## 8. 常见错误与信息边界
+
+| 错误 | 核对方式 |
+| --- | --- |
+| 缩小一定保留原来细节 | 比较不同起点与高频条纹 |
+| 预滤波能找回缺失信息 | 区分减少混叠与恢复原纹理 |
+| dtype 变宽就是级数变多 | 检查 unique 与不可区分输入对 |
+| 量化就是减小 width/height | 固定网格，只改 L |
+| 当前两点平均适合所有图片 | 它只是受控例子；不可泛化滤波尺度 |
+
+## 9. Project / Capability / Application 映射
+
+ROADMAP 的 `project.classical-inspection` 将需要受控退化比较：避免把重采样伪影当作检测到的结构。`project.imaging-quality-lab` 将连接采集质量与算法可用性。这两个项目当前仍为 draft；本篇不增加其执行契约，也不宣称学完即可完成工业检测。
+
+## 10. Mastery Evidence
+
+两项 required evidence：
+
+1. **混叠实验卡**：独立改一项条纹/起点参数，写预测、运行结果、预滤波前后同范围图、关键值、shape 和 source 断言；解释损失与局限。
+2. **量化实验卡**：固定网格比较两个 L，报规则、级数、float 最大误差、多对一输入对和范围失败诊断。
+
+允许查 API，不要求背代码；必须能解释自己的新参数结果。“示例运行成功”或只贴截图不构成掌握。
+
+## 11. 后续复用与精选资源
+
+后续采样与传感器节点讨论真实成像约束；频域节点再解释高频被折叠的数学语言。本页不提前教授它们。
+
+- **scikit-image：Rescale, resize, and downscale**：必看开头关于缩小前 anti-aliasing 的说明及对照图；选看 local mean 的直觉。跳过 spline order、完整 transform API，不要求安装或重写本页实验。官方例子用于核对“先滤波再缩小”，本页仍是主教材。量化只需掌握本页已明确的均匀规则。

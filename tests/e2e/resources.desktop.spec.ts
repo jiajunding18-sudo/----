@@ -104,7 +104,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   expect(browserErrors).toEqual([]);
 });
 
-test("15 个 Resource 均有静态详情，正式外链只由详情主动打开", async ({
+test("17 个 Resource 均有静态详情，正式外链只由详情主动打开", async ({
   page,
 }) => {
   const browserErrors = trackBrowserErrors(page);
@@ -113,8 +113,8 @@ test("15 个 Resource 均有静态详情，正式外链只由详情主动打开"
     .locator("[data-resource-id] h3 > a")
     .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
 
-  expect(detailHrefs).toHaveLength(15);
-  expect(new Set(detailHrefs).size).toBe(15);
+  expect(detailHrefs).toHaveLength(17);
+  expect(new Set(detailHrefs).size).toBe(17);
   for (const href of detailHrefs) {
     expect(href).not.toBeNull();
     await page.goto(href ?? "/resources/");

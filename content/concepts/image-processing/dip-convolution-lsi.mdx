@@ -1,0 +1,254 @@
+---
+schemaVersion: 1
+id: dip.convolution-lsi
+slug: dip-convolution-lsi
+title: 卷积与线性移不变系统
+englishTitle: Convolution and Linear Shift-Invariant Systems
+aliases: [LSI, 二维卷积, correlation]
+searchKeywords: [kernel, impulse response, weighted sum, filter2D, boundary]
+summary: 从局部加权和出发，用非对称小核、脉冲与阶跃实验区分卷积和相关，检验线性、移不变及有限图像的边界限制。
+why: 只有对齐方向、边界和数值类型，手工模型与库函数的差异才有可解释的原因，而不只是换参数碰运气。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 20
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 6, max: 8 }
+dependencies:
+  - conceptId: math.vectors-matrices
+    kind: hard
+    reason: 需要理解矩阵位置与逐项加权求和，才能解释一个输出像素。
+  - conceptId: python.numpy-arrays
+    kind: hard
+    reason: 需要切片、shape、浮点数组和副本，才能实现受限的小核实验。
+  - conceptId: math.linear-transforms
+    kind: recommended
+    reason: 保持加法与数乘的直觉有助于理解线性，但本页给出可独立核对的数值实验。
+tags: [Convolution, LSI, Kernel]
+learningOutcomes:
+  - 能用手工小核与 filter2D 对照解释卷积翻核、脉冲响应和阶跃方向。
+  - 能在限定的浮点、固定核和边界契约下检验线性与内部移不变，并解释量化、截断和边界的限制。
+masteryCriteria:
+  - id: criterion.dip-convolution-lsi.manual-comparison
+    description: 独立实现受限的二维 3×3 卷积，与库函数对齐方向、anchor、border 和 dtype 后比较。
+    evidenceHint: 提交一个局部手算、非对称核、脉冲及阶跃结果、最大绝对差、source 断言和一次库函数不一致诊断。
+    required: true
+  - id: criterion.dip-convolution-lsi.operator-properties
+    description: 用新系数检验线性，用安全内部平移检验移不变，并解释边界和饱和为何限制这些结论。
+    evidenceHint: 提交预测、系数、比较范围、allclose 容差、边界数值对照和 float/uint8 响应；不要求证明一般系统定理。
+    required: true
+resourceIds: [resource.opencv-filtering-reference]
+publicationStatus: published
+contentVersion: 2026.09.12.1
+---
+
+# 卷积与线性移不变系统（Convolution and LSI）
+
+## 1. 这是什么：先预测方向
+
+在一条从左暗到右亮的边缘上，用“右邻居减左邻居”会得到正数；交换左右，符号就反过来。两个程序都能运行、shape 也相同，但如果一个翻转了 kernel，另一个没有，结果不会相同。
+
+本页把**局部算子（local operator）**理解为一条规则：输出位置只读取附近输入，用固定权重求和。kernel 是写有这些权重的小矩阵，不是输入图像本身。
+
+## 2. 为什么现在学 / 学习深度
+
+Stage 2 的操作经验现在需要一个可以解释、检验的模型。后续 `dip.spatial-filtering`、`dip.frequency-domain`、`dip.edge-detection` 会复用它；`imaging.psf-mtf` 用点响应讨论成像扩散。这些后续内容仍 planned。
+
+master 仅指独立完成受限实验、预测方向、解释差异和诊断常见错误。当前不学严格系统证明、傅里叶推导、任意尺寸高性能卷积、FFT、CNN 或完整信号处理课程。
+
+## 3. 前置知识
+
+hard：[向量与矩阵](/knowledge/vectors-and-matrices/)、[NumPy 数组](/knowledge/numpy-arrays/)；recommended：[线性变换](/knowledge/linear-transforms-basis-rank/)。本页补齐实验所需的 `pad` 和 `filter2D` 语义，不额外增加 OpenCV Concept hard edge。复用已有 Python 环境，不重新安装工具链。
+
+## 4. 核心概念与初学者直觉
+
+### 一格输出怎样产生
+
+将 3×3 kernel 中心压在输出位置，读取九个邻居，对应相乘再相加。对 patch `[[1,2,3],[4,5,6],[7,8,9]]` 和中间行 `[-1,0,1]`、其余为 0 的核，**相关（correlation）**输出是 `-4+6=2`。
+
+严格**卷积（convolution）**先将核上下、左右同时翻转（相当于转 180°），于是输出为 `4-6=-2`。不是转置，也不是只反转一根轴。对称核翻转后相同，不能拿它证明两种运算永远一样。
+
+设 I 是输入，K 是以中心为偏移零点的 3×3 核，r/c 是行列，i/j 是 −1 到 1 的邻域偏移：
+
+$$
+\begin{aligned}
+C[r,c]&=\sum_{i,j}K[i,j]I[r+i,c+j],\\
+Y[r,c]&=\sum_{i,j}K[i,j]I[r-i,c-j].
+\end{aligned}
+$$
+
+求和符号只表示把九项相加（i、j 各取 −1、0、1）；上式是相关，下式是卷积。代码中的 K 仍用 0–2 下标，中心对应 `[1,1]`，不要直接拿数学负偏移当 Python 负索引。
+
+### 线性（linearity）
+
+固定算子 T 如果满足 `T(aA+bB)=aT(A)+bT(B)`，就是保持加法与数乘：先混合两张图再处理，等于分别处理后同样混合。a、b 是数值系数。固定核的浮点加权和具有这个性质（数值核对允许舍入误差）；clip、舍入或 uint8 饱和后的整条流水线一般不再线性。
+
+### 移不变（shift invariance）与脉冲响应
+
+将一个小亮点平移，输出图案也只发生同样平移，规则没有随位置改变，这就是移不变。**脉冲（impulse）**是一个像素为 1、其余为 0 的测试输入；输出称脉冲响应。每个像素可看成一个缩放、平移的小脉冲，线性允许把响应相加，移不变允许复用同一种形状。这是固定卷积核能描述这类系统的直觉，不要求一般性证明。
+
+无限网格上的固定卷积是 LSI。本页只有有限数组：补边与裁切可能破坏“任意平移都相同”。实验先把点和完整核支撑放在内部；不拿循环平移穿过边缘来冒充无限网格证明。
+
+### 边界与数值也是模型的一部分
+
+3×3 邻域在边缘需要图像外的值。补 0 与复制最近像素表达不同假设。`filter2D` 实际执行相关、不自动翻核；默认 anchor 位于核中心。本页显式指定 border、float32 输入和 `CV_32F` 输出。它与手工代码只有假设一致时才应吻合。
+
+## 5. Worked Example
+
+四段按顺序在同一脚本运行。只研究二维、非空、3×3 奇数核、same shape 输出；不是通用滤波库。`np.pad` 在数组四周加一圈值；`constant` 默认补 0，`edge` 复制边缘。`allclose` 在容差内比较所有位置。
+
+### Checkpoint 1：手工卷积与库函数
+
+```python
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+
+def manual_convolution(image, kernel, border="constant"):
+    if image.ndim != 2 or image.size == 0 or kernel.shape != (3, 3):
+        raise ValueError("expected nonempty H×W image and 3×3 kernel")
+    if border not in ("constant", "edge"):
+        raise ValueError("expected constant or edge border")
+    working = image.astype(np.float32)
+    padded = np.pad(working, 1, mode=border)
+    flipped = kernel[::-1, ::-1].astype(np.float32)
+    result = np.zeros(working.shape, dtype=np.float32)
+    for row in range(working.shape[0]):
+        for col in range(working.shape[1]):
+            patch = padded[row:row + 3, col:col + 3]
+            result[row, col] = np.sum(patch * flipped)
+    return result
+
+kernel = np.array([[0, 0, 0], [-1, 0, 1], [0, 0, 0]], dtype=np.float32)
+patch = np.arange(1, 10, dtype=np.float32).reshape(3, 3)
+manual = manual_convolution(patch, kernel)
+library = cv2.filter2D(patch, cv2.CV_32F, kernel[::-1, ::-1],
+                       borderType=cv2.BORDER_CONSTANT)
+correlation = cv2.filter2D(patch, cv2.CV_32F, kernel,
+                           borderType=cv2.BORDER_CONSTANT)
+assert manual[1, 1] == -2
+assert correlation[1, 1] == 2
+assert np.allclose(manual, library, atol=1e-6, rtol=0)
+print("max difference:", np.max(np.abs(manual - library)))
+```
+
+预期最大差为 0。手工函数内部翻核，库函数调用处翻核，各自只翻一次；不要把已翻转的核又传给手工函数。双轴反向切片用于 kernel 方向，与图像颜色通道反转无关。
+
+### Checkpoint 2：脉冲、阶跃和 dtype
+
+先预测：卷积的脉冲中心 3×3 响应与 K 同向；相关响应与翻转的 K 同向。阶跃从 10 到 30，当前卷积核应在过渡位置产生 −20。
+
+```python
+impulse = np.zeros((7, 9), dtype=np.float32)
+impulse[3, 4] = 1
+response = manual_convolution(impulse, kernel)
+assert np.array_equal(response[2:5, 3:6], kernel)
+corr_response = cv2.filter2D(impulse, cv2.CV_32F, kernel,
+                             borderType=cv2.BORDER_CONSTANT)
+assert np.array_equal(corr_response[2:5, 3:6], kernel[::-1, ::-1])
+
+edge = np.full((7, 9), 10., dtype=np.float32)
+edge[:, 4:] = 30.
+original = edge.copy()
+edge_response = manual_convolution(edge, kernel, border="edge")
+assert np.all(edge_response[:, 3:5] == -20)
+assert np.all(edge_response[:, :3] == 0)
+saturated = cv2.filter2D(edge.astype(np.uint8), -1, kernel[::-1, ::-1],
+                        borderType=cv2.BORDER_REPLICATE)
+assert saturated[3, 3] == 0
+assert np.array_equal(edge, original)
+print("float / uint8:", edge_response[3, 3], saturated[3, 3])
+```
+
+原始响应 −20 在 uint8 路径被饱和为 0；这不是 NumPy 整数回绕，也不代表边缘不存在。边缘显示用带正负范围的色图，不能先裁到 0–255 再分析。
+
+### Checkpoint 3：检验线性与内部平移
+
+先写下两项预测，再运行：在线性实验中，相同 dtype、boundary 和数值假设下，`T(aX + bY)` 与 `aT(X) + bT(Y)` 应在浮点容差内一致；在内部平移实验中，impulse 向右移动一个像素，只要完整响应没有碰到有限数组边界，输出响应也应整体向右移动一个像素。运行后核对预测；若不一致，先检查边界、dtype、kernel orientation 与实现假设，而不是立即否定性质。
+
+```python
+def T(image):
+    return manual_convolution(image, kernel)
+
+a, b = 2., -0.5
+mixed = T(a * impulse + b * edge)
+separate = a * T(impulse) + b * T(edge)
+assert np.allclose(mixed, separate, atol=1e-6, rtol=0)
+
+shifted = np.zeros_like(impulse)  # 同 shape、同 dtype 的全零数组
+shifted[:, 1:] = impulse[:, :-1]  # 向右一格；不是环绕
+expected_shift = np.zeros_like(response)
+expected_shift[:, 1:] = response[:, :-1]
+assert np.array_equal(T(shifted), expected_shift)
+```
+
+当前点从 `(x=4,y=3)` 到 `(5,3)`，完整响应仍在图内。这个实验支持内部固定规则的直觉，不证明任何补边下、任何位置都移不变。把点移到边缘应重新检查裁切与延拓假设。
+
+### Checkpoint 4：边界对照与可信显示
+
+```python
+mean_kernel = np.ones((3, 3), dtype=np.float32) / 9
+zero_border = manual_convolution(patch, mean_kernel, "constant")
+replicate = manual_convolution(patch, mean_kernel, "edge")
+assert np.isclose(zero_border[0, 0], 12 / 9)
+assert np.isclose(replicate[0, 0], 21 / 9)
+assert np.isclose(zero_border[1, 1], 5)
+assert np.isclose(replicate[1, 1], 5)
+assert np.allclose(replicate, cv2.filter2D(patch, cv2.CV_32F, mean_kernel,
+                    borderType=cv2.BORDER_REPLICATE), atol=1e-6, rtol=0)
+
+fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+axes[0].imshow(edge, cmap="gray", vmin=0, vmax=30)
+axes[0].set_title("input intensity")
+for ax, data, title in zip(axes[1:], [edge_response, saturated], ["float response", "uint8 response"]):
+    shown = ax.imshow(data, cmap="coolwarm", vmin=-20, vmax=20)
+    ax.set_title(title)
+    fig.colorbar(shown, ax=ax)
+plt.tight_layout()
+plt.show()
+```
+
+左上角零补边只有 1、2、4、5 四个非零值，总和 12；复制边缘时邻域是 `[[1,1,2],[1,1,2],[4,4,5]]`，总和 21。中心邻域完整，所以二者都是 5。差异可定位到边缘，不要因此断言卷积实现全错。
+
+## 6. Active Recall
+
+- 手工和库函数中心符号相反、边缘也不同，你会按什么顺序检查翻核、anchor、border 和 dtype？
+- 为什么只用对称均值核无法检验“库是否翻核”？如何换成有方向的探针？
+- 加大平滑邻域为什么可能同时减小波动、损伤阶跃？用跨边界的加权值解释，不需要先学噪声模型。
+- 浮点 T 通过线性测试，`clip(T(image),0,255)` 就必然通过吗？负响应在哪里丢失？
+- 内部脉冲平移成功后，为何不能声称边界处也无条件移不变？
+
+## 7. Practice
+
+1. **局部数值**：将 kernel 中间行改为 `[1,2,0]`，其余为零。对 1–9 patch 预测相关为 14、卷积为 16，再核对；必须说明哪边邻居得到权重 1。
+2. **独立小实现**：不照抄循环，按已声明的 3×3/二维/float/零补边契约重写一次；对脉冲与阶跃分别和库比较，最大绝对差不超过 `1e-5`，source 相等。
+3. **性质检查**：改 `a=0.5,b=3` 重跑线性；将内部脉冲下移一格重跑移不变。记录核、位置、容差与比较范围；不使用穿边界的环绕来隐去裁切。
+4. **失败卡**：故意取消库调用的翻核。记录 input=当前非对称核，expected=中心 −2，actual=2，reason=相关未翻核，correction=双轴翻核且中心 anchor 不变。再任选一次 border 或 uint8 错误，给同样五项诊断。
+
+## 8. 常见错误与边界
+
+| 错误 | 最小修正 |
+| --- | --- |
+| 卷积就是矩阵乘法 | 局部逐项乘后求和，不是 patch @ kernel |
+| 翻核等于转置 | 同时反转行、列；非对称探针验证 |
+| 默认库边界与手工补 0 相同 | 显式设置 BORDER_CONSTANT |
+| uint8 能表达所有滤波响应 | float 保留原始负值，再决定显示/保存 |
+| 一次实验证明所有系统 LSI | 只声称固定核、浮点运算和已检查区域 |
+
+## 9. Project / Capability / Application 映射
+
+ROADMAP 的 draft `project.classical-inspection` 后续比较处理方案时，需要分清真正方法差异与边界/dtype 不一致；draft `project.imaging-quality-lab` 将研究模糊和成像质量。这里仅建立局部响应与可复现实验能力，不实现项目或宣称能够恢复任意模糊图像。
+
+## 10. Mastery Evidence
+
+1. **实现与对照记录**：独立完成受限小核实现、一处手算、非对称核脉冲/阶跃实验、库差异容差与 source 断言，并提交一个失败诊断。可以查 API，不要求性能优化。
+2. **性质与限制记录**：用改过的系数和内部位置验证线性/移不变；报告 border 两个角点值、float/uint8 差异，解释为何不能推广到饱和流水线或任意边界。
+
+两项均 required；只贴代码不解释结果不能证明掌握。当前不要求一般定理证明或完整系统辨识。
+
+## 11. 后续复用与精选资源
+
+后续频域从另一种表示理解同一算子，空域滤波再比较不同任务下的核选择；此处不提前讲授。
+
+- **OpenCV Image Filtering reference**：必看 Detailed Description 的局部计算/边界，以及 filter2D 条目中 correlation、翻核、anchor、ddepth；选看 depth combinations。跳过同页其余滤波器、算法实现和性能说明。用它核对库契约，不要求阅读整个 API 页面；LSI 的当前直觉和实验以本页为准。

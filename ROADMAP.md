@@ -120,7 +120,7 @@ flowchart LR
 
 Stage 1B 有意不设置阶段级 `entryGate`：Stage 1 采用即时、交错学习，坐标系可以在概率统计与梯度全部掌握前按任务进入。Stage 1B 内每个 Concept 仍必须满足第 3.1 节声明的自身 `hard` 前置；移除整段 checkpoint 门槛不表示可以绕过这些知识依赖。Stage 1A checkpoint 继续独立记录该子阶段的完整能力证据。
 
-checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`、S2-U6 的 `opencv.filtering-basics`、S2-U7 的 `opencv.threshold-morphology`、S2-U8 的 `opencv.edges-contours`，以及 S2-U9 的 `pipeline.batch-images` 与 `opencv.features-preview`。Stage 2 十二个规划 Concept 均已正式发布；checkpoint 保持 available。内容发布不代表个人学习、Pixel Lab gate、exit evidence 或复测已经完成。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
+checkpoint catalog 使用 `contentStatus` 记录正式内容成熟度：当前 `stage.tooling-foundations`、`stage.vision-math-immediate`、`stage.vision-math-geometry-optimization` 与 `stage.image-computing` 为 `available`；`stage.digital-image-processing` 也因 Wave 1 的两篇正式内容成为 `available`；其余 checkpoint 为 `planned`，直到真实 Concept 经 schema 与引用校验后发布。Stage 1B 当前已发布五个必修 Concept，其中包括 `math.numerical-stability`；A 级选修 `math.lie-groups` 仍未发布。Stage 2 当前已发布 S2-U1 / U2 的数组、dtype、数字图像表示与可信显示四个基础节点、S2-U3 的 `opencv.io-color`、S2-U4 的 `opencv.roi-masks`、S2-U5 的 `opencv.geometric-transforms`、S2-U6 的 `opencv.filtering-basics`、S2-U7 的 `opencv.threshold-morphology`、S2-U8 的 `opencv.edges-contours`，以及 S2-U9 的 `pipeline.batch-images` 与 `opencv.features-preview`。Stage 2 十二个规划 Concept 均已正式发布；checkpoint 保持 available。内容发布不代表个人学习、Pixel Lab gate、exit evidence 或复测已经完成。`available` 不表示规划节点已全部发布，也不表示 Stage 的项目、出口证据与复测已经完成。`planned` 不影响路线 ID、入口门槛或出口证据的正式性，也不允许用占位 Concept 伪造课程覆盖。
 
 ---
 
@@ -299,6 +299,8 @@ Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computin
 **估算工时：** 65–85 小时。
 
 **关联项目：** `project.classical-inspection`, `project.imaging-quality-lab`。
+
+Phase 9F-C1 发布第一批 `dip.sampling-quantization` 与 `dip.convolution-lsi`，Stage 3 当前为 2/12 published，其余十个节点尚未发布。`stage.digital-image-processing` 内容成熟度同步为 `available`，不代表课程全部覆盖或个人阶段完成。本轮不发布 Classical Inspection、Stage 3 retest 或新增出口契约。Stage 2 旧文中指向卷积的延后 recommended edge 仍待单独同步，不影响本批 hard DAG。
 
 ### 5.1 核心知识簇
 

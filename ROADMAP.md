@@ -300,7 +300,7 @@ Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computin
 
 **关联项目：** `project.classical-inspection`, `project.imaging-quality-lab`。
 
-Phase 9F-C1 已发布 `dip.sampling-quantization` 与 `dip.convolution-lsi`；Phase 9F-C2 发布 `dip.noise-models`，Stage 3 当前为 3/12 published，其余九个节点尚未发布。`stage.digital-image-processing` 内容成熟度保持 `available`，不代表课程全部覆盖或个人阶段完成。本轮不发布 Classical Inspection、Stage 3 retest 或新增出口契约。Stage 2 旧文中指向卷积的延后 recommended edge 仍待单独同步；本篇对 `sensor.noise-snr` 的推荐关系保留在 ROADMAP/正文，待该实体发布后再加入正式 DAG，不创建占位节点。
+Phase 9F-C1 已发布 `dip.sampling-quantization` 与 `dip.convolution-lsi`；Phase 9F-C2 发布 `dip.noise-models`；Phase 9F-C3 发布 `dip.spatial-filtering`，Stage 3 当前为 4/12 published，其余八个节点尚未发布。`stage.digital-image-processing` 内容成熟度保持 `available`，不代表课程全部覆盖或个人阶段完成。本轮不发布 Classical Inspection、Stage 3 retest 或新增出口契约。Stage 2 旧文中指向卷积的延后 recommended edge 仍待单独同步；noise-models 对 `sensor.noise-snr` 的推荐关系保留在 ROADMAP/正文，待该实体发布后再加入正式 DAG，不创建占位节点。
 
 ### 5.1 核心知识簇
 

@@ -2,6 +2,26 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.opencv-spatial-filtering",
+    title: "OpenCV Spatial Filtering：四种平滑方法参考",
+    authorOrOrganization: "OpenCV",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "在中文受控比较实验之后核对四种方法的接口，不把算法名字或外观当成方法选择证据；与 Stage 2 scope 分离。",
+    recommendedParts: [
+      "必看：Image Blurring 下 Averaging、Gaussian Blurring、Median Blurring、Bilateral Filtering 四小节；只核对 blur/boxFilter、GaussianBlur、medianBlur、bilateralFilter 的当前调用。",
+      "选看：各小节所链接 API 的 dtype、ksize、sigmaColor/sigmaSpace、border 限制，特别是 float32 median 的 3/5 核与内部 BORDER_REPLICATE。",
+      "跳过：完整 filter2D 教程、算法推导、性能优化、其他滤波器、频域、恢复和完整质量指标；不扩展旧 Stage 2 Resource 阅读要求。",
+    ],
+    aliases: ["OpenCV spatial smoothing reference"],
+    verification: "verified",
+    url: "https://docs.opencv.org/4.13.0/d4/d13/tutorial_py_filtering.html",
+    verifiedAt: "2026-09-13",
+    lastCheckedAt: "2026-09-13",
+  },
+  {
     id: "resource.numpy-random-generator",
     title: "NumPy Random Generator",
     authorOrOrganization: "NumPy",

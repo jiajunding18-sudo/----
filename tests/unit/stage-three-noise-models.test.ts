@@ -8,8 +8,8 @@ import { stageReadyInput, stageTime } from "../fixtures/stage-lifecycle";
 
 describe("Stage 3 noise models slice", () => {
   const concept = contentManifest.concepts.find(c => c.id === "dip.noise-models")!;
-  it("publishes exactly three Stage 3 concepts, with constrained master depth", () => {
-    expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId).map(c => c.id).sort())
+  it("retains the C2 concept with constrained master depth", () => {
+    expect(contentManifest.concepts.filter(c => ["dip.convolution-lsi", "dip.noise-models", "dip.sampling-quantization"].includes(c.id)).map(c => c.id).sort())
       .toEqual(["dip.convolution-lsi", "dip.noise-models", "dip.sampling-quantization"]);
     expect(concept).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master" });
     expect(concept.masteryCriteria).toHaveLength(2);

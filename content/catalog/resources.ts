@@ -2,6 +2,26 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.opencv-histogram-enhancement",
+    title: "OpenCV Histogram Enhancement API",
+    authorOrOrganization: "OpenCV",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "在中文增强对照后核对全局均衡化与 CLAHE 的输入及参数契约，不将图像范围更满当作质量结论；与 Stage 2 scope 分离。",
+    recommendedParts: [
+      "必看：equalizeHist 的 uint8 单通道和同 size/type 输出；createCLAHE 及所链接 CLAHE.apply 的输入要求、clipLimit、tileGridSize 分块数量。仅核对本页调用。",
+      "选看：CLAHE 参数说明；当前实验只用 uint8，不增加 uint16 实验或内部实现推导。",
+      "跳过：calcBackProject、compareHist、EMD、完整 histogram API、颜色空间、性能和其他算法；不改变 Stage 2 OpenCV/NumPy/Matplotlib 原阅读范围。",
+    ],
+    aliases: ["equalizeHist CLAHE reference"],
+    verification: "verified",
+    url: "https://docs.opencv.org/4.13.0/d6/dc7/group__imgproc__hist.html",
+    verifiedAt: "2026-09-14",
+    lastCheckedAt: "2026-09-14",
+  },
+  {
     id: "resource.numpy-fft",
     title: "NumPy Discrete Fourier Transform",
     authorOrOrganization: "NumPy",

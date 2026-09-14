@@ -60,10 +60,11 @@ describe("Knowledge manifest 派生视图", () => {
         "dip.noise-models",
         "dip.spatial-filtering",
         "dip.frequency-domain",
+        "dip.enhancement",
       ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      Array.from({ length: 34 }, (_, index) => index + 1),
+      Array.from({ length: 35 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -112,7 +113,7 @@ describe("Knowledge manifest 派生视图", () => {
     expect(knowledge.availableStageCount).toBe(5);
     expect(knowledge.plannedStageCount).toBe(12);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      34, 0, 0,
+      35, 0, 0,
     ]);
   });
 

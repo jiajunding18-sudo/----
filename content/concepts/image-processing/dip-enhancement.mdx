@@ -1,0 +1,286 @@
+---
+schemaVersion: 1
+id: dip.enhancement
+slug: dip-enhancement
+title: 对比度、直方图与图像增强
+englishTitle: Contrast, Histograms, and Image Enhancement
+aliases: [图像增强, CLAHE, 灰度均衡化]
+searchKeywords: [equalizeHist, contrast stretch, power-law, gamma, histogram equalization, clipping]
+summary: 固定输入、显示和已知区域，比较线性拉伸、幂律、全局均衡化与 CLAHE，用目标差异、平坦波动和端点比例判断收益与代价。
+why: 看起来更清楚可能只是显示拉伸，也可能同时放大噪声或压掉细节；方法选择需要数据检查，不能把增强误当信息恢复。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 60
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 6, max: 8 }
+dependencies:
+  - conceptId: visualization.image-plots
+    kind: hard
+    reason: 需要能固定显示范围并解释 histogram，避免用不同色阶比较增强结果。
+  - conceptId: dip.noise-models
+    kind: hard
+    reason: 需要能构造固定噪声实现、解释平坦区波动和 clipping，才能分清增强收益与副作用。
+tags: [Enhancement, Histogram, CLAHE, Intensity]
+learningOutcomes:
+  - 能区分仅改变显示与真正强度映射，预测线性、幂律和全局/局部均衡化的有限效果。
+  - 能固定输入和区域完成增强对照，用局部差异、波动及裁剪记录解释过增强与信息边界。
+masteryCriteria:
+  - id: criterion.dip-enhancement.controlled-comparison
+    description: 独立比较同一输入的全局与局部增强，固定显示及 ROI，记录参数、目标差异、平坦区波动和端点比例，解释取舍。
+    evidenceHint: 复用限定框架，先预测再改变一个关键参数；提交输入契约、固定显示、局部数值和选择理由，不要求通用质量指标或自动任务优化。
+    required: true
+  - id: criterion.dip-enhancement.information-boundary
+    description: 构造并诊断一次过增强或显示误导，解释噪声放大、裁剪或仅显示变化为何不能证明信息增加。
+    evidenceHint: 提交 input/expected/actual/reason/correction 与原图保护断言；区分端点比例和实际裁剪，解释不同原始输入被映射为相同输出后，原有差异不能靠后续映射恢复。
+    required: true
+resourceIds: [resource.opencv-histogram-enhancement]
+publicationStatus: published
+contentVersion: 2026.09.14.1
+---
+
+# 对比度、直方图与图像增强（Image Enhancement）
+
+## 1. 现象：更清楚，为什么不一定更有用？
+
+暗灰底上的浅灰小条带不显眼。把灰度差拉大后，条带更容易看见，但底上的细小波动也可能一起变强。先问任务：这里要观察已知条带，同时保留它周围的真实差异，而不是追求最亮、最硬的画面。
+
+**增强（enhancement）**改变强度表示，让某些结构更容易观察或使用；**恢复（restoration）**尝试依据退化模型估计原始信号。本篇只做前者，不解决逆问题。已经被裁剪、饱和或量化合并为相同值的差异，单靠后续强度映射无法知道原来是多少。
+
+## 2. 为什么现在学 / 前置与深度
+
+[可信显示](/knowledge/image-plots/)教会你分开数组和外观；[噪声模型](/knowledge/dip-noise-models/)教会你固定 seed、观察波动和保护 raw 数据。本篇把这些能力用于方法选择，而不是重新学 OpenCV 读写。
+
+当前 `master` 指独立完成限定对照、预测一个参数变化、解释收益和失败，允许查 API、复用代码。预计 6–8 小时包含实验和两项短证据，不要求每个方法单写报告。当前不学完整颜色科学、HDR、Retinex、恢复、频域增强、分割、PSNR/SSIM 或深度增强。
+
+ROADMAP 推荐的 `sensor.dynamic-range` 尚未发布：以后用它理解采集动态范围；当前不是开始条件，正式 recommended edge 等实体发布后再加入，不创建占位前置。也不要求先学 spatial-filtering、frequency-domain 或 quality-metrics。
+
+## 3. 最小模型：四种映射，不是四个质量等级
+
+### 显示变化不等于数据增强
+
+`imshow(a, vmin=lo, vmax=hi)` 只改变标量到颜色的显示尺子，不会自动重写 a。真正的数据映射产生新数组。两者都可以让外观更清楚，只有检查数组才能知道发生了什么。方法间比较必须共享显示范围，不能每张各自 autoscale。
+
+### Linear stretch / window：指定一段强度窗口
+
+对输入值 x、窗口下限 l 和上限 h（h 必须大于 l），输出到 0–1：
+
+$$
+y=\operatorname{clip}\left(\frac{x-l}{h-l},0,1\right).
+$$
+
+窗口内差值乘上 `1/(h-l)`，目标和噪声都受影响；窗口外值截到端点。`clip` 是截断，不是自动修复。这个全局单调映射不会反转排序，但相等值仍相等，截断还会合并原本不同的值。
+
+直接取 min/max 易受少量极端值牵制。**百分位（percentile）**是从排序后数据按比例选位置，例如第 1/99 百分位定义主体窗口；`np.percentile` 可以在相邻值间插值。这能减少极端值对窗口的影响，却会主动截掉尾部，不能默认尾部都是坏数据。离散重复值使端点比例也未必恰好是 2%。
+
+### Power-law intensity mapping：在规定范围内改变分配
+
+本篇定义 normalized float `0≤x≤1`、`gamma>0` 下 `y=x**gamma`。gamma 小于 1 抬高内部值，大于 1 压低内部值，等于 1 不变；0 和 1 保持不变，排序保持。它不是完整相机/显示器 gamma correction：不讨论编码曲线、曝光响应或颜色管理。
+
+抬亮不等于所有暗部差值都增大。例如 gamma=0.5 时，0.01/0.04 变成 0.1/0.2，差值扩大；但在本例约 0.30 的背景附近，波动反而略缩小。不能从“gamma 小于 1”推出“所有位置噪声都放大”。
+
+### Global histogram equalization：按累计数量分配灰度
+
+histogram 只计数、不保留位置；打乱像素可以保持同一个 histogram。**累计分布（CDF）**可理解为“有多少比例像素不大于当前灰度”。全局均衡化用这类累计信息为灰度建立共同映射，不是把每个像素独立排成一个新值。离散、重复的灰度不能被拆成完美均匀分布；直方图更展开也不证明结果更好。
+
+`cv2.equalizeHist` 的正式输入是单通道 uint8（H×W），输出同 shape/type。它不是给任意 float/RGB 直接调用的函数。本例先统一一次 8 位编码，之后所有方法都从同一编码输入出发，避免把转换误差当成算法收益。
+
+### CLAHE：局部映射也有代价
+
+**CLAHE（Contrast Limited Adaptive Histogram Equalization，限制对比度的自适应直方图均衡化）**按局部区域统计直方图，限制过高的 bin 计数并重新分配，再结合相邻局部映射。它可以让全局分布中不显眼的局部差异更明显，但不是去噪器。
+
+`tileGridSize=(4,4)` 表示横向 4、纵向 4 个 tile，不是每块 4×4 像素；本例 H×W=96×128，因此每块 24×32。固定图像时增加分块数会缩小局部区域。`clipLimit` 控制直方图的对比度限制，不是像素强度阈值，也不是“最多裁剪百分之几”；其他条件相同时提高它可能允许更强的局部增强。参数数值不能当跨图像通用质量分数。
+
+`createCLAHE(...).apply(...)` 支持单通道 uint8/uint16；本篇只用 uint8，不引入 16 位实验。小 tile 或较弱限制可能让平坦区波动更明显、区域间外观更不一致。局部映射还依赖位置，所以不能把全局单调映射的跨区域排序保证直接套到 CLAHE。
+
+## 4. Worked Example：同一条带，收益与波动一起记录
+
+四个 checkpoint 在同一脚本顺序运行，复用既有 NumPy/OpenCV/Matplotlib 环境。输入完全合成，不需要下载照片。每次只改一个因素；对比固定 seed、同一数组、同一 ROI、同一 histogram bins、同一 0–1 显示范围。
+
+### Checkpoint 1：先确认输入，再制造显示错觉
+
+先预测：仅缩窄显示范围，暗条带会更显眼，但数组与 histogram 不会变。图中左半 clean=0.30、右半=0.55；两块已知条带分别为 0.33、0.58。加入一次 sigma=0.003 的高斯模拟扰动；它不是对真实相机来源的证明。
+
+```python
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+
+print("versions:", np.__version__, cv2.__version__)
+clean = np.full((96, 128), 0.30, dtype=np.float64)
+clean[:, 64:] = 0.55
+clean[32:56, 20:44] = 0.33
+clean[32:56, 84:108] = 0.58
+seed = 42
+raw = clean + np.random.default_rng(seed).normal(0, 0.003, clean.shape)
+assert np.all((raw >= 0) & (raw <= 1))  # 当前输入生成没有先丢掉尾部
+encoded = np.rint(np.clip(raw, 0, 1) * 255).astype(np.uint8)
+base = encoded.astype(np.float64) / 255
+snapshot = base.copy()
+assert np.max(np.abs(base - raw)) <= 0.5/255 + 1e-12
+print("input:", base.shape, base.dtype, base.min(), base.max())
+
+fig, axes = plt.subplots(1, 2, figsize=(8, 3), layout="constrained")
+for ax, limits, title in zip(axes, [(0,1), (0.29,0.34)],
+                            ["display 0-1", "display window only"]):
+    im = ax.imshow(base, cmap="gray", vmin=limits[0], vmax=limits[1])
+    ax.set_title(title)
+    ax.set_xlabel("column / x"); ax.set_ylabel("row / y")
+    fig.colorbar(im, ax=ax, label="intensity")
+plt.show()
+assert np.array_equal(base, snapshot)
+```
+
+预期 shape `(96,128)`，base 是 float64、范围约 `0.2902–0.5882`。右侧亮区在窄显示中会饱和成白色，但数据没有被裁剪。编码顺序是 clip→乘 255→rint（取最近整数）→astype；astype 本身不替你合理裁剪或四舍五入。转换引入量化，base 不等于 raw；本次方法比较统一使用 base/encoded，不混入这一步的误差。
+
+### Checkpoint 2：线性、outlier 与幂律的预测
+
+先预测：0.29–0.59 拉伸会把条带差异和波动约放大 `1/0.30`；加入两个 0/1 outlier 后，min/max 窗口反而无法展开主体。幂律先看明确数值，再判断当地差值，不用“整体变亮”替代局部检查。
+
+```python
+def window(a, lo, hi):
+    if not np.isfinite([lo, hi]).all() or not 0 <= lo < hi <= 1:
+        raise ValueError("expected 0 <= lo < hi <= 1")
+    return np.clip((a - lo) / (hi - lo), 0, 1)
+
+linear = window(base, 0.29, 0.59)
+outlier_input = base.copy()
+outlier_input[0, 0], outlier_input[0, 1] = 0, 1
+minmax = window(outlier_input, outlier_input.min(), outlier_input.max())
+p_lo, p_hi = np.percentile(outlier_input, [1, 99])
+robust = window(outlier_input, p_lo, p_hi)
+assert np.array_equal(minmax, outlier_input)
+print("percentile window:", p_lo, p_hi)
+
+values = np.array([0.01, 0.04, 0.25, 0.81])
+for gamma in (0.5, 1.0, 2.0):
+    print("gamma:", gamma, "mapped values:", values**gamma)
+    assert np.all(np.diff(values**gamma) > 0)
+power_half, power_one, power_two = base**0.5, base**1.0, base**2.0
+assert np.array_equal(power_one, base)
+assert np.all(power_half >= base) and np.all(power_two <= base)
+assert np.array_equal(base, snapshot)
+```
+
+当前 percentile 窗口约 `0.2941–0.5809`。outlier 对照只比较同一份 outlier_input 的 min/max 与 percentile，不拿不同输入制造“公平”结论。gamma=0.5/1/2 时，0.25 分别成为 0.5/0.25/0.0625；这些都是新的像素值，不是显示设置。`np.diff` 在这里检查相邻排序值之差，不是图像边缘算法。
+
+### Checkpoint 3：全局与局部，对同一区域量一遍
+
+先写下：哪块可能受益？平坦区会怎样？本例目标 T 是左条带，B 是同一暗背景下另一块同大小区域，F 是不含条带的平坦区域；索引全部是 `[row,column]`。这些是构造时已知位置，不是分割算法输出。
+
+三项最小检查：`separation=abs(mean(T)-mean(B))` 表示本合成实验的目标差异；`flat_std=std(F)`（ddof=0）表示平坦区实际波动；`endpoint_fraction` 是输出等于 0/1 的比例。它们都不是通用图像质量分数。CLAHE 的 flat_std 也可能包含位置相关映射变化，不能把它直接称为纯噪声估计。
+
+```python
+target = np.s_[32:56, 20:44]
+background = np.s_[60:84, 20:44]
+flat = np.s_[8:28, 8:52]  # np.s_ 保存切片，便于所有方法用同一 ROI
+def checks(a):
+    return (float(abs(a[target].mean() - a[background].mean())),
+            float(a[flat].std()), float(np.mean((a <= 0) | (a >= 1))))
+
+assert encoded.ndim == 2 and encoded.dtype == np.uint8
+equalized_u8 = cv2.equalizeHist(encoded)
+clahe2_u8 = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4)).apply(encoded)
+clahe40_u8 = cv2.createCLAHE(clipLimit=40.0, tileGridSize=(4,4)).apply(encoded)
+results = {"input": base, "linear": linear, "power 0.5": power_half,
+           "power 2": power_two, "global HE": equalized_u8.astype(float)/255,
+           "CLAHE 2": clahe2_u8.astype(float)/255,
+           "CLAHE 40": clahe40_u8.astype(float)/255}
+for name, a in results.items():
+    assert a.shape == base.shape and np.isfinite(a).all()
+    assert np.all((a >= 0) & (a <= 1))
+    print(name, "separation / flat std / endpoints:", checks(a))
+print("outlier minmax / percentile:", checks(minmax), checks(robust))
+assert checks(linear)[0] > checks(base)[0]
+assert checks(linear)[1] > checks(base)[1]
+assert checks(results["CLAHE 40"])[1] > checks(results["CLAHE 2"])[1]
+assert np.array_equal(base, snapshot)
+```
+
+以下为 NumPy 2.4.6 / OpenCV 5.0.0 的当前核验近似值；记录自己的版本，不把最后一位差异当成质量差异。所有行来自相同编码输入与同一组 ROI。
+
+| 方法 | 目标差异 | 平坦 std | 端点比例 |
+| --- | ---: | ---: | ---: |
+| input | 0.02991 | 0.00321 | 0 |
+| linear 0.29–0.59 | 0.09970 | 0.01070 | 0 |
+| power 0.5 | 0.02665 | 0.00293 | 0 |
+| power 2 | 0.01884 | 0.00193 | 0 |
+| global HE | 0.17816 | 0.12582 | 0.01204 |
+| CLAHE 2 | 0.06609 | 0.00960 | 0 |
+| CLAHE 40 | 0.26415 | 0.11558 | 0 |
+
+linear 的差异和波动同增，不代表新信息出现。global HE 将密集灰度段展开，也展开背景中的扰动；CLAHE 40 的平坦 std 比 CLAHE 2 大约 12 倍，正是限制放松后局部灰度差被更强重分配的失败证据，不只是说“参数太强”。不能因目标差异最大就宣布它获胜。percentile 对照目标差异约 0.10412，而 min/max 仍约 0.02991；代价是尾部被裁剪。可以对右条带观察不同收益，但不要求新增一套报告。
+
+### Checkpoint 4：统一显示、直方图与不可恢复的裁剪
+
+固定显示和 bins 再看 global/local。`ravel` 只把像素排成一列计数，不保留空间布局。下方 histogram 坐标范围也相同，避免各自缩放制造分布差异。
+
+```python
+shown = ["input", "global HE", "CLAHE 2", "CLAHE 40"]
+bins = np.linspace(0, 1, 33)  # 32 个相同区间；最右区间包含 1
+fig, axes = plt.subplots(2, 4, figsize=(12, 6), layout="constrained")
+for col, name in enumerate(shown):
+    a = results[name]
+    im = axes[0,col].imshow(a, cmap="gray", vmin=0, vmax=1)
+    axes[0,col].set_title(name)
+    axes[0,col].set_xlabel("column"); axes[0,col].set_ylabel("row")
+    axes[1,col].hist(a.ravel(), bins=bins)
+    axes[1,col].set_xlim(0,1); axes[1,col].set_ylim(0,base.size)
+    axes[1,col].set_xlabel("intensity"); axes[1,col].set_ylabel("pixel count")
+fig.colorbar(im, ax=axes[0,:].tolist(), label="intensity 0-1")
+plt.show()
+hist = np.bincount(equalized_u8.ravel(), minlength=256)
+print("occupied output levels:", np.count_nonzero(hist))
+assert np.count_nonzero(hist) < 256  # 本例不是完美均匀 histogram
+
+lo, hi = 0.305, 0.56
+clipped_count = np.count_nonzero((base < lo) | (base > hi))
+aggressive_window = window(base, lo, hi)
+print("clipped count / fraction:", clipped_count, clipped_count/base.size)
+print("aggressive window checks:", checks(aggressive_window))
+lost = window(np.array([0.1, 0.2, 0.3]), lo, hi)
+assert np.array_equal(lost, [0,0,0])
+assert np.array_equal(lost**0.5, [0,0,0])
+assert np.array_equal(base, snapshot)
+```
+
+这里 `hist[k]` 是灰度值 k 的像素数量；`minlength=256` 为 0–255 每个灰度值保留计数位置，即使计数为 0。`count_nonzero(hist)` 数的是计数非零的位置，因此得到实际占用的灰度等级数；它只是数值分布描述，不是等级越多质量越高。
+
+当前均衡化输出只占 17 个离散等级，不是完美均匀直方图。窄窗口裁剪 5592/12288 个像素，约 45.51%。裁剪后平坦 std 甚至约降到 0.00133，但这是许多值合并到 0 的结果，不是成功去噪！端点比例只描述结果，不能单独证明发生裁剪：原数据可以本来就在端点，equalization 也会把极值映射到端点；本窗口另按映射前的 `<lo / >hi` 计数，才明确哪些值被截断。
+
+失败卡示例：input=本例窄窗口 0.305–0.56；expected=保留暗背景差异；actual=约 45.51% 被裁剪；reason=窗口把多个不同输入合并成端点；correction=回到未修改的 base，扩大窗口并重查差异、波动和裁剪，不对已裁剪结果再拉伸假装恢复。
+
+## 5. Active Recall
+
+- 同一 base 用窄 vmin/vmax 更清楚，如何证明这不是数据增强？
+- 两个 outlier 为什么能让 min/max stretch 几乎不起作用？percentile 会牺牲什么？
+- 在本篇定义中 gamma 小于 1 会抬亮；为什么仍不能断言每块区域的差异都增加？
+- global HE 为何可能展开背景噪声？histogram 更均匀为何不是成功标准？
+- CLAHE 的 clipLimit 为什么不是像素裁剪比例？提高后应检查哪个平坦区域？
+- 目标差异增加，同时端点比例增加，能直接宣布结果更好吗？还缺什么检查？
+- 两张图 histogram 相同，空间结构一定相同吗？为什么这些检查不能保证后续自动任务成功？
+
+## 6. Practice：四次预测，复用一份短记录
+
+1. **Window**：改为 0.31–0.57，先预测左条带/背景和裁剪方向，再记录 separation、flat_std、映射前裁剪数。完成标准：合法窗口、同一 base，解释差异是否由端点合并造成，source 断言通过。
+2. **Power-law**：只将 gamma 改为 0.8，先预测 0.25 的输出相对原值及 gamma=0.5 的大小；运行核对，并比较同一 F 的 std。不用整体变亮代替局部数值解释。
+3. **Global/local**：复用同一输入，将 CLAHE clipLimit 从 2 改为 4，tileGridSize 保持 (4,4)。固定 0–1 显示、bins 和 ROI，至少报告目标差异与平坦波动，加端点检查；允许没有统一赢家，不要求 grid search。
+4. **失败诊断**：从已有 CLAHE 40、窄窗口或显示错觉中选一项，按五项失败卡说明机制和修正。必须有数值或数组相等断言，不只说“看起来过强”。
+
+## 7. Mastery Evidence
+
+两项 required，可使用同一脚本和一份短记录，不为每个方法单写报告。
+
+1. **Controlled enhancement comparison**：独立调整一个关键参数前先预测；同一输入比较 global HE 与 local/alternative，记录 seed/版本、shape/dtype/range、参数、固定显示、同一目标/背景和平坦 ROI、三项检查与取舍理由。允许查 API，但不能只复制原表。
+2. **Over-enhancement / information-boundary diagnosis**：给一个明确失败及 input/expected/actual/reason/correction；解释显示变化、噪声波动或裁剪中的机制，并用 source 断言证明还能回到原输入。指出增强不能恢复被合并的原值，不要求完整质量评价或视觉任务优化。
+
+## 8. 后续用途 / Project / Capability 边界
+
+ROADMAP 的 `dip.segmentation` 后续需要判断输入对比是否利于任务，`illumination.geometry` 再从采集侧改善可见性；这些未来用途不是本篇分割或照明作业。`dip.quality-metrics` 以后正式区分图像与任务评价，本篇只使用已定义的局部检查。`dip.restoration` 的退化逆问题也不在这里实现。
+
+Stage 3 关联的 draft `project.classical-inspection` 与 `project.imaging-quality-lab` 将复用公平对照、参数记录与失败解释；这里不增加 Project requirement，不承诺“增强后就能检测”。工业或成像处理中，过增强可能掩盖采集不足；本篇只提供识别风险的实验能力。
+
+## 9. 精选 Resource
+
+**OpenCV Histogram Enhancement API**：只核对 equalizeHist 的单通道 uint8、输出类型，以及 createCLAHE 和链接的 CLAHE.apply、clipLimit、tileGridSize。选看参数说明，不通读完整 Histograms 页。跳过 histogram matching/compareHist、反向投影、颜色空间、性能及其他算法。中文正文是主教材，不能把“范围更满”当官方替你判断图像质量。幂律只是本页 NumPy 表达式，不另增资源，也不扩大 Stage 2 阅读范围。

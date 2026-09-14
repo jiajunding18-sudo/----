@@ -57,7 +57,7 @@ export function frequencyDomainTests() {
       await page.goto(route);
       if (route === "/roadmap/graph/") await page.locator("#global-graph-stage").selectOption("stage.digital-image-processing");
       await expect(page.locator('a[href^="/knowledge/dip-frequency-domain"]').first()).toBeAttached();
-      await expect(page.locator('a[href="/knowledge/dip-enhancement/"]')).toHaveCount(0);
+      await expect(page.locator('a[href="/knowledge/dip-restoration/"]')).toHaveCount(0);
     }
     await page.goto("/resources/numpy-fft/");
     await expect(page.getByRole("main")).toContainText("fft2/ifft2");

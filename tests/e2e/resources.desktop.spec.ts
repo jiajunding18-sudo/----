@@ -27,7 +27,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   await page.goto("/resources/");
 
   await expect(page.getByRole("heading", { level: 1, name: "Resources" })).toBeVisible();
-  await expect(page.locator("[data-resource-id]")).toHaveCount(19);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(20);
   await expect(page.locator('[data-resource-id="resource.python-tutorial"]')).toContainText(
     "Python Software Foundation",
   );
@@ -45,7 +45,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   const conceptFilter = page.getByLabel("按 Related Concept 浏览");
 
   await typeFilter.selectOption("official-doc");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(14);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(15);
   await expect(page).toHaveURL(/type=official-doc/u);
   await typeFilter.selectOption("all");
   await stageFilter.selectOption("stage.tooling-foundations");
@@ -66,7 +66,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   await reset.focus();
   await expect(reset).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(19);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(20);
 
   await stageFilter.selectOption("stage.vision-math-geometry-optimization");
   await expect(page.locator("[data-resource-id]")).toHaveCount(3);
@@ -86,7 +86,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   await expect(trackFilter).toHaveValue("all");
   await expect(levelFilter).toHaveValue("all");
   await expect(conceptFilter).toHaveValue("all");
-  await expect(page.locator("[data-resource-id]")).toHaveCount(19);
+  await expect(page.locator("[data-resource-id]")).toHaveCount(20);
 
   const internalLink = page
     .locator('[data-resource-id="resource.python-tutorial"]')
@@ -104,7 +104,7 @@ test("Resources 从正式 catalog 浏览并组合筛选", async ({ page }) => {
   expect(browserErrors).toEqual([]);
 });
 
-test("19 个 Resource 均有静态详情，正式外链只由详情主动打开", async ({
+test("20 个 Resource 均有静态详情，正式外链只由详情主动打开", async ({
   page,
 }) => {
   const browserErrors = trackBrowserErrors(page);
@@ -113,8 +113,8 @@ test("19 个 Resource 均有静态详情，正式外链只由详情主动打开"
     .locator("[data-resource-id] h3 > a")
     .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
 
-  expect(detailHrefs).toHaveLength(19);
-  expect(new Set(detailHrefs).size).toBe(19);
+  expect(detailHrefs).toHaveLength(20);
+  expect(new Set(detailHrefs).size).toBe(20);
   for (const href of detailHrefs) {
     expect(href).not.toBeNull();
     await page.goto(href ?? "/resources/");

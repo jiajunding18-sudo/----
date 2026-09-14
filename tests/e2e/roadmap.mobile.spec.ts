@@ -45,13 +45,13 @@ test("360px 下 Roadmap 无横向溢出且阶段内容可访问", async ({ page 
   await expect(stage.getByRole("link", { name: /Pixel Lab/ })).toBeVisible();
   await expect(stage.getByRole("heading", { name: "Stage 出口标准" })).toBeVisible();
   const stageTwo = page.locator('[data-stage-id="stage.image-computing"]');
-  await stageTwo.locator("summary").click();
+  await stageTwo.locator("summary").filter({ hasText: "查看阶段目标、路线、项目与出口" }).click();
   await expect(stageTwo.locator("[data-concept-id]")).toHaveCount(12);
   await expect(
     stageTwo.locator('[data-concept-id="pipeline.batch-images"]'),
   ).toBeVisible();
-  await stageTwo.locator("summary").click();
-  await expect(stageTwo.locator("details")).not.toHaveAttribute("open", "");
+  await stageTwo.locator("summary").filter({ hasText: "查看阶段目标、路线、项目与出口" }).click();
+  await expect(stageTwo.locator("details").filter({ has: page.locator("summary", { hasText: "查看阶段目标、路线、项目与出口" }) })).not.toHaveAttribute("open", "");
   await expect
     .poll(() =>
       page.evaluate(

@@ -2,6 +2,26 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.numpy-fft",
+    title: "NumPy Discrete Fourier Transform",
+    authorOrOrganization: "NumPy",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "在中文频谱与补零实验后核对 FFT 调用契约；独立于 Stage 2 beginner scope，不要求通读信号处理课程。",
+    recommendedParts: [
+      "必看：Standard FFTs 中 fft2/ifft2 链接的 s、axes、返回 shape；Helper routines 中 fftshift、ifftshift、fftfreq 的最小用法，只核对正文实验。",
+      "选看：Background information 与 Implementation details 中 DC 顺序、abs/angle、默认归一化；不要求推导公式。",
+      "跳过：FFT 算法、rfft/hfft、多维扩展、性能、历史论文与其他变换；不改变 NumPy beginner 或 linear algebra 的原阅读范围。",
+    ],
+    aliases: ["NumPy FFT reference"],
+    verification: "verified",
+    url: "https://numpy.org/doc/stable/reference/routines.fft.html",
+    verifiedAt: "2026-09-13",
+    lastCheckedAt: "2026-09-13",
+  },
+  {
     id: "resource.opencv-spatial-filtering",
     title: "OpenCV Spatial Filtering：四种平滑方法参考",
     authorOrOrganization: "OpenCV",

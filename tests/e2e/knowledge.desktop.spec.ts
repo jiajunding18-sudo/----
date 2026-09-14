@@ -31,6 +31,11 @@ const conceptIds = [
   "opencv.edges-contours",
   "pipeline.batch-images",
   "opencv.features-preview",
+  "dip.sampling-quantization",
+  "dip.convolution-lsi",
+  "dip.noise-models",
+  "dip.spatial-filtering",
+  "dip.frequency-domain",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -63,21 +68,21 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   await page.goto("/knowledge/");
 
   const results = page.locator("[data-knowledge-concept-id]");
-  await expect(results).toHaveCount(29);
+  await expect(results).toHaveCount(34);
   expect(
     await results.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-knowledge-concept-id")),
     ),
   ).toEqual(conceptIds);
-  await expect(page.getByText("4 个 Stage 已有正式内容")).toBeVisible();
-  await expect(page.getByText("13 个 Stage 为 planned")).toBeVisible();
+  await expect(page.getByText("5 个 Stage 已有正式内容")).toBeVisible();
+  await expect(page.getByText("12 个 Stage 为 planned")).toBeVisible();
 
   const stageFilter = page.getByLabel("按 Stage 浏览");
   const trackFilter = page.getByLabel("按 Track 浏览");
   await expect(stageFilter.locator("option")).toHaveCount(18);
   await expect(trackFilter.locator("option")).toHaveText([
-    "全部 Track（29）",
-    "公共主干（29）",
+    "全部 Track（34）",
+    "公共主干（34）",
     "3D 工业视觉高级分支（0）",
     "计算成像高级分支（0）",
   ]);
@@ -121,6 +126,9 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     page.locator('[data-knowledge-concept-id="pipeline.batch-images"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.digital-image-processing");
+  await expect(results).toHaveCount(5);
+  await expect(page.locator('[data-knowledge-concept-id="dip.frequency-domain"]')).toBeVisible();
+  await stageFilter.selectOption("stage.imaging-foundations");
   await expect(results).toHaveCount(0);
   await expect(page.locator("[data-knowledge-empty-state]")).toContainText(
     "路线已规划，但正式学习内容尚未展开",
@@ -133,7 +141,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     "目前没有已发布 Concept",
   );
   await page.getByRole("button", { name: "全部知识", exact: true }).click();
-  await expect(results).toHaveCount(29);
+  await expect(results).toHaveCount(34);
 
   const developmentEnvironment = page.locator(
     '[data-knowledge-concept-id="tooling.dev-environment"]',

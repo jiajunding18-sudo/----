@@ -257,8 +257,8 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   const stageTwoConceptSection = page.locator(
     '[data-stage-id="stage.image-computing"]',
   );
-  await stageTwoConceptSection.locator("summary").click();
-  await expect(stageTwoConceptSection.locator("details")).toHaveAttribute("open", "");
+  await stageTwoConceptSection.locator("summary").filter({ hasText: "查看阶段目标、路线、项目与出口" }).click();
+  await expect(stageTwoConceptSection.locator("details").filter({ has: page.locator("summary", { hasText: "查看阶段目标、路线、项目与出口" }) })).toHaveAttribute("open", "");
   const stageTwoConcepts = stageTwoConceptSection.locator("[data-concept-id]");
   await expect(stageTwoConcepts).toHaveCount(12);
   expect(
@@ -289,13 +289,18 @@ test("Roadmap 从 manifest 展示 Stage 0 完整路线并支持键盘导航", as
   await expect(page.getByRole("progressbar")).toHaveCount(0);
   await expect(page.getByText("我的学习进度")).toHaveCount(0);
 
-  const disclosure = stage.locator("summary");
+  const disclosure = stage.locator("summary").filter({
+    hasText: "查看阶段目标、路线、项目与出口",
+  });
+  const stageDetails = stage.locator("details").filter({
+    has: page.locator("summary", { hasText: "查看阶段目标、路线、项目与出口" }),
+  });
   await disclosure.focus();
   await expect(disclosure).toBeFocused();
   await page.keyboard.press("Space");
-  await expect(stage.locator("details")).not.toHaveAttribute("open", "");
+  await expect(stageDetails).not.toHaveAttribute("open", "");
   await page.keyboard.press("Space");
-  await expect(stage.locator("details")).toHaveAttribute("open", "");
+  await expect(stageDetails).toHaveAttribute("open", "");
 
   await stageZeroOverview.locator("summary").click();
   const stageZeroOverviewLink = stageZeroOverview.getByRole("link", {

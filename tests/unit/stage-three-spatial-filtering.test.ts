@@ -8,8 +8,8 @@ import { stageReadyInput, stageTime } from "../fixtures/stage-lifecycle";
 
 describe("Stage 3 spatial filtering", () => {
   const concept = contentManifest.concepts.find(c => c.id === "dip.spatial-filtering")!;
-  it("publishes only the four approved Stage 3 concepts", () => {
-    expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId).map(c => c.id).sort())
+  it("retains the four approved C3 concepts", () => {
+    expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId && c.id !== "dip.frequency-domain").map(c => c.id).sort())
       .toEqual(["dip.convolution-lsi", "dip.noise-models", "dip.sampling-quantization", "dip.spatial-filtering"]);
     expect(concept).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master" });
     expect(concept.masteryCriteria).toHaveLength(2);

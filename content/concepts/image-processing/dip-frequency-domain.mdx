@@ -1,0 +1,324 @@
+---
+schemaVersion: 1
+id: dip.frequency-domain
+slug: dip-frequency-domain
+title: 傅里叶变换与频域滤波
+englishTitle: Fourier Transform and Frequency Domain
+aliases: [二维 FFT, 频谱, DFT]
+searchKeywords: [fft2, fftshift, magnitude, phase, circular convolution, zero padding]
+summary: 用常量、条纹和小核解释频率方向、幅度与相位，通过循环卷积反例和补零对照验证空间与频域计算契约。
+why: 空间结果不一致可能来自周期边界和核对齐，而非 FFT 出错；频谱能帮助定位变化尺度，但不能自动判断哪些信息有用。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 50
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 7, max: 9 }
+dependencies:
+  - conceptId: dip.convolution-lsi
+    kind: hard
+    reason: 需要先解释卷积方向、局部加权和及边界，才能对齐频域乘法的计算契约。
+  - conceptId: math.vectors-matrices
+    kind: hard
+    reason: 需要理解二维数组、shape 与逐项运算，避免把频谱逐项相乘误作矩阵乘法。
+  - conceptId: math.calculus-gradients
+    kind: recommended
+    reason: 变化率直觉有助于理解空间变化尺度，但本页不要求导数或傅里叶积分推导。
+tags: [Fourier, FFT, Spectrum, Convolution]
+learningOutcomes:
+  - 能预测简单条纹的频谱位置和方向，区分幅度、相位与显示数据并检查重建误差。
+  - 能对齐一个补零线性卷积实验，诊断未补零的循环回绕及核方向、裁切和边界差异。
+masteryCriteria:
+  - id: criterion.dip-frequency-domain.spectrum-interpretation
+    description: 独立改变简单图案的频率或方向，预测并解释频谱；正确使用 shift、幅度显示和逆变换检查。
+    evidenceHint: 至少两个确定性图案的预测、频率坐标、频谱、重建误差与一次误解诊断；用循环平移对照解释相位，不要求证明定理。
+    required: true
+  - id: criterion.dip-frequency-domain.spatial-frequency-equivalence
+    description: 独立对齐小图与非对称核的空间线性卷积和补零 FFT 乘法，解释直接同尺寸 FFT 的循环伪影。
+    evidenceHint: 保存空间 full、直接 FFT、补零 full 和 same 裁切，记录 shape、核方向、零边界、误差容差和失败修正；不要求恢复算法。
+    required: true
+resourceIds: [resource.numpy-fft]
+publicationStatus: published
+contentVersion: 2026.09.13.1
+---
+
+# 傅里叶变换与频域滤波（Fourier Transform）
+
+## 1. 现象：条纹为什么变成两个亮点？
+
+竖条纹从左到右反复明暗变化，却沿上下方向不变。空间图描述“每格有多亮”，频谱描述“哪些方向、哪些快慢的周期成分参与了这幅图”。因此频谱峰沿横向频率轴出现，而不是沿竖条纹走向出现。
+
+先预测方向和变化尺度，再看 FFT 输出。频率不是物体类别：真实边缘、细节和噪声都可能带有快速变化，不能凭峰的位置就把它删除。
+
+## 2. 为什么现在学 / 前置与深度
+
+[卷积与 LSI](/knowledge/dip-convolution-lsi/)教过局部加权和与边界；[向量与矩阵](/knowledge/vectors-and-matrices/)提供 shape 和运算语言。本篇换一个表示角度，解释为什么同一个卷积问题在频域计算时需要额外核对边界。recommended 是 [微积分与梯度](/knowledge/calculus-and-gradients/)，不是开始条件。
+
+当前 `master` 只要求独立运行限定实验、预测、解释与排错，允许查 API。不要求连续傅里叶积分、复分析、证明定理、恢复、Wiener、压缩、wavelet 或光学傅里叶变换。复用已有 NumPy/Matplotlib 环境，不增加数学节点。[采样与量化](/knowledge/dip-sampling-quantization/)只是关联阅读；离散网格的可表示变化尺度有限，本篇只用远离极限的整数周期，不要求先学采样定理。
+
+## 3. 最小模型：频率、复数与数据契约
+
+### 空间位置不是频率坐标
+
+本页二维实数灰度数组 `image[y,x]`：行是 y，列是 x。32 列里出现 4 次明暗周期，就是横向频率 `4/32=0.125 cycles/pixel`；一周期包含一次完整重复，不是只数亮条宽度。
+
+**DFT（离散傅里叶变换）**把有限数组表示为一组离散周期成分；**FFT**是计算 DFT 的高效算法，不是另一种物理变换。默认二维 FFT 沿最后两根轴运算，本页只传 H×W，不能直接把 H×W×3 当同一契约。
+
+未 shift 的 `F[0,0]` 是零频（DC）：默认前向不归一化，因此它等于像素总和，除以 `H*W` 才是平均值。常量图在精确计算中只有 DC 非零。低频表示缓慢变化，不必是背景，大尺度目标也可能在其中。
+
+`fftfreq(N,d=1)` 为每个频谱索引给出 cycles/pixel，d=1 表示一像素采样间隔。索引 4 不等于 4 cycles/pixel；还要结合 N。负频率是成分的有符号方向标记，不是“负亮度”。本页 x/y 像素间距相同，频谱半径才可按这两根相同单位的轴比较。
+
+### 幅度与相位共同定义频谱
+
+一个频谱值是**复数（complex number）**：`a+bj` 有实部 a、虚部 b，j 满足平方为 −1；不是两个颜色通道。也可写成：
+
+$$
+F = A(\cos\phi + j\sin\phi),\qquad A=|F|.
+$$
+
+这里 A 是**幅度（magnitude）**，表示成分的贡献尺度；φ 是**相位（phase）**，表示周期成分如何在空间位置上对齐。角度用弧度，一圈是 2π。`np.abs(F)` 与 `np.angle(F)` 分别读取两者；不要求复指数证明。幅度接近零的点没有可靠的相位解释。
+
+仅保留幅度一般不能恢复位置；也不能说相位包含所有结构。完整 DFT 需要二者共同确定。实图频谱有成对的共轭关系（对应值实部相同、虚部相反）；本页只把它作为解释对称峰和实数重建的辅助，不作 mastery 要求。
+
+### 分开 analysis data 与 display data
+
+`fftshift` 只重排索引，将 DC 放到中心，不改变频谱数值的集合，不平滑、不增加信息。对 shifted spectrum 做逆变换前用 `ifftshift` 还原顺序；不要靠偶数尺寸中两种 shift 恰好相同来记规则。
+
+`display = np.log1p(np.abs(F_shifted))` 是对数显示：压缩强弱差，便于同时看峰。它不是原始频谱，更没有相位；不能覆盖 F 后拿去 IFFT。正文保留复数 F，显示副本单独命名。未修改频谱的 FFT/IFFT 应在浮点容差内恢复离散输入，而非承诺误差严格为零。
+
+## 4. Worked Example A：预测条纹，再读取频谱
+
+以下四个 checkpoint 在同一脚本顺序运行。`np.indices` 生成行列坐标网格；`cos` 生成确定性的周期变化。本例周期恰好落在 DFT 网格上，便于找峰；任意裁切的真实纹理不保证只剩两个点。
+
+### Checkpoint 1：DC、方向和更密条纹
+
+运行前画三个预测：常量的 DC；竖条纹的左右峰；周期翻倍后峰离中心更远。再预测横条纹应把峰移到上下。
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+N = 32
+y, x = np.indices((N, N))
+def stripes(kx, ky):
+    return 0.5 + 0.25 * np.cos(2 * np.pi * (kx*x/N + ky*y/N))
+
+constant = np.full((N, N), 0.5, dtype=np.float64)
+vertical4, vertical8 = stripes(4, 0), stripes(8, 0)
+horizontal4 = stripes(0, 4)
+dc = np.fft.fft2(constant)
+assert np.isclose(dc[0, 0], 512)
+dc_rest = dc.copy()
+dc_rest[0, 0] = 0
+assert np.max(np.abs(dc_rest)) < 1e-10
+freq = np.fft.fftshift(np.fft.fftfreq(N, d=1.0))
+
+patterns = [constant, vertical4, vertical8, horizontal4]
+names = ["constant", "vertical 4 cycles", "vertical 8 cycles", "horizontal 4 cycles"]
+spectra = [np.fft.fft2(a) for a in patterns]
+displays = [np.log1p(np.abs(np.fft.fftshift(f))) for f in spectra]
+for name, f in zip(names[1:], spectra[1:]):
+    magnitude = np.abs(np.fft.fftshift(f))
+    magnitude[N//2, N//2] = 0  # 仅找非 DC 峰，不修改复数 f
+    peaks = np.argwhere(magnitude > 0.99 * magnitude.max())
+    print(name, "[row,col]:", peaks.tolist())
+    print("[fy,fx] cycles/pixel:", [[freq[r], freq[c]] for r,c in peaks])
+
+fig, axes = plt.subplots(2, 4, figsize=(12, 6), layout="constrained")
+display_max = max(a.max() for a in displays)
+for i, (a, name, d) in enumerate(zip(patterns, names, displays)):
+    axes[0,i].imshow(a, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    axes[0,i].set_title(name)
+    axes[0,i].set_xlabel("x / column"); axes[0,i].set_ylabel("y / row")
+    # extent 把格子中心对应到频率值，origin=lower 令 fy 向上增加。
+    half_bin = 0.5/N
+    im = axes[1,i].imshow(d, origin="lower", cmap="gray", vmin=0, vmax=display_max,
+        extent=[freq[0]-half_bin, freq[-1]+half_bin, freq[0]-half_bin, freq[-1]+half_bin],
+        interpolation="nearest")
+    axes[1,i].set_xlabel("fx / cycles per pixel")
+    axes[1,i].set_ylabel("fy / cycles per pixel")
+    axes[1,i].set_title("display: log1p magnitude", fontsize=9)
+fig.colorbar(im, ax=axes[1,:].tolist(), label="log1p magnitude")
+plt.show()
+```
+
+`subplots` 把空间图放在第一行、频谱显示放第二行。共享范围防止自动色阶冒充强度差异；频谱使用数学频率轴方向，空间图仍按行向下。本实验峰坐标核验如下：
+
+| 输入 | shifted 峰 `[row,col]`（不含 DC） | `[fy,fx]` cycles/pixel |
+| --- | --- | --- |
+| 竖条纹 4 周期 | `[16,12]`, `[16,20]` | `[0,−0.125]`, `[0,0.125]` |
+| 竖条纹 8 周期 | `[16,8]`, `[16,24]` | `[0,−0.25]`, `[0,0.25]` |
+| 横条纹 4 周期 | `[12,16]`, `[20,16]` | `[−0.125,0]`, `[0.125,0]` |
+
+竖条纹的变化方向是横向，峰在 fx 轴；不是“频谱方向等于条纹走向”。两根轴周期数同时非零时可形成斜条纹，但本篇不另增实验要求。三个输入非 DC 峰幅度约 128；这是当前尺寸和归一化约定下的数值，不是像素亮度 128。
+
+### Checkpoint 2：位置改变，幅度可以不变
+
+先预测：把方块循环向下 3、向右 5，位置变了，幅度能否区分它们？`np.roll` 将越界部分从另一侧接回，是循环平移，不是填黑平移。用相同周期边界才能作此比较。
+
+```python
+square = np.zeros((N, N), dtype=np.float64)
+square[9:17, 7:15] = 1.0
+snapshot = square.copy()
+F = np.fft.fft2(square)
+shifted_square = np.roll(square, shift=(3, 5), axis=(0, 1))
+G = np.fft.fft2(shifted_square)
+
+def real_checked(z, tol=1e-10):
+    if not np.isfinite(z).all() or np.max(np.abs(z.imag)) > tol:
+        raise ValueError("expected finite, nearly real inverse; check spectrum symmetry/order")
+    return z.real.copy()
+
+reconstructed = real_checked(np.fft.ifft2(F))
+reconstruction_error = np.max(np.abs(reconstructed - square))
+assert reconstruction_error < 1e-10
+assert np.iscomplexobj(F)
+assert np.allclose(np.abs(F), np.abs(G), atol=1e-10, rtol=0)
+significant = np.abs(F) > 1e-8
+# conj 是复共轭；乘积角度表示两幅图在同一频率的相位差。
+phase_delta = np.angle(G[significant] * np.conj(F[significant]))
+assert np.max(np.abs(phase_delta)) > 1.0
+zero_phase = real_checked(np.fft.ifft2(np.abs(F)))
+assert not np.allclose(zero_phase, square)
+assert np.array_equal(square, snapshot)
+print("reconstruction max abs error:", reconstruction_error)
+print("magnitude difference:", np.max(np.abs(np.abs(F)-np.abs(G))))
+print("nonzero-bin phase change / rad:", np.max(np.abs(phase_delta)))
+
+fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+for ax, a, name in zip(axes, [square, shifted_square, zero_phase],
+                       ["original", "circular shift", "magnitude + zero phase"]):
+    ax.imshow(a, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    ax.set_title(name)
+plt.show()
+print("zero-phase actual min/max:", zero_phase.min(), zero_phase.max())
+```
+
+当前核验幅度差约 `1.4e-14`，但有效频率上的相位差明显非零。两个位置不同的输入共享幅度，已经证明只看 magnitude 不够。`abs(F)` 当作复频谱意味着把相位设为零，不是“只换显示”。其逆结果可超出 0–1；图中显示饱和不会改动数组，必须同时读 min/max。不要推断 phase 包含一切。
+
+本页 float64 → complex FFT → 近实数 inverse，全程不转 uint8。先检查虚部，再取 real；若虚部显著，不能通过强制丢弃来掩盖错误。容差 `1e-10` 只服务本页小规模、当前幅度实验，不是所有尺寸的通用误差界。
+
+## 5. Worked Example B：为什么 FFT 乘法从另一侧冒出内容？
+
+### Checkpoint 3：同一卷积，三个边界检查
+
+先预测原因：是核方向、边界、输出尺寸还是裁切不一致？本次**零边界、full 线性卷积**保留所有贡献：输入 H×W、小核 Kh×Kw，总输出为 `(H+Kh−1)×(W+Kw−1)`，因为最末输入还会向后贡献 Kh−1 行、Kw−1 列。
+
+前课用核中心作偏移原点、输出 same；这里为 full 累加暂把核数组左上索引记为零。规则 `full[r+i,c+j] += image[r,c]*kernel[i,j]` 等价于输出处读取 `image[out_row-i,out_col-j]`，仍是卷积、不是相关。对奇数核，最后从 full 的核中心偏移位置裁出 H×W，就回到前课中心 anchor 的 same 坐标。
+
+**卷积定理**在这里是：对相同支持范围补零后，空间卷积对应 `FFT(image) * FFT(kernel)` 的逐项乘法，不是矩阵 `@`。直接同尺寸 DFT 隐含周期边界，超出支持范围的贡献按尺寸取余回绕，是 circular convolution，不是 full linear convolution。
+
+```python
+def full_convolution(image, kernel):
+    if image.ndim != 2 or kernel.ndim != 2 or image.size == 0 or kernel.size == 0:
+        raise ValueError("expected nonempty 2D arrays")
+    h, w = image.shape
+    kh, kw = kernel.shape
+    full = np.zeros((h+kh-1, w+kw-1), dtype=np.float64)
+    for r in range(h):
+        for c in range(w):
+            full[r:r+kh, c:c+kw] += image[r,c] * kernel
+    return full
+
+small = np.zeros((4, 5), dtype=np.float64)
+small[3, 4] = 1.0  # 边缘脉冲让回绕显现
+kernel = np.array([[0,0,0], [0,1,2], [0,3,4]], dtype=np.float64)
+small_snapshot = small.copy()
+spatial_full = full_convolution(small, kernel)
+naive = real_checked(np.fft.ifft2(
+    np.fft.fft2(small) * np.fft.fft2(kernel, s=small.shape)))
+support = spatial_full.shape  # (6,7)，s 指定补零尺寸；本页不以更小 s 截断输入
+padded = real_checked(np.fft.ifft2(
+    np.fft.fft2(small, s=support) * np.fft.fft2(kernel, s=support)))
+assert np.allclose(padded, spatial_full, atol=1e-10, rtol=0)
+assert np.allclose(naive[:2,:2], [[1,2],[3,4]], atol=1e-10)
+assert np.allclose(spatial_full[4:6,5:7], [[1,2],[3,4]])
+same = padded[1:5, 1:6]  # 3×3 核中心偏移 (1,1)
+
+# 独立的中心 anchor / zero-border 空间 same：翻核后与 patch 逐项乘。
+source_pad = np.pad(small, 1, mode="constant")
+spatial_same = np.zeros_like(small)
+for r in range(4):
+    for c in range(5):
+        spatial_same[r,c] = np.sum(source_pad[r:r+3,c:c+3] * kernel[::-1,::-1])
+assert np.allclose(same, spatial_same, atol=1e-10, rtol=0)
+assert np.array_equal(small, small_snapshot)
+print("full / naive / same shapes:", spatial_full.shape, naive.shape, same.shape)
+print("padded full max error:", np.max(np.abs(padded-spatial_full)))
+print("naive:\n", np.round(naive, 6))
+print("input: unpadded FFT; expected: full zero-boundary convolution (6,7)")
+print("actual: (4,5), values wrapped to top-left; reason: periodic boundary")
+print("correction: pad both operands to (6,7), then align/crop explicitly")
+```
+
+核验：空间 full 的右下 `[4:6,5:7]` 是 `[[1,2],[3,4]]`，直接同尺寸 FFT 却把它送到左上 `[0:2,0:2]`。补零 full 最大差约 `3.7e-16`；same 裁切 shape 为 `(4,5)`，与中心翻核实现吻合。不能直接比较不同 shape，也不能用“看起来移位”代替对齐说明。
+
+这里 kernel 保持左上存储顺序送入 FFT，没有先 `fftshift` 核；改变原点就必须同时改变输出对齐。OpenCV `filter2D` 仍是相关，若用于额外核对须翻转两根轴、使用中心 anchor 和 `BORDER_CONSTANT`。复制/反射边界不等于本例零边界；FFT 与空间计算不是不加条件就永远相等。
+
+**为什么边界不能只口头说一致？** 用 `np.arange(1,21,dtype=float).reshape(4,5)` 得到逐行排列 1–20 的输入，沿用上面的非对称 kernel。固定中心 anchor、翻转核的卷积方向和 `(4,5)` same 输出，只改变数组外取值：左上角 `[0,0]` 在 **zero boundary 下为 1，在 replicate boundary 下为 10**。补 0 时，翻核后的非零权重只有中心项读到输入值 1；复制最近边界像素时，这些权重读到的都是 1，因此得到 `4×1+3×1+2×1+1×1=10`。
+
+这里比较的是同一输出几何下的边界假设，不是 full 与 same 的尺寸差，也不是 FFT 舍入误差。即使 FFT 支持尺寸已正确补到 `(6,7)`、核方向和裁切也正确，它仍只与本例的零边界空间基准对齐，不会自动等价于 replicate。边界参与定义算子；不能因为差异位于边缘就直接忽略，否则逐点等价的结论已经不成立。前课见过的边界契约，在频域对照中同样必须继承。
+
+## 6. Checkpoint 4：删去高频，不等于处理更好
+
+预测方块边缘会变缓，但这不是有噪声的图；删除它的频率成分是在损失真实结构。下面仅作一个半径 `3/32 cycles/pixel` 的低通观察，不发展成滤波器目录。`meshgrid(indexing="ij")` 将 fy 放行、fx 放列。
+
+```python
+fy, fx = np.meshgrid(freq, freq, indexing="ij")
+low_mask = fx**2 + fy**2 <= (3/N)**2
+F_shifted = np.fft.fftshift(F)
+low = real_checked(np.fft.ifft2(np.fft.ifftshift(F_shifted * low_mask)))
+high = real_checked(np.fft.ifft2(np.fft.ifftshift(F_shifted * (~low_mask))))
+assert np.allclose(low + high, square, atol=1e-10, rtol=0)
+assert np.max(np.abs(np.diff(low, axis=1))) < np.max(np.abs(np.diff(square, axis=1)))
+assert not np.allclose(low, square)
+assert np.array_equal(square, snapshot)
+print("low actual min/max:", low.min(), low.max())
+fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+for ax, a, name in zip(axes, [square, low, high], ["original", "low only", "high residual"]):
+    im = ax.imshow(a, cmap="gray", vmin=-0.7, vmax=1.2, interpolation="nearest")
+    ax.set_title(name)
+fig.colorbar(im, ax=axes.tolist(), label="signed intensity, shared scale")
+plt.show()
+```
+
+当前 low 约为 `−0.0884…1.0989`，硬切频率也产生过冲/振荡，不能认为低通只是每个像素安全取平均。`np.diff` 只看相邻列差，不是正式边缘检测。high 是带符号的快速变化残差，不是“噪声图”。
+
+四条边界：**高频不等于噪声；低频不等于背景；边缘不能只归属于高频；删除高频不等于去噪成功。**频率描述变化尺度，有用与否由任务和来源决定。此无噪声方块上“更平滑”本身不能证明更好。
+
+## 7. Active Recall
+
+- 竖条纹变密，为什么峰沿 fx 轴远离中心，而不是沿条纹方向移动？
+- 常量图的 DC=512 是否意味着每个像素都是 512？缺哪个归一化信息？
+- 为什么不能将 log magnitude 覆盖 F 后宣称还能重建？
+- 两幅循环平移图幅度一样，哪些信息仍区分其位置？为什么不能说 phase 包含一切？
+- 直接 FFT 相乘的左上伪影为什么可能来自右下？先核对哪些边界与索引？
+- 空间基准使用 replicate、频域使用 zero padding 时，误差非零是否说明 FFT 错了？
+- 方块低通后边缘更缓，能否称为去噪成功？数值越界又说明什么？
+
+## 8. Practice：四个小改动，一份记录
+
+1. **频率**：保持 N=32，将竖条纹从 4 改为 6 周期。先预测 shifted 峰，再核对 `[16,10]` 与 `[16,22]`、fx=±0.1875；报告重建最大差小于本例 `1e-10`。
+2. **方向与相位**：把同一 6 周期改为水平，先预测上下峰 `[10,16]`、`[22,16]`；再复用方块平移，换一个非零位移，比较幅度和有效频率相位。解释循环边界，不写“相位含全部信息”。
+3. **缺 padding 诊断**：将 small 脉冲从右下移到 `[2,3]`，先预测 full 中各非零位置及按 `(4,5)` 回绕位置，再运行；补零 full 与空间基准最大差须小于 `1e-10`，same 裁切须一致。交付 input/expected/actual/reason/correction，不通过放宽容差掩盖回绕。
+4. **任务边界**：复用方块 mask 结果，给出一项结构损失和实际 min/max，判断“更平滑是否更适合保留方块边界”。先预测后检查，不新增噪声或复杂滤波器。
+
+常见错误检查顺序：H×W 输入 → 复数 F 与显示副本分开 → 频率轴 → shift 配对 → kernel 方向 → 边界/support → crop → 虚部与数值容差。它是本篇的短诊断路线，不是完整信号处理规范。
+
+## 9. Mastery Evidence
+
+两项 required，可复用上述代码和图，不重复写四份报告：
+
+1. **Spectrum interpretation**：至少两种确定性图案，先预测频率方向与峰，再保存频率坐标、幅度显示、误差和解释。附循环平移幅度/相位观察、一次显示或索引误解诊断，以及高低频的任务边界。
+2. **Spatial/Frequency equivalence**：独立更改小输入，记录空间 full、naive FFT、padded FFT、same crop 与容差；解释卷积方向、零边界、回绕、对齐和修正。只运行原代码不是掌握，不要求证明定理或实现高性能 FFT。
+
+## 10. 后续用途 / Project / Capability 边界
+
+ROADMAP 后续 `dip.restoration` 将复用退化与频域表示，`dip.feature-representation` 会再考虑纹理特征；它们仍未发布。本页不提前讲恢复、特征或增强。
+
+Stage 3 的 draft `project.classical-inspection` 与 `project.imaging-quality-lab` 未来可复用“解释周期伪影、固定边界做对照”的能力；这不是新的 Project requirement，也不宣称频谱能直接完成检测或成像诊断。本轮不修改项目、阶段出口与复测。
+
+## 11. 精选 Resource
+
+**NumPy Discrete Fourier Transform** 是独立的窄范围参考，不扩大 Stage 2 beginner scope。必看 `fft2/ifft2` 的 shape、s、axes，以及 `fftshift/ifftshift/fftfreq` 的最小说明；只核对本页调用。选看 Background/Implementation details 中 DC 顺序、abs/angle 与默认归一化说明。跳过推导、FFT 算法、rfft/hfft、性能、历史论文及其他变换。中文正文与实验足以完成证据，不要求通读官方长页。

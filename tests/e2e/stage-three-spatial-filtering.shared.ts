@@ -54,7 +54,7 @@ export function spatialFilteringTests() {
       await page.goto(route);
       if (route === "/roadmap/graph/") await page.locator("#global-graph-stage").selectOption("stage.digital-image-processing");
       await expect(page.locator('a[href^="/knowledge/dip-spatial-filtering"]').first()).toBeAttached();
-      await expect(page.locator('a[href="/knowledge/dip-frequency-domain/"]')).toHaveCount(0);
+      await expect(page.locator('a[href="/knowledge/dip-enhancement/"]')).toHaveCount(0);
     }
     await page.goto("/resources/opencv-spatial-filtering/");
     await expect(page.getByRole("main")).toContainText("Median Blurring");

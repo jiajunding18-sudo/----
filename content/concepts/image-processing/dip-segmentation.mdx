@@ -1,0 +1,323 @@
+---
+schemaVersion: 1
+id: dip.segmentation
+slug: dip-segmentation
+title: 阈值、区域与基础分割
+englishTitle: Thresholds, Regions, and Basic Segmentation
+aliases: [基础分割, 前景与背景, Otsu]
+searchKeywords: [adaptiveThreshold, ground truth, FP, FN, IoU, frozen parameters]
+summary: 先定义任务前景和真值，再比较固定、Otsu 与局部阈值，用 FP/FN/IoU 解释光照、预处理与小目标失败，并冻结参数检查新输入。
+why: 看起来干净的 mask 可能漏掉全部目标；分割需要任务语义、独立真值和未调参输入，而不只是一个 threshold 调用。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 80
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 7, max: 9 }
+dependencies:
+  - conceptId: dip.spatial-filtering
+    kind: hard
+    reason: 需要解释平滑降低波动时对边界与小目标的代价，不能把预处理当成必然改善。
+  - conceptId: dip.enhancement
+    kind: hard
+    reason: 需要分清显示与数据映射，判断增强后的可见性是否真正改善当前分割任务。
+  - conceptId: math.probability-statistics
+    kind: recommended
+    reason: 统计与样本意识有助于解释 histogram 和新输入检查；本篇仍本地定义必要计数及 IoU。
+tags: [Segmentation, Threshold, Ground Truth, Controlled Comparison]
+learningOutcomes:
+  - 能先固定任务前景与真值，预测并比较全局和局部阈值的 FP/FN，解释 mask 观感与任务正确性的区别。
+  - 能诊断光照、预处理和小目标失败，在新输入上执行冻结方案，记录假设边界而不反复调参掩盖失败。
+masteryCriteria:
+  - id: criterion.dip-segmentation.controlled-comparison
+    description: 独立定义前景与固定真值，在同一输入上比较至少两种基础分割策略，以 FP/FN/IoU、预测和失败解释支持选择。
+    evidenceHint: 复用限定代码，提交任务、truth 来源、mask 契约、参数、固定显示、局部错误和一次预处理取舍；不要求分割算法大全或完整评价框架。
+    required: true
+  - id: criterion.dip-segmentation.frozen-input
+    description: 在查看新输入结果前冻结方法和参数，不重新调参地运行，比较 FP/FN 与原结果并解释失效假设或有限成功。
+    evidenceHint: 一份短记录包含冻结配置、新输入生成条件、truth、IoU、source 断言和 input/expected/actual/reason/correction；无明显失败也须说明仅验证当前样本。
+    required: true
+resourceIds: [resource.opencv-segmentation-thresholds]
+publicationStatus: published
+contentVersion: 2026.09.14.1
+---
+
+# 阈值、区域与基础分割（Segmentation）
+
+## 1. 现象：mask 很干净，目标却没找到
+
+假设一万个像素中只有一百个是待找目标。全部涂成背景，有 9900 个位置“答对”，像素正确率达到 99%，但目标一个也没找到。分割首先是**任务定义**，不是让二值图好看。
+
+**前景（foreground）**是当前任务希望标为 True / 255 的位置集合，背景是其余位置。它不是“亮像素”或“所有物体”的天然同义词。同一图中，任务可以是找亮零件，也可以是找暗缺陷；相应正确 mask 不同。图像强度相同，不代表任务相同。
+
+## 2. 为什么现在学 / 前置与当前深度
+
+Stage 2 的 [threshold 基础](/knowledge/opencv-threshold-morphology/)已介绍合法二值数组及 API。本篇新增的是：**任务与固定 truth → 假设 → 预测 → mask → FP/FN/IoU → 失败解释 → 冻结配置 → 新输入检查**，不重教 I/O。这里的预测是预计算法在固定 truth 下的 FP/FN/IoU 行为，不是预测或事后调整 truth；新输入也使用预先定义的对应 truth。
+
+[空域滤波](/knowledge/dip-spatial-filtering/)解释平滑代价；[增强](/knowledge/dip-enhancement/)解释可见性不等于更多信息。现在把这些判断落到任务错误上。[可信显示](/knowledge/image-plots/)和[数字图像表示](/knowledge/digital-image-representation/)用于检查数组，不新增 hard edge。
+
+`master` 仅表示能独立完成限定实验、预测与诊断；可以查 API、复用函数。预计 7–9 小时包含四个 checkpoint、四项短练习和两项可共用记录的证据。不学深度分割、watershed、graph cuts、完整区域生长、检测、形态学参数课、轮廓流水线或完整评价体系。
+
+## 3. 先声明集合，再选择规则
+
+### Truth 与表示不是算法替你决定的
+
+**真值（ground truth）**是用来核对任务的参考标注。本例在构造图像时就固定目标区域；不是运行算法后挑一张漂亮 mask 充当 truth。真实图片需要依据任务独立标注，还可能有标注误差；本篇不展开标注系统。
+
+正式输出契约为 H×W、uint8、值属于 `{0,255}`；评价中 `pred = mask > 0` 转为 bool。转换只改表示，不重新做分割决策。索引是 `[row,column]`，即常用 `[y,x]`。
+
+### 全局阈值：亮度能否在整幅图上分开两类？
+
+亮目标规则是 `I > T` 为前景；提高 T 时前景集合只会缩小，因此对固定 truth，FP 不增、FN 不减。暗目标可用反向比较；本页 OpenCV BINARY_INV 是 `I <= T` 为前景，等号归属必须明确。
+
+单个 global threshold 的假设是任务类别能用同一强度分界区分。若暗侧目标比亮侧背景还暗，就不存在一个“目标都高于 T，背景都不高于 T”的阈值。算法没报错也不代表假设成立。
+
+### Otsu：自动选数字，不自动知道任务
+
+Otsu 根据当前 histogram 选择使两组灰度在其统计准则下分离的全局阈值（可理解为尽量减小组内散布）。它不读取 truth，也不知道哪个物体是任务目标。两组可能恰好是照明的暗半幅与亮半幅，而不是前景/背景。
+
+本页使用单通道 uint8：`cv2.threshold(a, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)`。`|` 组合两个选项：亮前景输出规则与自动选阈值；此时传入的 0 不是固定阈值，返回的第一个值才是所选阈值。返回阈值不是得分，“自动”不等于任务最优、边界正确或适应光照。
+
+### Adaptive/local：局部参考也有尺度假设
+
+本篇只用 adaptive mean：局部阈值约为邻域均值减 C。BINARY 仍判断像素是否大于该局部阈值。C 增大降低阈值，通常选入更多像素；C 可为负，本例 C=-8 表示要求像素高于局部均值约 8 个灰度单位。
+
+`blockSize` 是正奇数且大于 1，例如 3、31；输入须为 H×W uint8，输出同 shape 的 0/255 mask。局部统计包含中心和邻居，OpenCV 此接口在图像边界使用复制/隔离边界语义，本页不另传 border 参数。
+
+窗口很小时，物体内部的邻居也都是物体，局部差异可能不足；噪声也会左右判断。窗口增大可读到更多背景，却可能混入照明变化、别的目标或边界复制值。大窗口更接近大范围参考，但不是保证与 global threshold 相同。因此“光照不均就用 adaptive”仍是不完整的决策。
+
+## 4. 最小评价：不要用背景数量遮住漏检
+
+设 P 为预测前景，G 为预先固定的真值前景。以下计数都依赖“哪一类被定义为前景”：
+
+- TP：P 和 G 都为 True，正确选中。
+- FP：P=True、G=False，误把背景选入。
+- FN：P=False、G=True，漏掉目标。
+- TN：两者都 False，正确保留背景。
+
+**IoU（交并比，Intersection over Union）**只用集合交集除以并集：
+
+$$
+\mathrm{IoU}=\frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}+\mathrm{FN}}.
+$$
+
+主报告只列 FP、FN、IoU。它们描述此 truth 下的像素重叠，不等于所有任务表现；一列位置偏移可能 IoU 仍高，却影响尺寸测量。本篇不实现边缘或测量算法。代码在并集为空时返回 `None`，表示本页不评价空集合重叠，不悄悄计作完美；主实验 truth 非空。
+
+## 5. Worked Example：先固定任务，再接受反例
+
+四个 checkpoint 在同一脚本顺序运行。使用现有环境、无下载数据。主任务是选出两个矩形亮条和一个 3×3 小亮块，**不选亮侧背景**。同一个任务先在 A 上比较；B 必须等配置冻结后才生成和检查。
+
+### Checkpoint 1：输入、truth 与最小计数
+
+先预测：左侧条带虽然比其附近亮，但可能比右侧背景暗，单阈值会在左侧漏检或右侧误检。输入背景从 60 渐变到 160，目标在所在位置额外加 45；固定 seed 加 sigma=4 的模拟扰动。单位都是本页 0–255 灰度，不代表已标定照明或真实相机模型。
+
+```python
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+
+print("versions:", np.__version__, cv2.__version__)
+H, W = 96, 128
+truth = np.zeros((H, W), dtype=bool)
+truth[28:60, 20:36] = True
+truth[28:60, 88:104] = True
+truth[72:75, 24:27] = True  # 3x3 小目标
+truth_snapshot = truth.copy()
+z = np.random.default_rng(61).normal(0, 4, (H, W))
+
+def make_input(slope, noise):
+    clean = np.broadcast_to(60 + np.linspace(0, slope, W), (H, W)).copy()
+    clean[truth] += 45
+    raw = clean + noise
+    assert np.all((raw >= 0) & (raw <= 255))
+    return np.rint(raw).astype(np.uint8)  # 已检查范围，round 后安全编码
+
+a = make_input(100, z)
+source_snapshot = a.copy()
+assert truth.sum() == 1033
+print("A:", a.shape, a.dtype, a.min().item(), a.max().item())
+
+def score(mask, reference):
+    if mask.shape != reference.shape or mask.ndim != 2:
+        raise ValueError("expected matching H x W mask/truth")
+    if mask.dtype != np.uint8 or not np.isin(mask, [0, 255]).all():
+        raise ValueError("expected uint8 {0,255} mask")
+    if reference.dtype != bool:
+        raise ValueError("expected bool truth fixed before segmentation")
+    pred = mask > 0
+    tp = int(np.count_nonzero(pred & reference))
+    fp = int(np.count_nonzero(pred & ~reference))
+    fn = int(np.count_nonzero(~pred & reference))
+    tn = int(np.count_nonzero(~pred & ~reference))
+    union = tp + fp + fn
+    return dict(TP=tp, FP=fp, FN=fn, TN=tn,
+                IoU=tp/union if union else None)
+
+# 相同输入，两个任务：亮零件 vs 暗缺陷；先分别声明 truth
+toy = np.array([[30, 100, 220]], dtype=np.uint8)
+bright_truth = np.array([[False, False, True]])
+dark_truth = np.array([[True, False, False]])
+bright = cv2.threshold(toy, 180, 255, cv2.THRESH_BINARY)[1]
+dark = cv2.threshold(toy, 50, 255, cv2.THRESH_BINARY_INV)[1]
+assert score(bright, bright_truth)["IoU"] == 1
+assert score(dark, dark_truth)["IoU"] == 1
+
+rare_truth = np.zeros((100, 100), dtype=bool)
+rare_truth[:10, :10] = True
+all_background = np.zeros((100, 100), dtype=np.uint8)
+r = score(all_background, rare_truth)
+print("accuracy trap:", (r["TP"] + r["TN"])/rare_truth.size, r)
+```
+
+`np.broadcast_to` 在这里把同一行照明复制到各行，随后的 copy 才用于改值；truth 是独立构造的 bool 数组。`np.isin` 检查值是否属于允许集合，`count_nonzero` 计数 True 位置。`~` 对 bool 取反，不是在 uint8 mask 上猜集合意义。预期主 truth 有 1033 个像素；反例正确率 0.99，但 TP=0、FN=100、IoU=0。
+
+### Checkpoint 2：全局与局部，用相同 truth 比
+
+先写出 T=100→130→160 时 FP/FN 的方向。自动阈值可能仍按光照分组；局部 31×31 或许能比较条带与邻近背景，但不要预先宣布胜出。三种方法从同一 A 独立生成输出，不串联 mask，也不改 truth。
+
+```python
+def fixed(source, threshold):
+    return cv2.threshold(source, threshold, 255, cv2.THRESH_BINARY)[1]
+
+def local(source, block=31, offset=-8):
+    if source.ndim != 2 or source.dtype != np.uint8:
+        raise ValueError("adaptive input must be H x W uint8")
+    if not isinstance(block, int) or block <= 1 or block % 2 == 0:
+        raise ValueError("blockSize must be odd integer > 1")
+    return cv2.adaptiveThreshold(source, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                 cv2.THRESH_BINARY, block, offset)
+
+sweep = {t: score(fixed(a, t), truth) for t in (100, 130, 160)}
+for t, report in sweep.items():
+    print("fixed", t, report)
+assert sweep[100]["FP"] >= sweep[130]["FP"] >= sweep[160]["FP"]
+assert sweep[100]["FN"] <= sweep[130]["FN"] <= sweep[160]["FN"]
+otsu_t, otsu_mask = cv2.threshold(a, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+predictions = {"fixed 130": fixed(a, 130), "Otsu": otsu_mask,
+               "local31": local(a), "local3": local(a, 3)}
+print("Otsu selected threshold:", otsu_t)
+for name, mask in predictions.items():
+    print(name, score(mask, truth))
+assert np.array_equal(a, source_snapshot)
+assert np.array_equal(truth, truth_snapshot)
+```
+
+OpenCV 5.0.0 / NumPy 2.4.6 下的当前核验值（记录自己的版本，不把末位差异当任务进步）：
+
+| A 方法 | FP | FN | IoU |
+| --- | ---: | ---: | ---: |
+| fixed 100 | 6798 | 0 | 0.13191 |
+| fixed 130 | 3225 | 400 | 0.14866 |
+| fixed 160 | 199 | 521 | 0.41558 |
+| Otsu，T=113 | 5217 | 4 | 0.16464 |
+| local31，C=-8 | 136 | 1 | 0.88281 |
+| local3，C=-8 | 142 | 840 | 0.16426 |
+
+因果检查：不加噪声时，左目标 x=28 约为 `60+100*28/127+45≈127`，亮侧背景 x=115 约为 151。要选前者需 `T<127`，要拒绝后者需 `T≥151`，不能同时成立。噪声只进一步模糊分界。Otsu 的自动数字也没有解决这个矛盾。
+
+local3 不只受噪声干扰：大条带内部的邻域全是目标，中心并不比其邻域高约 8，因此大量内部变成 FN。local31 在当前尺寸上能读到周围背景，但仍有 FP，不能推广成“31 永远合适”。
+
+### Checkpoint 3：预处理不是免费修复
+
+先预测：轻平滑可能减少背景偶然越阈值；强平滑可能把 3×3 小目标混入背景；强 CLAHE 可能让更多背景波动越过局部阈值。本组**固定后端 local31/C=-8**，只改输入预处理，检查插入它会怎样，不是在比较各算法重新调优后的上限。
+
+```python
+light = cv2.GaussianBlur(a, (3, 3), 1.0, sigmaY=1.0,
+                         borderType=cv2.BORDER_REPLICATE)
+strong = cv2.GaussianBlur(a, (11, 11), 3.0, sigmaY=3.0,
+                          borderType=cv2.BORDER_REPLICATE)
+enhanced = cv2.createCLAHE(clipLimit=40.0, tileGridSize=(4, 4)).apply(a)
+variants = {"raw local31": predictions["local31"], "light local31": local(light),
+            "strong local31": local(strong), "CLAHE40 local31": local(enhanced)}
+for name, mask in variants.items():
+    print(name, score(mask, truth),
+          "small target selected:", np.count_nonzero(mask[72:75, 24:27]))
+assert score(variants["light local31"], truth)["FP"] < score(predictions["local31"], truth)["FP"]
+assert np.count_nonzero(variants["strong local31"][72:75, 24:27]) == 0
+assert score(variants["CLAHE40 local31"], truth)["FP"] > score(predictions["local31"], truth)["FP"]
+assert np.array_equal(a, source_snapshot)
+
+panels = [("A intensity", a), ("TRUTH (fixed)", truth.astype(np.uint8)*255),
+          ("PRED fixed130", predictions["fixed 130"]), ("PRED local31", predictions["local31"]),
+          ("PRED strong blur", variants["strong local31"]),
+          ("PRED CLAHE40", variants["CLAHE40 local31"])]
+fig, axes = plt.subplots(2, 3, figsize=(10, 6), layout="constrained")
+for ax, (name, array) in zip(axes.ravel(), panels):
+    ax.imshow(array, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
+    ax.set_title(name)
+    ax.set_xlabel("column / x"); ax.set_ylabel("row / y")
+plt.show()
+```
+
+当前轻平滑 FP=7、FN=4、IoU≈0.98942；强平滑 FP=5、FN=91、IoU≈0.90751，小目标 9 个像素全部漏掉。只看 FP 会选错保护小目标的方案。CLAHE40 后 FP=3847、FN=0、IoU≈0.21168；更强的局部灰度差也包含背景扰动，且位置相关映射改变了原规则的参考。它不是新增了随机噪声，也不证明所有增强无用。
+
+显示统一灰度、0–255、nearest；truth 与 prediction 用标题分开，白色都只表示各自定义的前景，不能靠显示平滑“补齐”mask。小目标可回看固定 `[72:75,24:27]`；这些已知坐标只用于诊断，算法本身不读取 truth。
+
+失败卡示例：input=A/11×11 平滑/local31；expected=保留 3×3 目标；actual=该处 9 个 FN；reason=邻域混合降低目标相对局部背景差；correction=回到 A，在开发输入上减轻或拒绝平滑，冻结新方案后另找新输入检查。不要用 morphology 把 mask 修漂亮后宣称原分割正确。
+
+### Checkpoint 4：冻结配置后再打开 B
+
+以下预先选定 **无预处理的 local31/C=-8** 作为最小基线，不声称它在 A 上最优。复制并固定 block、C、前景极性和预处理选择；然后才生成 B。B 保持任务/目标区域，使用更大照明梯度与新的噪声 seed。它是未用于本次选参的小输入，不是证明广泛泛化能力的数据集。
+
+```python
+frozen = {"method": "adaptive_mean_binary", "block": 31, "C": -8,
+          "preprocessing": "none"}
+config_snapshot = frozen.copy()
+def run_frozen(source, config):
+    assert config["method"] == "adaptive_mean_binary"
+    assert config["preprocessing"] == "none"
+    return local(source, config["block"], config["C"])
+
+b = make_input(140, np.random.default_rng(62).normal(0, 4, (H, W)))
+b_snapshot = b.copy()
+b_mask = run_frozen(b, frozen)
+print("frozen configuration:", frozen)
+print("A frozen baseline:", score(run_frozen(a, frozen), truth))
+print("B frozen check:", score(b_mask, truth))
+assert frozen == config_snapshot
+assert np.array_equal(b, b_snapshot)
+assert np.array_equal(a, source_snapshot)
+assert np.array_equal(truth, truth_snapshot)
+```
+
+当前 B 为 FP=158、FN=0、IoU≈0.86734；A 对应 FP=136、FN=1。局部参考并没有完全消除输入变化的影响；B 同时改变梯度与噪声实现，不能仅凭两次计数将变化全部归因于照明。要归因，可另做固定噪声、只改梯度的开发对照，但不能用 B 调好参数后还称其为未调参检查。
+
+若 B 失败，如实保留；修方案后需要另一个未用于修改的小输入重新检查。新输入结果没有变差也只支持这一次检查。复用相同目标布局降低实验负担，并不验证对新形状、混合噪声、真实光学或工业场景的鲁棒性。
+
+## 6. Active Recall
+
+- 同一灰度图找亮零件与找暗缺陷，为什么两个不同 mask 都可能正确？
+- T 升高时，亮前景 FP/FN 的集合方向是什么？暗前景为什么不能照搬？
+- 99% 像素正确却一个目标没找到，报告隐藏了什么？
+- Otsu 输出一个阈值，为什么不知道它分开的是照明还是目标？
+- adaptive 小窗口为何会漏掉大片目标内部？改 C 的方向与改 block 的意义有何不同？
+- 平滑后 FP 降低却小目标全漏，能否叫成功？CLAHE 后更明显为何仍可能新增 FP？
+- morphology 改善 mask 外观能证明 truth 对齐吗？
+- 为什么冻结后不能继续用 B 调参？相同目标布局的 B 又没有验证什么？
+
+## 7. Practice：四项，共用一份记录
+
+每项先记录方向预测，再运行检查；不做 grid search 或长报告。
+
+1. **阈值与光照**：A 上比较 T=120/140/160 的 FP/FN；再保持同一 z，只把 slope 改为 0 或 140，固定 T=130。指出哪侧出现 FP/FN；解释这是照明假设变化，不重画 truth。
+2. **局部尺度**：只改 block=3/31/61，保持 C=-8，再单独比较 C=-8 与 C=0。报告 FP/FN/IoU 与小目标保留数；C 增大时亮前景集合不得缩小，窗口变化不承诺单调改善。非法 block=4 应被 helper 拒绝。
+3. **预处理取舍**：复用 light/strong 两个输出，记录 FP 减少是否伴随 FN 与 3×3 漏检增加；另解释已有 CLAHE40 对照。禁止接 morphology 补洞作为通过标准。
+4. **冻结检查**：在 A 上选一个已教方案并记录全部配置，再用尚未查看结果的 seed（例如 63）及 slope=120 生成新输入；冻结执行，保留 source 与 truth 断言，解释新 FP/FN。代码中的 B 已看过，不能再充当你的新检查输入。
+
+完成标准：合法 mask、计数覆盖全部像素、truth 不随预测改变、记录失败与有限结论；IoU 高低不是作业是否通过的唯一标准，诚实解释失败同样是证据。
+
+## 8. Mastery Evidence
+
+两项 required，共用脚本与一份短记录。
+
+1. **Controlled segmentation comparison**：独立声明 foreground 与固定 truth，先预测，再在相同输入上比较至少两个已教策略；给出参数、mask 契约、FP/FN/IoU、可信显示和选择理由。包含一个光照或预处理失败，不仅贴截图，不把调好的 prediction 变成 truth。
+2. **Frozen unseen-input check**：在查看新结果前记录冻结方法、参数、极性、预处理和生成条件；在未参与本次选择的输入运行，不改参数，比较 FP/FN/IoU，提交五项失败/边界卡及 source/truth 断言。若无明显失败，说明仅验证哪些条件，不宣称普遍鲁棒。
+
+## 9. 后续用途 / Project / Resource
+
+输出接口是合法 binary mask 加明确 foreground 语义。后续 `dip.morphology` 研究怎样改变 mask geometry，不负责重新定义任务，也不能替错误阈值假设担保。`dip.quality-metrics` 以后扩展图像/任务评价，本篇的局部定义不依赖它；`dip.edge-detection`、restoration 也不是本篇必做内容。
+
+ROADMAP 中 draft `project.classical-inspection` 将复用任务、truth、固定测试输入和失败分析；本轮不发布其正文、requirement 或 acceptance，不要求完成检测系统。真实图片无合成真值便利，须先明确目标与标注，再验证照明和处理假设，不能直接套用这里的 T 或 C。
+
+**OpenCV Segmentation Thresholds** 仅供核对 threshold 的返回值、BINARY/INV/OTSU 及 adaptiveThreshold 的 uint8、blockSize、C 契约。必看对应调用；选看 adaptive mean 与 Gaussian 的区别，不新增第二种局部算法实验。跳过 Otsu 公式推导、手工实现、其他阈值类型、形态学、watershed 与完整教程扩展；中文正文是主教材，官方“optimal”也只在算法准则内解释，不当任务最优保证。Stage 2 Resource scope 不变。

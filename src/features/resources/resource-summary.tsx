@@ -200,7 +200,7 @@ export function ResourceSummary({
         ) : null}
       </dl>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-5 [overflow-wrap:anywhere] lg:grid-cols-2">
         <div>
           <SectionHeading className="text-sm font-semibold">
             为什么推荐

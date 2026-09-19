@@ -2,6 +2,26 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.opencv-segmentation-thresholds",
+    title: "OpenCV Segmentation Thresholds",
+    authorOrOrganization: "OpenCV",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "在中文任务与真值实验后，仅核对全局、Otsu 和局部阈值调用，不将自动选阈值等同任务最优；独立于 Stage 2 scope。",
+    recommendedParts: [
+      "必看：threshold 的输入、ret/output、THRESH_BINARY/THRESH_BINARY_INV/THRESH_OTSU；adaptiveThreshold 的单通道 uint8、奇数 blockSize > 1、均值减 C 和边界说明。仅核对本页用法。",
+      "选看：ADAPTIVE_THRESH_MEAN_C 与 GAUSSIAN_C 参数区别；不增加 Gaussian adaptive 实验。",
+      "跳过：其他 threshold 类型、Otsu 完整推导和手工实现、distance transform、floodFill、GrabCut、watershed、形态学和完整图像评价；Stage 2 旧阅读范围不变。",
+    ],
+    aliases: ["Otsu adaptiveThreshold reference"],
+    verification: "verified",
+    url: "https://docs.opencv.org/4.13.0/d7/d1b/group__imgproc__misc.html",
+    verifiedAt: "2026-09-14",
+    lastCheckedAt: "2026-09-14",
+  },
+  {
     id: "resource.opencv-histogram-enhancement",
     title: "OpenCV Histogram Enhancement API",
     authorOrOrganization: "OpenCV",

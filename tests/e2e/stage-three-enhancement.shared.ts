@@ -54,7 +54,7 @@ export function enhancementTests() {
       await page.goto(route);
       if (route === "/roadmap/graph/") await page.locator("#global-graph-stage").selectOption("stage.digital-image-processing");
       await expect(page.locator('a[href^="/knowledge/dip-enhancement"]').first()).toBeAttached();
-      for (const slug of ["dip-segmentation", "dip-restoration", "dip-quality-metrics"])
+      for (const slug of ["dip-morphology", "dip-restoration", "dip-quality-metrics"])
         await expect(page.locator(`a[href="/knowledge/${slug}/"]`)).toHaveCount(0);
     }
     await page.goto("/resources/opencv-histogram-enhancement/");

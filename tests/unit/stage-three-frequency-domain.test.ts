@@ -10,9 +10,9 @@ import { getRetestLifecycle } from "@/features/progress/stage-retest";
 
 describe("Stage 3 frequency domain", () => {
   const concept = contentManifest.concepts.find(c => c.id === "dip.frequency-domain")!;
-  it("includes frequency domain in the seven published Stage 3 concepts with constrained master depth", () => {
+  it("includes frequency domain in the nine published Stage 3 concepts with constrained master depth", () => {
     expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId).map(c => c.id).sort()).toEqual([
-      "dip.convolution-lsi", "dip.enhancement", "dip.frequency-domain", "dip.morphology", "dip.noise-models", "dip.sampling-quantization", "dip.segmentation", "dip.spatial-filtering",
+      "dip.convolution-lsi", "dip.edge-detection", "dip.enhancement", "dip.frequency-domain", "dip.morphology", "dip.noise-models", "dip.sampling-quantization", "dip.segmentation", "dip.spatial-filtering",
     ]);
     expect(concept).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master" });
     expect(concept.masteryCriteria).toHaveLength(2);

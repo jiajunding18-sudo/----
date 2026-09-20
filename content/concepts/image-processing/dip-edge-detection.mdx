@@ -1,0 +1,349 @@
+---
+schemaVersion: 1
+id: dip.edge-detection
+slug: dip-edge-detection
+title: 梯度、Canny 与边缘定位
+englishTitle: Gradients, Canny, and Edge Localization
+aliases: [边缘检测, Edge Detection, 梯度方向]
+searchKeywords: [Sobel, Canny, magnitude, orientation, non-maximum suppression, hysteresis]
+summary: 从阶跃与斜坡预测空间梯度，用已知边缘带检查噪声、平滑和阈值的代价，不把强响应等同语义边界。
+why: 轮廓清晰不代表找到了任务边界；必须分清变化方向、响应强度、离散位置与漏检代价，才能解释边缘图。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 100
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 6, max: 8 }
+dependencies:
+  - conceptId: dip.convolution-lsi
+    kind: hard
+    reason: 需要能解释局部加权和、相关方向、dtype 与边界，才能核对 Sobel 响应。
+  - conceptId: math.calculus-gradients
+    kind: hard
+    reason: 需要理解空间偏导与梯度向量，才能区分响应方向和边缘走向。
+  - conceptId: dip.noise-models
+    kind: recommended
+    reason: 固定噪声样本有助于比较；本篇本地解释所需的种子和扰动参数，不阻塞开始。
+tags: [Gradient, Edge, Sobel, Canny]
+learningOutcomes:
+  - 能预测 Gx/Gy 的符号和方向，解释 magnitude、orientation、对比度与离散算子尺度。
+  - 能以固定输入和边缘带比较噪声、平滑及 Canny 阈值，用数值解释伪边缘和薄结构漏检。
+masteryCriteria:
+  - id: criterion.dip-edge-detection.interpret-gradient-edge-response
+    description: 独立预测并核对简单图像的 Gx/Gy、幅值与方向，解释边缘切向、梯度法向及 dtype/sign 安全。
+    evidenceHint: 提交常量/阶跃/斜坡、方向与对比度预测、数值核对和一次 signed/display 错误诊断；可查 API。
+    required: true
+  - id: criterion.dip-edge-detection.diagnose-edge-detection-tradeoffs
+    description: 在固定含噪输入上比较有限平滑或阈值变化，解释一个伪边缘或漏边缘，以及边缘图不等于语义边界。
+    evidenceHint: 记录参数、预定义边缘带、逐行命中与带外检测、薄结构响应、source 断言及失败卡；无需完整项目。
+    required: true
+resourceIds: [resource.opencv-image-gradients, resource.opencv-canny-edges]
+publicationStatus: published
+contentVersion: 2026.09.20.1
+---
+
+# 梯度、Canny 与边缘定位（Edge Detection）
+
+## 1. 现象与目的：检测的是变化，不是物体身份
+
+一条零件边界、一道阴影和一块条纹，都可能从暗变亮。边缘检测首先寻找**局部强度变化**，不会自动知道哪一条属于任务目标。更干净、边更少，都不能单独证明检测更好。
+
+主线：**空间变化 → 预测导数 → 梯度幅值/方向 → 边缘决策 → 噪声/平滑/阈值对照 → 数值检查 → 失败解释**。
+
+## 2. 为什么现在学 / 前置与深度
+
+hard 是[卷积/LSI](/knowledge/dip-convolution-lsi/)与[微积分梯度](/knowledge/calculus-and-gradients/)。Stage 2 的 [edges/contours](/knowledge/opencv-edges-contours/)已提供安全调用与已知几何入口；这里新增梯度方向、Canny 机制与受控任务取舍，不重复轮廓测量。
+
+`master` 仅指能独立完成下面的限定实验、预测、解释和常见错误诊断，允许查 API。预计 6–8 小时，两项 Evidence 共用脚本和短记录。噪声模型是 recommended；平滑、图像坐标和评价口径在本页补足，不要求先学 segmentation、quality-metrics 或空间滤波课程。
+
+现在不学完整微分几何、尺度空间证明、Laplacian/LoG、Harris/Hough、描述子、从零实现完整 Canny 或检测流水线。
+
+## 3. 从一维变化到二维梯度
+
+### 常量、阶跃与斜坡
+
+常量的一行没有左右变化；阶跃在短距离内跳变；斜坡每格增加相近数值。先预期：常量响应为零，阶跃响应集中，斜坡内部响应持续。不是“所有边缘只有一个非零像素”：响应宽度取决于离散 kernel、采样、平滑及边界。
+
+连续导数描述连续函数的局部变化率；有限差分/Sobel 是离散局部近似。当前像素间距按1计，但未归一化的 Sobel 数字还带算子增益，不能直接当物理单位变化率，也不能跨 kernel size/强度范围照搬阈值。
+
+### Sobel：差分与垂直方向的加权
+
+本页 `ksize=3, scale=1, delta=0`。x 算子沿列用右减左 `[-1,0,1]`，沿行用 `[1,2,1]` 加权，后者提供有限的正交方向平滑，但不消除所有噪声。按局部**相关**读法，其核为
+
+$$
+K_x=\begin{bmatrix}-1&0&1\\-2&0&2\\-1&0&1\end{bmatrix},\qquad K_y=K_x^T.
+$$
+
+这里转置只是构造 y 方向核。OpenCV 的当前 Sobel 符号与按上式相关相符；若按前课严格卷积定义实现，应翻核以保持同一算子，不能不加说明地再翻一次。后面直接用 filter2D 核对，而不是依赖术语习惯猜符号。
+
+### Gx/Gy、幅值与方向
+
+本页灰度数组是 `image[row,column] = image[y,x]`，x向右、y向下。Gx表示沿x强度变化，Gy表示沿y强度变化。**竖直边缘**左右两侧强度不同，主要响应是Gx；**水平边缘**上下不同，主要响应是Gy。它们不是“边缘朝向”的名称。
+
+$$
+M=\sqrt{G_x^2+G_y^2},\qquad \theta=\operatorname{atan2}(G_y,G_x).
+$$
+
+M是 magnitude（幅值），只描述局部变化强度。atan2同时看两个分量符号，给出 gradient orientation（方向），代码再由弧度转为度。非零梯度指向最陡增亮方向，近似边缘**法向**；边缘沿线的**切向**通常与它相差90°。在本页y向下坐标中，正90°指向下方，不套用数学y向上的图像直觉。
+
+方向相差360°可表示同一有向箭头；无向边缘切线相差180°可等价。反转暗亮会翻转梯度极性（polarity），但幅值可不变。M≈0时方向没有可靠意义，即使atan2给出了数字，也不能称它为边缘方向。
+
+### 分析数据与显示副本
+
+导数可正可负，而且可超过255。使用 `CV_32F` 保存 signed response；uint8输出会饱和并丢失负值。`abs`、`convertScaleAbs`或显示归一化可能丢符号、裁幅值，**display gradient不等于analysis gradient**。本页原始Gx/Gy不被显示操作覆盖。
+
+## 4. Canny：从响应带到候选连接
+
+在简单模型里，`M > T`给出候选：T低可能保留噪声，T高可能漏掉真实弱变化。它没有把宽响应变细，也不理解物体。
+
+Canny可分为五个理解步骤：
+
+1. **平滑**：邻近强度加权平均可降低随机波动，也会混合跨边缘强度、降低峰值，薄线尤其容易损失。本页显式调用 GaussianBlur，不能假定 `cv2.Canny` 自动替你做同样的高斯预处理。
+2. **梯度**：计算局部变化强度和方向。
+3. **非极大值抑制（NMS）**：较宽的梯度脊线上，沿梯度方向比较相邻响应，保留局部峰，使边更细；不是随意删除“重复线”。
+4. **双阈值**：high提供strong seeds（强种子），low界定可能连接的weak candidates（弱候选），本页始终 `0 <= low < high`。
+5. **滞后连接（hysteresis）**：弱候选须经合适的邻接链连到强种子才能保留；不是所有超过low的点都保留。示意：low=40/high=100，响应70的候选沿链连到120可能保留；孤立70会被丢弃。这里只解释规则，不手写Canny。
+
+本页Canny使用非空H×W uint8输入、`apertureSize=3, L2gradient=True`；后者选择欧氏幅值，不是默认的绝对值之和。阈值作用于梯度响应而非原灰度，不能把threshold=100解释为“保留灰度大于100”。输出为H×W uint8的0/255 edge map，不是区域标签。
+
+OpenCV Canny接口不提供此调用的border参数；不要宣称能在这里任意指定内部边界。本篇显式控制外部Gaussian/Sobel的复制边界，并排除图外框8像素进行评价，避免边界延拓主导实验。不同算子的内部细节不被宣称完全等价。
+
+## 5. Worked Example：预测、检查、再解释
+
+以下五段在现有Python环境中按顺序运行，不需要下载数据。记录OpenCV/NumPy版本。先写预测，再展开结果；数字只对应本页输入与参数，不是通用最佳阈值。
+
+### Checkpoint A：一维响应不是单像素标签
+
+先预测常量、阶跃和斜坡内部响应的零/非零分布。`np.tile`把同一行复制7次，避免y方向引入变化。
+
+```python
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+print("versions", cv2.__version__, np.__version__)
+BORDER = cv2.BORDER_REPLICATE
+
+def gradients(image):
+    if image.ndim != 2 or image.size == 0 or not np.isfinite(image).all():
+        raise ValueError("expected nonempty finite H x W scalar image")
+    a = image.astype(np.float32)
+    gx = cv2.Sobel(a, cv2.CV_32F, 1, 0, ksize=3, borderType=BORDER)
+    gy = cv2.Sobel(a, cv2.CV_32F, 0, 1, ksize=3, borderType=BORDER)
+    return gx, gy, np.hypot(gx, gy)
+
+rows = {
+    "constant": np.full(9, 30, np.float32),
+    "step": np.array([30]*4 + [50]*5, np.float32),
+    "ramp": np.arange(9, dtype=np.float32)*5 + 30,
+}
+profiles = {}
+for name, row in rows.items():
+    gx, gy, magnitude = gradients(np.tile(row, (7, 1)))
+    profiles[name] = gx[3].copy()
+    print(name, profiles[name])
+    assert np.all(gy == 0)
+assert np.all(profiles["constant"] == 0)
+assert np.array_equal(profiles["step"], [0,0,0,80,80,0,0,0,0])
+assert np.all(profiles["ramp"][1:-1] == 40)
+```
+
+阶跃增量20乘正交权重和4，响应80出现在两列；斜坡每格增5，右减左为10，再乘4得40。斜坡边端因复制延拓为20，因此只用内部结果解释持续斜率。较弱/较强是相对当前增量而言，不是所有ramp必然弱于step。
+
+### Checkpoint B：方向、对比度与 signed buffer
+
+运行前预测：左右30→50产生正Gx、零Gy；转置后主要为正Gy；暗亮反转改变符号。对比度翻倍而边界位置不变时，幅值应翻倍。
+
+```python
+vertical = np.tile(rows["step"], (7, 1))
+gx, gy, mag = gradients(vertical)
+hx, hy, hm = gradients(vertical.T)
+theta = np.degrees(np.arctan2(gy, gx))
+horizontal_theta = np.degrees(np.arctan2(hy, hx))
+assert gx[3, 3] == 80 and gy[3, 3] == 0 and theta[3, 3] == 0
+assert hx[3, 3] == 0 and hy[3, 3] == 80
+assert np.isclose(horizontal_theta[3, 3], 90)
+reverse = 80 - vertical
+rx, ry, rm = gradients(reverse)
+assert rx[3, 3] == -80 and np.array_equal(rm, mag)
+double_contrast = 30 + 2*(vertical-30)
+assert np.allclose(gradients(double_contrast)[2], 2*mag)
+
+kx = np.array([[-1,0,1],[-2,0,2],[-1,0,1]], np.float32)
+assert np.allclose(gx, cv2.filter2D(vertical, cv2.CV_32F, kx,
+                                  borderType=BORDER))
+bad_unsigned = cv2.Sobel(reverse.astype(np.uint8), cv2.CV_8U,
+                         1, 0, ksize=3, borderType=BORDER)
+display_abs = cv2.convertScaleAbs(rx)  # only a display copy
+assert bad_unsigned[3, 3] == 0 and display_abs[3, 3] == 80
+assert rx[3, 3] == -80
+print("signed / uint8 / abs display", rx[3,3], bad_unsigned[3,3], display_abs[3,3])
+```
+
+竖直边切向沿上下，但梯度朝右；水平边梯度朝下。`dx=1,dy=0`与`dx=0,dy=1`分别求x/y一阶离散变化，`ddepth`规定输出类型。不能从abs图中恢复暗→亮或亮→暗。
+
+### Checkpoint C：同一含噪输入，平滑不是免费改善
+
+定义64×96灰度图：column32开始由50变130，column72是一像素宽的170亮线。任务要保留主阶跃及亮线两侧，而不是把所有变化都叫目标。先预测加入噪声后带外梯度上升；轻平滑可能降低它；强平滑可能使亮线峰值明显衰减。
+
+噪声仅是教学用独立加性扰动：`default_rng(72)`固定生成器，`normal(0,8,shape)`指定均值0、标准差8与输出shape。先在float相加，再clip/rint/uint8（裁范围、舍入、编码），不在uint8内直接加噪声。记录版本；不承诺跨版本随机序列完全一致。
+
+下面 `smooth` 的 `size` 是有限方形邻域的边长：`size=5` 使用 5×5 窗口。它决定参与计算的空间范围，不是单独的“平滑强度”；实际效果还取决于 `sigma`、图像结构和边界处理。
+
+Gaussian blur 的 `sigma` 描述空间权重随距离衰减的尺度，也就是权重分布的宽度，本实验以像素（pixel）为单位。固定 `size` 时增大 `sigma`，窗口内较远邻居会获得相对更多权重，分布更平缓；有限窗口仍限制参与计算的范围。因此 Practice 3 固定 5×5、将 `sigma` 从 1 改为 2，改变的是同一窗口内的权重分布，不是把窗口同时扩大。两者不是等价的强度旋钮，也不能据此断言 `sigma` 越大越好。
+
+这里的 blur `sigma` 不同于上文 noise std：后者的 8 描述灰度扰动的统计幅度，前者描述像素距离上的空间加权尺度。不能因为噪声标准差是 8，就推断 blur `sigma` 也应取 8；仍需比较降噪收益与真实边缘、薄结构的损失。
+
+**评价契约先固定**：行8–55、列8–87是valid区域；主边缘带为列30–33，薄线带为70–74，容忍离散响应宽度及一格定位差。这是当前合成模型的容差带，不是通用标注标准。逐行hit表示该行带内至少有一个检测点，不能证明整条边精确定位；薄线hit也不证明两侧都完整。另数带外检测点，禁止扩大band来美化结果。这里不依赖分割的TP/FP/FN或完整质量评价。
+
+```python
+H, W = 64, 96
+clean = np.full((H, W), 50, np.float32)
+clean[:, 32:] = 130
+clean[:, 72] = 170
+clean_snapshot = clean.copy()
+noise = np.random.default_rng(72).normal(0, 8, clean.shape)
+source = np.rint(np.clip(clean + noise, 0, 255)).astype(np.uint8)
+snapshot = source.copy()
+valid = np.zeros((H, W), bool)
+valid[8:-8, 8:-8] = True
+band = np.zeros_like(valid)
+band[:, 30:34] = True
+band[:, 70:75] = True
+band &= valid
+off = valid & ~band
+
+def smooth(image, size, sigma):
+    return cv2.GaussianBlur(image, (size, size), sigma, borderType=BORDER)
+
+variants = {"raw": source.copy(), "light": smooth(source, 5, 1),
+            "strong": smooth(source, 21, 4)}
+magnitudes = {name: gradients(a)[2] for name, a in variants.items()}
+
+def edge_checks(edge):
+    if edge.shape != (H, W) or edge.dtype != bool:
+        raise ValueError("expected matching H x W bool detections")
+    # any per row: at least one selected pixel inside the predeclared band
+    return dict(main_hit=float(edge[8:-8,30:34].any(axis=1).mean()),
+                thin_hit=float(edge[8:-8,70:75].any(axis=1).mean()),
+                off_count=int(np.count_nonzero(edge & off)))
+
+assert np.all(gradients(clean)[2][off] == 0)
+for name, m in magnitudes.items():
+    print(name, "off mean / main peak / thin peak",
+          m[off].mean(), m[8:-8,30:34].max(), m[8:-8,70:75].max())
+assert magnitudes["raw"][off].mean() > magnitudes["light"][off].mean()
+assert magnitudes["light"][off].mean() > magnitudes["strong"][off].mean()
+
+# Same thin structure without noise: isolates structure loss from noise removal.
+thin_peaks = [gradients(a)[2][8:-8,70:75].max()
+              for a in (clean, smooth(clean,5,1), smooth(clean,21,4))]
+print("clean thin peaks", thin_peaks)
+assert thin_peaks[0] > thin_peaks[1] > thin_peaks[2]
+for threshold in (25, 100):
+    print("simple magnitude threshold", threshold,
+          edge_checks(magnitudes["raw"] > threshold))
+assert np.array_equal(source, snapshot)
+assert np.array_equal(clean, clean_snapshot)
+```
+
+核验环境OpenCV5.0.0/NumPy2.4.6：含噪带外幅值均值约35.28→12.21→6.71；无噪薄线峰值160→55.70→3.45。注意强平滑的带外读数可能含主边缘展宽，不全是噪声。clean对照用于确认薄线损失不是“只删掉噪声”。size与sigma作为三组声明的预处理方案一起变化，只能归因于整个平滑方案，不能据此单独估计size或sigma的因果效应。
+
+### Checkpoint D：Canny 阈值与连接代价
+
+先预测三组low/high：降低阈值可能增加带外点，提高阈值可能丢薄线；同一阈值用于强平滑图时可能连主边也没有strong seed。不要求某组永远最好。
+
+```python
+def canny_checked(image, low, high):
+    if image.ndim != 2 or image.size == 0 or image.dtype != np.uint8:
+        raise ValueError("expected nonempty H x W uint8")
+    if not (0 <= low < high):
+        raise ValueError("expected 0 <= low < high")
+    return cv2.Canny(image, low, high, apertureSize=3, L2gradient=True)
+
+threshold_pairs = [(10,25), (40,100), (150,300)]
+edges, records = {}, {}
+for name, image in variants.items():
+    for low, high in threshold_pairs:
+        edge = canny_checked(image, low, high)
+        assert edge.shape == source.shape and edge.dtype == np.uint8
+        assert np.isin(edge, [0,255]).all()
+        edges[name,low,high] = edge
+        records[name,low,high] = edge_checks(edge > 0)
+        print(name, low, high, records[name,low,high])
+assert records["raw",10,25]["off_count"] > records["raw",40,100]["off_count"]
+assert records["raw",40,100]["thin_hit"] == 1
+assert records["raw",150,300]["thin_hit"] == 0
+assert records["strong",40,100]["main_hit"] == 0
+assert np.array_equal(source, snapshot)
+```
+
+当前确定性输入的核验读数如下；噪声实现或OpenCV版本不同应记录差异，先查契约，不应强行改输入迎合表格。
+
+| 输入 | low/high | 主边逐行hit | 薄线逐行hit | 带外点数 |
+| --- | --- | --- | --- | --- |
+| raw | 10/25 | 1 | 1 | 1245 |
+| raw | 40/100 | 1 | 1 | 118 |
+| raw | 150/300 | 1 | 0 | 0 |
+| light | 40/100 | 1 | 0 | 0 |
+| strong | 40/100 | 0 | 0 | 0 |
+
+零带外点并不充分：最后两行分别漏薄线、漏所有目标边。失败卡例：input=固定含噪图/strong/40–100；expected=保留主边及薄线；actual=两种hit均0；reason=平滑降低峰值，阈值下缺少有效强种子；correction=在同一输入比较较轻方案或较低阈值，同时检查带外点和薄线，不能只奖励“更干净”。
+
+纹理同样会触发：一排交替暗亮条纹具有多个强度过渡，即使任务只关心外框，Sobel/Canny仍可能返回内部纹理。阴影也可能如此。此例只作语义判断，不新增第三份Evidence。边缘图不是object identity、缺陷结论或区域mask，不接“形态学清理→填充→分割”来掩盖失败。
+
+### Checkpoint E：固定显示，不改分析数据
+
+`subplots`创建多个绘图区，axes保存各区域，ravel按一维顺序遍历。输入灰度统一0–255；有符号导数统一−400到400，超出仅显示饱和，raw仍保留；检测和band统一0–255。expected band是评价容差区域，不是算法输出。
+
+```python
+source_gx, source_gy, source_mag = gradients(source)
+fig, axes = plt.subplots(2, 3, figsize=(11, 6), layout="constrained")
+panels = [(source, "fixed noisy input", "gray", 0, 255),
+          (source_gx, "signed Gx / display range", "coolwarm", -400, 400),
+          (band.astype(np.uint8)*255, "expected tolerance band", "gray", 0, 255),
+          (edges["raw",10,25], "raw Canny 10/25", "gray", 0, 255),
+          (edges["raw",40,100], "raw Canny 40/100", "gray", 0, 255),
+          (edges["strong",40,100], "strong Canny 40/100", "gray", 0, 255)]
+for ax, (a, title, cmap, lo, hi) in zip(axes.ravel(), panels):
+    shown = ax.imshow(a, cmap=cmap, vmin=lo, vmax=hi, interpolation="nearest")
+    ax.set_title(title); ax.set_xlabel("column / x"); ax.set_ylabel("row / y")
+    if cmap == "coolwarm": fig.colorbar(shown, ax=ax)
+plt.show()
+assert np.array_equal(source, snapshot)
+```
+
+## 6. Active Recall
+
+- 竖线响应主要在Gx，为什么不是程序把方向写反？梯度箭头与沿线切向怎样区分？
+- 强度反转后幅值不变，为什么不能判断变化方向相同？若先convertScaleAbs，丢了什么？
+- 噪声和条纹也有大梯度，哪种额外任务依据才能判断它是否有用？
+- 强平滑后带外点为0但薄线hit为0，为什么不能称为最优？
+- NMS为何沿梯度方向比较峰值，而不是沿边缘切线任意删点？
+- low以上的孤立弱响应为何可能被丢弃？阈值100为什么不是原灰度100？
+- 改图像强度范围、Sobel核或sampling scale后，旧阈值和像素容差为何要重新核对？
+
+## 7. Practice
+
+1. **方向/极性**：把B的水平阶跃反转。先预测Gx≈0、`Gy < 0`，核对−80、幅值80和−90°；说明这不是无向切线角。输出保留float，给uint8错误的input/expected/actual/reason/correction。
+2. **对比度**：将阶跃右侧改为40，左侧30不变。先预测边缘两列不变、Gx=40，比原80减半，再数值核对。不要凭自动拉伸后的显示判断强弱。
+3. **平滑取舍**：保留C的同一source，固定5×5，只将sigma从1改为2。运行前预测带外幅值与薄线峰值趋势，运行后记录两者与40/100的hit/off；解释实际变化而非要求必胜。带外读数可能混有展宽结构，必须连同clean薄线对照看。
+4. **阈值诊断**：固定raw输入和band，比较D的三组阈值；报告主边/薄线hit、带外点数和一个伪边/漏边失败卡。完成标准：说明为何不只最大化hit或最小化点数、weak连接为何重要，以及仍未验证的纹理/真实图像条件。不做网格搜索。
+
+## 8. Mastery Evidence
+
+仅两项required，允许查API、复用同一脚本，不交大型报告。
+
+1. **Gradient interpretation record**：独立给出常量/阶跃/斜坡及竖直/水平预测，改变一次对比度或极性，核对Gx/Gy、magnitude/orientation与数值，解释切向/法向、无响应处方向限制及signed/display区别。附一次dtype/sign诊断。
+2. **Edge tradeoff diagnosis**：固定含噪source与预定义band，先预测后改变一次平滑或阈值设置，记录hit/off、薄线响应、source断言和一个失败解释。能用自己的话解释NMS、strong/weak连接及“edge不等于语义边界”。不需要实现完整Canny、轮廓或Project。
+
+## 9. 后续用途与精选 Resource
+
+ROADMAP 的后续 `cv.corners-keypoints`、`cv.optical-flow` 会复用局部梯度；`dip.feature-representation` 再研究如何表示结构。本篇不提前讲角点、匹配、描述子或不变性。draft `project.classical-inspection` 未来比较方法时可复用已知边缘检查与失败分析，但这里不修改其requirements，不保证工业检测或测量精度。
+
+真实图像的目标尺度、采样分辨率、对比度、噪声和任务边界都可能不同，不能把当前阈值或±一格直觉当作通用标注标准。
+
+- **OpenCV Image Gradients**：必看Sobel与One Important Matter中的output depth/负值；选看本页实际dx/dy/ksize。跳过Scharr、Laplacian和完整示例扩展；官方abs显示不可替代本页signed分析。
+- **OpenCV Canny Edge Detection**：必看Canny调用、low/high和L2gradient；选看NMS/hysteresis对照本页机制。跳过trackbar、完整实现、Hough、轮廓和高级特征。官方概念流水线里的平滑与具体API是否自动执行要分开，本篇显式预处理。
+
+两项资源只用于核对，本页中文正文自足；不改变Stage 2的OpenCV阅读范围。

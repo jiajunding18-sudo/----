@@ -38,6 +38,7 @@ const conceptIds = [
   "dip.frequency-domain",
   "dip.enhancement",
   "dip.segmentation",
+        "dip.morphology",
 ] as const;
 
 function trackBrowserErrors(page: Page) {
@@ -70,7 +71,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   await page.goto("/knowledge/");
 
   const results = page.locator("[data-knowledge-concept-id]");
-  await expect(results).toHaveCount(36);
+  await expect(results).toHaveCount(37);
   expect(
     await results.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-knowledge-concept-id")),
@@ -83,8 +84,8 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
   const trackFilter = page.getByLabel("按 Track 浏览");
   await expect(stageFilter.locator("option")).toHaveCount(18);
   await expect(trackFilter.locator("option")).toHaveText([
-    "全部 Track（36）",
-    "公共主干（36）",
+    "全部 Track（37）",
+    "公共主干（37）",
     "3D 工业视觉高级分支（0）",
     "计算成像高级分支（0）",
   ]);
@@ -128,7 +129,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     page.locator('[data-knowledge-concept-id="pipeline.batch-images"]'),
   ).toBeVisible();
   await stageFilter.selectOption("stage.digital-image-processing");
-  await expect(results).toHaveCount(7);
+  await expect(results).toHaveCount(8);
   await expect(page.locator('[data-knowledge-concept-id="dip.frequency-domain"]')).toBeVisible();
   await stageFilter.selectOption("stage.imaging-foundations");
   await expect(results).toHaveCount(0);
@@ -143,7 +144,7 @@ test("Knowledge 从正式 catalog 浏览 Stage / Track，并保留未发布范�
     "目前没有已发布 Concept",
   );
   await page.getByRole("button", { name: "全部知识", exact: true }).click();
-  await expect(results).toHaveCount(36);
+  await expect(results).toHaveCount(37);
 
   const developmentEnvironment = page.locator(
     '[data-knowledge-concept-id="tooling.dev-environment"]',

@@ -963,7 +963,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
   });
 
   it("features-preview 仅由 edges 解锁，understood 已达目标且发布不通过 Stage gate", () => {
-    expect(contentManifest.concepts).toHaveLength(36);
+    expect(contentManifest.concepts).toHaveLength(37);
     const preview = contentManifest.concepts.find(({ id }) => id === "opencv.features-preview");
     if (!preview) throw new Error("missing feature preview");
     const state = createInitialLearningState(contentManifest.tracks, "2026-09-07T00:00:00.000Z");

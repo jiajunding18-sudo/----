@@ -2,6 +2,25 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.opencv-morphology",
+    title: "OpenCV Morphological Transformations",
+    authorOrOrganization: "OpenCV",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "核对结构元素与基本形态学调用；中文受控实验负责解释尺度、真目标删除和误连接，不把去噪描述当普遍保证。",
+    recommendedParts: [
+      "必看：Erosion、Dilation、Opening、Closing、Structuring Element；仅核对 erode/dilate/morphologyEx/getStructuringElement。",
+      "选看：anchor、iterations、border 参数，与本页中心锚点、一次操作和显式边界对照。",
+      "跳过：Morphological Gradient、Top Hat、Black Hat、扩展教程与完整形态学理论；Stage 2 阅读范围不变。",
+    ],
+    verification: "verified",
+    url: "https://docs.opencv.org/4.13.0/d9/d61/tutorial_py_morphological_ops.html",
+    verifiedAt: "2026-09-19",
+    lastCheckedAt: "2026-09-19",
+  },
+  {
     id: "resource.opencv-segmentation-thresholds",
     title: "OpenCV Segmentation Thresholds",
     authorOrOrganization: "OpenCV",

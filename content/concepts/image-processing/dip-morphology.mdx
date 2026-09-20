@@ -1,0 +1,262 @@
+---
+schemaVersion: 1
+id: dip.morphology
+slug: dip-morphology
+title: 二值与灰度形态学
+englishTitle: Binary and Grayscale Morphology
+aliases: [形态学, 结构元素, 开运算, 闭运算]
+searchKeywords: [erosion, dilation, opening, closing, structuring element]
+summary: 用固定真值和小数组预测结构元素造成的收缩、扩张、删除与连接，比较去噪收益和小目标、间隙损失。
+why: mask 更平滑不等于任务更正确；结构元素会改变区域几何，必须知道删除了什么、连接了什么。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 90
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 5, max: 7 }
+dependencies:
+  - conceptId: dip.segmentation
+    kind: hard
+    reason: 先固定任务前景与 truth，再用 FP/FN/IoU 判断几何修改是否有益。
+  - conceptId: opencv.threshold-morphology
+    kind: recommended
+    reason: 已有二值 API 经验有助于运行实验，但本页本地解释必要操作和契约。
+tags: [Morphology, Geometry, Mask, Controlled Comparison]
+learningOutcomes:
+  - 能预测结构元素尺度和方向对面积、连通区域与小结构的影响。
+  - 能用固定 truth 展示收益与失败，不把 mask 美化当成分割正确。
+masteryCriteria:
+  - id: criterion.dip-morphology.explain-structuring-element-effects
+    description: 在限定二值实验中先预测，再独立比较不同结构元素的面积、连通区域和几何变化并解释原因。
+    evidenceHint: 记录输入、结构元素形状/尺寸、中心锚点、边界、预测和实际计数；不要求形态学证明。
+    required: true
+  - id: criterion.dip-morphology.diagnose-morphology-tradeoffs
+    description: 用预先固定的 truth 展示一个改善案例和一个失败案例，解释被删除或连接的结构与任务的关系。
+    evidenceHint: 提交 FP/FN/IoU、局部几何、source 断言和简短失败卡；可共用正文代码，不要求检测系统。
+    required: true
+resourceIds: [resource.opencv-morphology]
+publicationStatus: published
+contentVersion: 2026.09.19.1
+---
+
+# 二值与灰度形态学（Morphology）
+
+## 1. mask 问题：被删掉的是噪点，还是目标？
+
+一个孤立白点可以是误检，也可以是任务要找的小缺陷。形态学只看到数组和结构元素，不知道哪个是真目标。同样，把两个白块连接起来，可能修好了断裂，也可能把两个零件误并成一个。
+
+主线是：**mask 问题与固定 truth → 预测几何变化 → 选择结构元素 → 操作 → 区域/几何检查 → 失败解释 → 适用边界**。不根据处理结果重新画 truth。
+
+## 2. 为什么现在学 / 当前深度
+
+[基础分割](/knowledge/dip-segmentation/)已经回答前景是什么、FP/FN 如何计算。本篇接着问：修改 mask 后，目标面积、厚度和相互关系发生了什么？这会影响后续零件计数、尺寸判断和缺陷保留。
+
+`master` 限于二值形态学的小型独立实验、预测与诊断；灰度部分只要求 `understand`，不是第三项 Evidence。预计 5–7 小时，可复用同一脚本与短记录。不学重建、骨架化、拓扑证明、完整形态学理论或检测流水线。[Stage 2 基础](/knowledge/opencv-threshold-morphology/)是推荐复习，不是新增硬门槛。
+
+## 3. 结构元素怎样改变几何
+
+**结构元素（structuring element）**指定当前位置要检查的邻域形状。这里用含 0/1 的小数组，1 是参与检查的位置；它不是滤波加权求和的权重。矩形 3×3 检查全部九个位置，十字只检查中心及上下左右。**锚点（anchor）**是对齐当前像素的位置，本页只用奇数尺寸、默认中心锚点、一次操作。
+
+输入 mask 是 H×W、uint8、{0,255}，255 表示任务前景。对本页含中心、对称的结构元素：
+
+| 操作 | 邻域判断 | 几何直觉 |
+| --- | --- | --- |
+| erosion 腐蚀 | 参与位置全部是前景才保留中心 | 边缘邻域碰到背景就消失，因此区域收缩 |
+| dilation 膨胀 | 参与位置至少一个是前景就选入 | 前景影响附近位置，因此区域扩大 |
+| opening 开运算 | 先腐蚀，再用同一结构元素膨胀 | 恢复能容纳结构元素的大结构，但被完全腐蚀掉的小结构不会凭空恢复 |
+| closing 闭运算 | 先膨胀，再用同一结构元素腐蚀 | 可能填小孔、桥接小间隙；随后腐蚀不保证把两个目标重新分开 |
+
+尺寸要和目标厚度、孔洞、间隙一起看，不是越大越好。矩形与十字也不是可互换的同尺寸工具。以下面积是**前景像素数**，不是 polygon 的 contourArea。
+
+本页的 3×3、5×5 是当前确定性输入中的像素尺度，不是固定物理尺度；若分辨率、成像倍率或目标、缺陷、间隙的像素尺寸变化，结构元素尺寸必须重新验证，不能直接套用到工业图像。
+
+边界同样属于契约：本页显式用 `BORDER_CONSTANT`、外部背景 0，目标远离外框，避免把裁切影响混进尺度比较。若目标接触图边，外部补 0 会影响结果，不能照搬内部矩形的面积公式。不要把本页补零等同 OpenCV 未指定 borderValue 的所有默认行为。
+
+## 4. Worked Example：四个连续检查点
+
+使用现有 NumPy/OpenCV 环境，按顺序运行，无需图片下载。所有显示固定灰度 0–255、nearest，不用显示平滑掩盖几何损失。
+
+### Checkpoint A：尺寸、形状与面积
+
+先预测：8×5 实心矩形被 3×3 方核腐蚀后，每侧去一层，变成 6×3；膨胀后变成 10×7。5×5 则每侧变化两层。只对本例远离边界的完整矩形使用这个推导。
+
+```python
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+print("versions", cv2.__version__, np.__version__)
+
+def kernel(n, shape=cv2.MORPH_RECT):
+    if not isinstance(n, int) or n < 1 or n % 2 == 0:
+        raise ValueError("expected positive odd kernel size")
+    return cv2.getStructuringElement(shape, (n, n))
+
+def morph(mask, operation, element):
+    if mask.ndim != 2 or mask.dtype != np.uint8 or not np.isin(mask, [0, 255]).all():
+        raise ValueError("expected H x W uint8 {0,255} mask")
+    return cv2.morphologyEx(mask, operation, element, iterations=1,
+                            borderType=cv2.BORDER_CONSTANT, borderValue=0)
+
+def geometry(mask):
+    # 8-connectivity: side or corner contact belongs to one foreground region.
+    count, _ = cv2.connectedComponents(mask, connectivity=8)
+    y, x = np.nonzero(mask)
+    box = None if x.size == 0 else (int(x.min()), int(y.min()),
+                                    int(x.max()-x.min()+1), int(y.max()-y.min()+1))
+    return dict(area=int(np.count_nonzero(mask)), components=count-1, bbox=box)
+
+def errors(mask, truth):
+    assert mask.shape == truth.shape and truth.dtype == bool
+    p = mask > 0
+    tp = int(np.count_nonzero(p & truth))
+    fp = int(np.count_nonzero(p & ~truth))
+    fn = int(np.count_nonzero(~p & truth))
+    return dict(FP=fp, FN=fn, IoU=tp/(tp+fp+fn) if tp+fp+fn else None)
+
+rect = np.zeros((32, 40), np.uint8)
+rect[10:15, 10:18] = 255
+rect_snapshot = rect.copy()
+for n in (1, 3, 5):
+    eroded = morph(rect, cv2.MORPH_ERODE, kernel(n))
+    dilated = morph(rect, cv2.MORPH_DILATE, kernel(n))
+    print(n, "erode", geometry(eroded), "dilate", geometry(dilated))
+    assert geometry(eroded)["area"] == (8-(n-1))*(5-(n-1))
+    assert geometry(dilated)["area"] == (8+(n-1))*(5+(n-1))
+point = np.zeros_like(rect)
+point[12, 14] = 255
+square = morph(point, cv2.MORPH_DILATE, kernel(3))
+cross = morph(point, cv2.MORPH_DILATE, kernel(3, cv2.MORPH_CROSS))
+print("square/cross area", geometry(square), geometry(cross))
+assert np.array_equal(rect, rect_snapshot)
+```
+
+预期腐蚀面积 40/18/4，膨胀面积 40/70/108；均为一个连通区域。3×3 腐蚀 bbox 为 `(11,11,6,3)`，其中顺序是 x/y/宽/高。单点膨胀时方核产生九个像素，十字产生五个像素：同样外接尺寸并不表示同样几何。
+
+`connectedComponents` 返回的 count 包含背景标签，减一才是前景区域数；这里固定 8 连通，即角接触也算相连，不在实验中途换规则。它只计区域，不知道物体数量。`np.nonzero` 返回非零位置的行、列索引；bbox 是所有前景的联合外接框，不是逐物体检测。空 mask 返回 None。
+
+### Checkpoint B：去噪成功与真目标被删除
+
+这里使用两份独立输入：成功例只有大块目标与三个孤立前景噪点，truth 仅包含大块；失败例另加入真实细线和 2×2 小目标，它们也属于该例的 truth。两份输入各自的 truth 都在 morphology 操作前固定，三个额外孤立点均为误检。先预测：3×3 开运算会去掉误检，但一像素细线和 2×2 真目标也容不下结构元素。
+
+```python
+large = np.zeros((32, 40), bool)
+large[6:14, 6:16] = True
+noise_positions = [(2, 2), (20, 25), (27, 35)]
+
+def noisy(reference):
+    source = reference.astype(np.uint8)*255
+    for y, x in noise_positions:
+        source[y, x] = 255
+    return source
+
+success_source = noisy(large)
+success_snapshot = success_source.copy()
+success_open = morph(success_source, cv2.MORPH_OPEN, kernel(3))
+print("opening success", errors(success_source, large), errors(success_open, large))
+assert np.array_equal(success_open > 0, large)
+
+truth_b = large.copy()
+truth_b[20, 6:14] = True  # eight-pixel true thin line
+truth_b[24:26, 6:8] = True  # four-pixel true small target
+source_b = noisy(truth_b)
+snapshot_b, truth_b_snapshot = source_b.copy(), truth_b.copy()
+opened = morph(source_b, cv2.MORPH_OPEN, kernel(3))
+print("opening failure", errors(source_b, truth_b), errors(opened, truth_b))
+print("geometry", geometry(source_b), geometry(opened))
+assert errors(opened, truth_b)["FP"] == 0
+assert errors(opened, truth_b)["FN"] == 12
+assert np.array_equal(source_b, snapshot_b)
+assert np.array_equal(success_source, success_snapshot)
+assert np.array_equal(truth_b, truth_b_snapshot)
+```
+
+成功例 FP 从 3 到 0、FN 保持 0。失败例虽然 FP 也降到 0，却新增 12 个 FN；输出只剩 80 像素的大块，IoU=80/92≈0.86957。不能把被删除的东西一律叫噪点。开运算的“恢复”不是把原图所有信息还原。
+
+### Checkpoint C：填孔成功与相邻目标误连接
+
+先固定任务：一例是完整实心块中错误漏掉一个像素；另一例要求保留两个块之间的真实背景间隙。先预测 3×3 闭运算会填前者，也可能填后者。孔和间隙都是背景，操作不理解哪一种该保留。
+
+```python
+truth_hole = np.zeros((32, 40), bool)
+truth_hole[8:16, 8:18] = True
+hole = truth_hole.astype(np.uint8)*255
+hole[11, 12] = 0
+hole_snapshot = hole.copy()
+filled = morph(hole, cv2.MORPH_CLOSE, kernel(3))
+print("closing success", errors(hole, truth_hole), errors(filled, truth_hole))
+assert np.array_equal(filled > 0, truth_hole)
+
+truth_pair = np.zeros((32, 40), bool)
+truth_pair[8:16, 6:12] = True
+truth_pair[8:16, 14:20] = True  # columns 12 and 13 are true background
+pair = truth_pair.astype(np.uint8)*255
+pair_snapshot, truth_pair_snapshot = pair.copy(), truth_pair.copy()
+joined = morph(pair, cv2.MORPH_CLOSE, kernel(3))
+print("closing failure", geometry(pair), geometry(joined), errors(joined, truth_pair))
+assert geometry(pair)["components"] == 2
+assert geometry(joined)["components"] == 1
+assert errors(joined, truth_pair)["FP"] == 16
+assert np.array_equal(pair, pair_snapshot)
+assert np.array_equal(hole, hole_snapshot)
+assert np.array_equal(truth_pair, truth_pair_snapshot)
+
+panels = [("opening truth", truth_b.astype(np.uint8)*255), ("opening input", source_b),
+          ("opening result", opened), ("closing truth", pair),
+          ("closing input", pair), ("closing result", joined)]
+fig, axes = plt.subplots(2, 3, figsize=(10, 6), layout="constrained")
+for ax, (name, image) in zip(axes.ravel(), panels):
+    ax.imshow(image, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
+    ax.set_title(name)
+    ax.set_xlabel("column / x"); ax.set_ylabel("row / y")
+plt.show()
+```
+
+填孔例 FN 从 1 到 0。连接例输入本来就完全正确，闭运算将两列间隙变成 16 个 FP，面积从 96 到 112，连通区域从 2 到 1，IoU=96/112≈0.85714。这里的大外接框前后相同，因此只查 bbox 也会漏掉错误。形态学可能改善某些分割错误，但它不证明原 mask 正确，更不能替代 truth、FP/FN/IoU。
+
+失败卡：input=两个正确块/两像素间隙/3×3 close；expected=保持两个区域；actual=1 区域、16 FP；reason=膨胀桥接间隙，后续腐蚀保留桥；correction=根据任务拒绝本次 close，或在开发输入上比较更小元素，再用新的固定输入验证。不要事后把间隙改成真前景。
+
+### Checkpoint D：灰度只理解局部极值
+
+平坦结构元素下，灰度腐蚀取参与位置的局部最小值，膨胀取局部最大值；不是均值滤波。先预测下列中心像素 50 在 3×3 邻域内的结果。灰度数组不是 0/255 mask，所以不通过上面的 binary helper。
+
+```python
+gray = np.array([[10, 20, 30], [40, 50, 60], [70, 80, 90]], np.uint8)
+gray_snapshot = gray.copy()
+gray_eroded = cv2.erode(gray, kernel(3), borderType=cv2.BORDER_REPLICATE)
+gray_dilated = cv2.dilate(gray, kernel(3), borderType=cv2.BORDER_REPLICATE)
+print("gray center", gray_eroded[1, 1], gray_dilated[1, 1])
+assert gray_eroded[1, 1] == 10 and gray_dilated[1, 1] == 90
+assert np.array_equal(gray, gray_snapshot)
+```
+
+中心结果为 10/90。此处边界显式复制，但中心不访问数组外部；不拿它与 binary 补零实验混比。不展开非平坦元素、灰度重建或理论证明。
+
+## 5. Active Recall
+
+- 3×3 开运算删除一个 2×2 块，为什么不能据此认定它是噪声？
+- 两个目标合为一个，但 bbox 不变，应该追加检查什么？
+- 同为 3×3，十字与方核为什么可能保留不同细节？
+- FP 下降但细线全丢，任务要求检测细裂纹时应怎样判断？
+- 把核换大，孔洞消失更多，为什么仍不能宣布改进？
+- 中心灰度膨胀得到 90 而不是均值 50，是否是程序错误？
+
+## 6. Practice
+
+1. **尺寸预测**：对 A 的 8×5 块，先写出 3×3、5×5 腐蚀/膨胀面积和 bbox，再运行。完成标准：数值匹配，解释公式为什么要求目标远离边界。
+2. **方向**：在 B 的细线上比较 `np.ones((1,3),np.uint8)` 与 `np.ones((3,1),np.uint8)` 的 opening。前者检查水平方向，后者检查竖直方向。先预测细线保留数，再验证分别为 8 和 0；其他区域也须记录，不只截有利位置。
+3. **取舍与诊断**：复用 B/C，提交一个成功和一个失败案例的 FP/FN/IoU、面积与连通数。truth 不变，记录为何接受或拒绝操作。偶数核输入 helper 应明确失败，不靠无异常判断契约正确。
+4. **理解即可**：把 D 的中心改为 100，预测中心最小/最大值为 10/100；解释这是邻域极值而非平均。无需增加第三项证据。
+
+## 7. Mastery Evidence
+
+仅两项 required，可共用脚本和短记录。
+
+1. **Explain structuring-element effects**：独立运行 A 与方向练习，先预测，再给出形状、尺寸、anchor、border、iterations 和面积/连通/bbox 检查，解释核与结构尺度关系。不是背 API。
+2. **Diagnose morphology tradeoffs**：复用或修改 B/C 的限定数组，先声明 truth，展示一个改善和一个失败，报告 FP/FN/IoU、具体丢失或连接的位置、source 断言及五项失败卡。高 IoU 不替代任务判断；无需检测项目或新数据集。
+
+## 8. 后续用途 / Resource
+
+ROADMAP 中 draft `project.classical-inspection` 将用这里的尺度与失败判断支持规则检测，但本篇不发布 Project requirement 或验收；学完不等于已经完成真实工业检测。后续图像评价可以进一步比较任务代价，不是本篇额外前置。
+
+**OpenCV Morphological Transformations**：必看 Erosion、Dilation、Opening、Closing、Structuring Element，核对 erode/dilate/morphologyEx/getStructuringElement；选看参数中的 anchor、iterations 和 border，仅对照本页设置。跳过 gradient、top-hat、black-hat、扩展教程及算法大全。官方“去噪”描述需结合本篇真目标删除反例，中文实验是主教材；不改变 Stage 2 Resource scope。

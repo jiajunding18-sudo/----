@@ -1,0 +1,305 @@
+---
+schemaVersion: 1
+id: dip.feature-representation
+slug: dip-feature-representation
+title: 形状、纹理与局部描述
+englishTitle: Feature Representation
+aliases: [局部特征表示, Local Feature Representation]
+searchKeywords: [raw patch, descriptor, keypoint, mean centering, ORB, information loss]
+summary: 用像素向量、去均值表示和 ORB 输出认识信息选择，借助小扰动实验解释稳定性、区分性与信息损失。
+why: 后续算法需要可读取的结构表示，但编码相似不代表同一物体；先弄清保留了什么、舍弃了什么，才能理解表示的用途与局限。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 110
+level: beginner
+requiredness: required
+targetDepth: understand
+estimatedHours: { min: 4, max: 6 }
+dependencies:
+  - conceptId: dip.edge-detection
+    kind: hard
+    reason: 局部边缘和方向变化是结构线索，需要先区分响应与任务语义。
+  - conceptId: dip.frequency-domain
+    kind: hard
+    reason: 需要用快慢空间变化解释模糊为什么改变局部纹理信息，不在这里重复 FFT 实验。
+  - conceptId: math.eigen-svd
+    kind: recommended
+    reason: 信息压缩与主要方向的直觉有帮助，但本页不需要分解或 PCA 运算。
+tags: [Representation, Descriptor, ORB]
+learningOutcomes:
+  - 能借助示例解释像素向量、去均值表示、关键点与描述子的 shape、dtype 和信息边界。
+  - 能在框架帮助下修改一次小扰动，记录表示变化或可用性，区分稳定、不变、语义和未来比较任务。
+masteryCriteria:
+  - id: criterion.dip-feature-representation.explain-local-feature-representation
+    description: 借助示例解释 raw patch、去均值表示、keypoint 与 descriptor 的分工，以及维度、dtype 和信息损失。
+    evidenceHint: 整理一次 patch/向量形状、亮度偏移前后的数值变化、信息碰撞和 ORB 输出契约；无需独立设计描述子。
+    required: true
+  - id: criterion.dip-feature-representation.reason-about-representation-stability
+    description: 在给定框架帮助下观察小扰动，解释稳定性与区分性的取舍、None 分支以及表示不等于语义或匹配。
+    evidenceHint: 提交 flat/structured 及一次 blur 或 rotation 的 availability、shape/dtype、source 断言和限制说明；不要求性能排行或算法证明。
+    required: true
+resourceIds: [resource.opencv-python-tutorials]
+publicationStatus: published
+contentVersion: 2026.09.21.1
+---
+
+# 形状、纹理与局部描述（Feature Representation）
+
+## 1. 从局部结构到数值表示
+
+两块都带直角的图案可能来自完全不同的物体。程序先能读到的是像素与局部变化，不是“螺丝”或“缺陷”。**特征表示（feature representation）**是选择和编码图像信息，使后续算法能读取的一组数值；常希望更紧凑，但不保证每种表示都缩短数组。
+
+主线：局部结构 → 选位置/区域 → 有限维表示 → 小扰动 → 检查变化与信息损失 → 解释任务边界。
+
+为什么不总保留整张图或所有 patch 像素？当然可以，它是有价值的 baseline；但计算与存储随像素数增长，位置或亮度变化会使直接数值变化很大，也可能保留许多任务不关心的信息。选择表示是在作取舍，不是自动获得理解。
+
+## 2. 为什么现在学 / 前置与深度
+
+hard 是[边缘检测](/knowledge/dip-edge-detection/)和[频域](/knowledge/dip-frequency-domain/)。局部边缘/方向模式可以提供结构线索，但 edge map 本身不是某个关键位置的一行 descriptor。频域课中的高频对应较快空间变化：blur 会削弱这类变化，使边缘和纹理线索改变，依赖它们的表示自然也可能改变。本篇不再计算 FFT。
+
+Stage 2 的 [Feature Preview](/knowledge/opencv-features-preview/)已展示调用和输出检查；本页新增 raw patch baseline、信息碰撞、亮度敏感性及表示取舍。它不是新增 hard 前置，下面提供最小可运行框架。`math.eigen-svd` 仅 recommended，不要求 PCA。
+
+正式深度为 **understand**，预计4–6小时。可以照框架运行、修改一次扰动、记录并解释；不要求从零写 ORB、设计描述子、做 benchmark 或证明不变性。达到 understood 即满足本节点默认路线目标，两个 required criteria 是解释与观察的证据指引，不把本课提升为 master。
+
+## 3. 三种表示与三项取舍
+
+### Raw patch 与 flatten
+
+patch 是选出的局部图块。5×5 灰度 patch 有25个像素，将它按行排列成长度25的 vector，就是最直接的表示。`reshape(-1)` 中 −1 表示由元素总数推算一维长度；它不提取高级特征，也不自动获得稳定性。
+
+**flatten 本身不丢像素值**：保留原 shape 和排列顺序就能还原 patch。有限维不等于必然有损；真正压缩、摘要或丢弃均值时，才可能无法恢复原输入。只截取 patch 已经没有包含图块外的上下文。
+
+### 本页唯一手工变体：去均值
+
+将每个像素减去该 patch 的平均灰度，得到 **去均值表示（mean-centered representation）**。这是本页的简单亮度归一化：只移除整体偏移，不除以标准差，不改变向量长度。
+
+在没有 clipping 的统一加法亮度偏移下，像素和均值一起增加，差值可以保持不变。代价是舍弃 absolute brightness（绝对亮度）：如果不保存均值，两个整体明暗不同的 patch 可能变成同一个向量。这叫本例的表示碰撞，不是计算错误。非均匀照明、对比度缩放、饱和、平移或旋转并不会因此自动消失。
+
+### 紧凑、稳定、有区分性
+
+- **Compactness（紧凑性）**：用多少数值/字节表达所需信息。去均值仍存25个数，不是降维压缩；ORB 则是另一种固定长度编码，不能跨不同支持区域只凭长度排行。
+- **Stability（稳定性）**：在声明的小扰动下，表示的变化相对有限。**Invariance（不变性）**则要求某类变换后保持不变；本页去均值对理想统一 offset 的等式不等于对所有照明不变。
+- **Discriminativeness（区分性）**：需要区分的不同局部结构，是否仍保留可区别信息。若任务恰好靠绝对灰度区分类别，去均值的“稳定”反而删掉了有用线索。
+
+| 表示 | 当前 shape / dtype | 保留与舍弃 | 不应推出 |
+| --- | --- | --- | --- |
+| raw patch vector | (25,) / float32 | 保留这块图的所有像素及约定顺序 | 已理解图案或具备位置不变性 |
+| mean-centered vector | (25,) / float32 | 保留相对强度；不再保存均值 | 更短、对任何光照都稳定 |
+| 默认 ORB 的一行 descriptor | (D,) / uint8，当前 D=32 bytes | 编码局部比较结果，不可逆恢复原 patch | 32个灰度测量或物体身份 |
+
+低维可能舍弃细节，高维也可能保留干扰。不存在“越短越高级”或“越长越准确”的一般结论。
+
+## 4. Keypoint 与 descriptor：地址不是内容编码
+
+**Keypoint（关键点）**回答“在哪里描述”，包含位置及方法相关的尺度、方向等 metadata；**descriptor（描述子）**回答“这个邻域怎样编码”。一个关键点对象不是一串 descriptor，更不是物体身份。
+
+ORB 是这里唯一的真实描述子例子。它提出关键位置并生成 binary descriptor（二维局部比较的二进制编码）；本页只使用默认配置，不展开检测器、采样模式或方向算法。`detect` 提出位置，`compute` 根据位置计算编码并返回本次成功描述的关键点；合并调用 `detectAndCompute` 仍有这两个职责。
+
+非空输出为 N×D：N 是**本次返回的、与描述子配对的关键点数**，D 是每行存储字节数，用 `descriptorSize()` 检查。第 i 行只对应同次返回的第 i 个点，不是另一张图中同编号点的身份。
+
+默认 ORB 当前返回 uint8，每个元素是一字节、8 bits 的打包编码；32 bytes 是256 bits，不是32个连续灰度特征。元素数值大小不表示“更亮”或“更好”。本篇不比较 ORB 行间距离。
+
+平坦图可能缺少可描述结构，从而 `descriptors is None`；也可能受图像大小、边界排除或参数影响。先验证输入再处理合法 None 分支，不能直接访问 None.shape，也不能把“无描述子”一律当文件损坏或 API 崩溃。
+
+`None` 只表示当前方法在当前输入和参数下没有返回可用描述子，不说明图像没有目标、结构或有用信息，也不能推出其他 detector/descriptor 同样得不到结果，或当前任务没有可利用信息。描述子是否可用是算法输出，不是语义判断；本例平坦图的 None 观察不能外推到所有 flat / low-texture 图像。
+
+## 5. Worked Example：四个连续 checkpoint
+
+在现有环境中按顺序运行，共用变量。先预测再核对；无需网络图片。数值差用本地 L2 change：对应元素相减、平方求和再开根号。它只是同一种教学向量在指定扰动下的变化量，不是 feature quality score，也不证明两个位置是同一物体。不跨维度或单位直接排行，不对 ORB bytes 使用此公式。
+
+### Checkpoint A：同一个窗口规则，位置偏一格
+
+在9×9画布造一个小L形，再提取5×5 patch。保持提取规则为固定大小窗口，把窗口向右移一格，相当于结构在局部坐标中向左移一格；不是循环回绕。先预测：即使仍看到L形，向量中数值的位置也会改变。
+
+```python
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+print("versions", cv2.__version__, np.__version__)
+
+canvas = np.full((9, 9), 40, np.float32)
+canvas[3:6, 4] = 160
+canvas[5, 4:7] = 160
+canvas_snapshot = canvas.copy()
+patch = canvas[2:7, 2:7].copy()
+shifted_patch = canvas[2:7, 3:8].copy()
+raw = patch.reshape(-1).copy()
+shifted_raw = shifted_patch.reshape(-1).copy()
+
+def vector_change(a, b):
+    if a.ndim != 1 or a.shape != b.shape:
+        raise ValueError("expected same one-dimensional representation shape")
+    return float(np.linalg.norm(a.astype(np.float32) - b.astype(np.float32)))
+
+translation_change = vector_change(raw, shifted_raw)
+print("patch/vector", patch.shape, raw.shape, raw.dtype)
+print("translation change", translation_change)
+assert patch.shape == (5, 5) and raw.shape == (25,)
+assert np.array_equal(raw.reshape(5, 5), patch)
+assert translation_change > 0
+assert np.array_equal(canvas, canvas_snapshot)
+```
+
+当前两个窗口中共有6个位置相差120，L2 change 约293.94。它不是通用敏感度阈值；说明直接像素向量对本次位移敏感。恢复5×5成功则说明 flatten 没有自动压缩或丢掉像素。
+
+### Checkpoint B：去均值能舍弃什么
+
+仅把同一 patch 每个灰度加20，不移动、不模糊、不截断。先预测 raw 会变化；去均值后变化应为零，但无法分辨哪个输入整体更亮。
+
+```python
+def centered_vector(image):
+    if image.ndim != 2 or image.size == 0 or not np.isfinite(image).all():
+        raise ValueError("expected nonempty finite H x W patch")
+    values = image.astype(np.float32).reshape(-1).copy()
+    return values - values.mean()
+
+brighter = patch + np.float32(20)
+assert brighter.min() >= 0 and brighter.max() <= 255
+centered = centered_vector(patch)
+brighter_centered = centered_vector(brighter)
+raw_brightness_change = vector_change(raw, brighter.reshape(-1))
+centered_brightness_change = vector_change(centered, brighter_centered)
+print("means", patch.mean(), brighter.mean())
+print("offset change: raw / centered", raw_brightness_change,
+      centered_brightness_change)
+assert raw_brightness_change == 100  # sqrt(25 * 20**2)
+assert centered_brightness_change == 0
+assert not np.array_equal(patch, brighter)
+assert np.array_equal(centered, brighter_centered)  # information collision
+assert centered.shape == raw.shape and centered.dtype == np.float32
+assert np.array_equal(patch, canvas[2:7, 2:7])
+
+fig, axes = plt.subplots(1, 3, figsize=(9, 3), layout="constrained")
+for ax, a, title in zip(axes, [patch, shifted_patch, brighter],
+                        ["source patch", "window shifted 1px", "offset +20"]):
+    ax.imshow(a, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
+    ax.set_title(title)
+    ax.set_xlabel("column / x"); ax.set_ylabel("row / y")
+plt.show()
+```
+
+均值64变84，raw change=100、centered change=0。两个不同输入得到相同去均值表示，就是不可逆信息损失的具体例子。若任务希望忽略统一亮度偏移，这有帮助；若要区分绝对亮度，它有害。这里比较的是各表示对同一offset的响应，不宣称任何归一化都优于raw；自动拉伸显示会掩盖亮度变化，所以三图统一0–255。
+
+### Checkpoint C：结构可以描述，不等于已经识别
+
+复用预览课的小型结构造图方式，但本次只检查编码契约，不重新讲画关键点。192×288画布中的转折和棋盘离边框留有余量。先预测 flat 少/无点、structured 有候选；这不是“任意结构图一定成功”的保证。
+
+```python
+def make_structure():
+    image = np.full((192, 288), 90, np.uint8)
+    image[42:65, 105:128] = 220
+    image[92:117, 103:119] = 30
+    image[132:153, 103:111] = 220
+    image[145:153, 103:134] = 220
+    for row in range(8):
+        for column in range(8):
+            y, x = 40 + row*14, 144 + column*14
+            image[y:y+14, x:x+14] = 220 if (row+column) % 2 else 30
+    return image
+
+orb = cv2.ORB_create()
+def observe(image):
+    if image is None or image.ndim != 2 or image.size == 0 or image.dtype != np.uint8:
+        raise ValueError("expected nonempty H x W uint8 grayscale")
+    before = image.copy()
+    points, descriptions = orb.detectAndCompute(image, None)
+    record = {"count": len(points), "available": descriptions is not None,
+              "shape": None, "dtype": None, "bytes_per_row": orb.descriptorSize()}
+    if descriptions is not None:
+        assert descriptions.ndim == 2
+        assert descriptions.shape == (len(points), orb.descriptorSize())
+        assert descriptions.dtype == np.uint8
+        record.update(shape=descriptions.shape, dtype=str(descriptions.dtype))
+        print("one row storage bytes/bits", descriptions[0].nbytes,
+              descriptions[0].nbytes * 8)
+    else:
+        print("descriptors=None: inspect input structure, size and settings")
+    assert np.array_equal(image, before)
+    print(record)
+    return points, descriptions, record
+
+source = make_structure()
+source_snapshot = source.copy()
+flat = np.full(source.shape, 90, np.uint8)
+flat_points, flat_descriptors, flat_record = observe(flat)
+points, descriptors, original_record = observe(source)
+assert np.array_equal(source, source_snapshot)
+```
+
+在本机OpenCV5.0.0/NumPy2.4.6，flat为0点/None，所选structured输入有描述子，`descriptorSize()`为32；不背精确点数。None时记录没有表，不访问shape；非空时检查N、D与dtype。`None`作为调用的第二个参数表示不额外限制检测区域，和返回的“没有描述子”不是同一职责。
+
+如用分开的 detect/compute，必须检查 compute 返回的点与描述子配对，不能沿用检测前的列表行号。这里仅保留合并调用主路径。不把多个点的编码表当成一张新的灰度图片。
+
+### Checkpoint D：模糊与旋转，只观察契约
+
+分别从同一source生成两个变体，不串联扰动。5×5 Gaussian使用空间sigma=1像素和复制边界；它抑制较快空间变化，可能改变局部结构。10°旋转围绕图像中心，scale=1，输出仍为原宽高，采用线性插值和复制边界，因此包含重采样影响。代码提供这些条件，不要求先掌握几何API。
+
+先预测可用性或数量可能改变，但不要预测“模糊必定减少点数”。ORB设计考虑局部方向以提高旋转稳定性；本实验没有建立跨图位置身份，不能逐行相减ORB表，更不能凭数量相等证明不变性。
+
+```python
+height, width = source.shape
+blurred = cv2.GaussianBlur(source, (5, 5), 1, borderType=cv2.BORDER_REPLICATE)
+rotation = cv2.getRotationMatrix2D((width/2, height/2), 10.0, 1.0)
+rotated = cv2.warpAffine(source, rotation, (width, height),
+                         flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+variants = {"original": source, "blur": blurred, "rotation": rotated}
+observations = {}
+fig, axes = plt.subplots(1, 3, figsize=(10, 3), layout="constrained")
+for ax, (name, image) in zip(axes, variants.items()):
+    current_points, current_descriptors, record = observe(image)
+    observations[name] = record
+    ax.imshow(image, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
+    ax.set_title(f"{name}: available={record['available']}")
+    ax.set_xlabel("column / x"); ax.set_ylabel("row / y")
+plt.show()
+assert np.array_equal(source, source_snapshot)
+assert np.array_equal(canvas, canvas_snapshot)
+```
+
+本机这三个输入都有描述子，但数量不同；这里只记录availability/shape/dtype，不把它称为描述子稳定性评分。blur改变外观，输出变化未必是算法失败；仍有descriptor也不证明鲁棒。要解释“编码数值变化”，使用A/B中有明确像素顺序的简单向量，不把两张ORB表的第i行假设为同一位置。
+
+## 6. Active Recall
+
+- flatten后仍能还原patch，为什么不能说“压缩后丢失了空间信息”？哪些约定必须保留？
+- keypoint的地址与descriptor的内容编码分别回答什么？相同shape能否替代语义说明？
+- 加20后去均值向量不变，若任务判断“亮块还是暗块”，你丢了什么？
+- 两个表示一样，为什么不能推出来自同一物体？
+- ORB的一行32个uint8为何不是32个灰度测量？
+- 为什么 `descriptors is None` 可以是合法无描述子结果，却不能据此断言图像没有目标、结构或有用信息？它与错误输入应怎样区分？
+- 模糊后点更多或旋转后仍有描述子，分别能说明什么、不能说明什么？
+- 为什么更短不必更好，稳定性也可能损伤区分性？
+- 本页检查表示，为何还没有完成feature matching？
+
+## 7. Practice
+
+四项都可沿用代码，不要求从零实现算法。先预测、后记录；可直接整理成下面两项Evidence。
+
+1. **位置**：将A的窗口向下移一格，保持5×5；记录两向量shape、L2 change和局部图。完成标准：解释变的是哪些像素位置，不将数值差叫物体差异分数。
+2. **亮度**：将B的offset改为10，不加其他扰动。完成标准：raw change=50，去均值change接近0（浮点容差1e-5），说明维度仍25及绝对亮度信息损失；不能宣称对任意光照不变。
+3. **编码契约**：借助C整理flat和structured的记录。完成标准：先判None；非空时解释N×D、uint8 bytes与本次返回点的关系。若所用版本/输入无点，如实记录并检查契约，不强凑固定点数。
+4. **扰动观察**：仅将D的sigma从1改为1.5（仍5×5），或将角度改为5°。完成标准：记录参数、availability/shape/dtype、输入变化与source断言；明确这些记录未证明编码逐点稳定、语义识别或不变性。不做参数扫描。
+
+## 8. Mastery Evidence
+
+两项required仅服务understand：允许直接使用正文框架、查API，共用脚本与简短说明，不增加第三项或大型报告。
+
+1. **Representation comparison note**：整理A/B与Practice1/2，包含deterministic patch、raw和去均值表示、shape/dtype、一次位移及亮度变化量、相同表示但不同原图的例子。解释信息保留、碰撞和任务取舍，不要求设计新描述子。
+2. **ORB observation record**：整理C/D与Practice3/4，包含flat/structured、None-safe分支、keypoint/descriptor区别、N×D/bytes，以及一次blur或rotation观察。解释为什么输出存在不等于稳定、表示相似不等于语义相同；不要求匹配或完整Project。
+
+## 9. 常见误区、用途与范围
+
+raw vector是合法baseline，reshape不是理解；去均值不是全光照校正；descriptor不是可逆原图压缩，更不是object identity。局部重复纹理即使来自不同物体也可能产生类似编码。遇到空表先查输入与None分支，遇到表shape不同先查返回点数，不靠截断两张表使它们“可以相减”。
+
+本页支撑ROADMAP中形状/纹理表示的初步判断：例如分类任务是否需要保留绝对亮度，不能只因为表示更稳定就删去它。本页不训练分类器。边缘/频率知识用于解释选择的信息；不重新实现边缘直方图、PCA、完整ORB或其他描述子。
+
+后续课程会讨论如何比较和验证这些表示。本轮没有feature matching、几何验证或Project执行；Classical Inspection保持draft且不修改，学完本页不等于能够工业定位。
+
+## 10. 精选 Resource
+
+只复用 [OpenCV-Python Tutorials](/resources/opencv-python-tutorials/)。该资源汇总多篇课程范围；**本节点只按下面的窄范围核对**，不要求重读Stage 2所有条目。
+
+- 必看：官方 [ORB in OpenCV](https://docs.opencv.org/4.x/d1/d89/tutorial_py_orb.html) 的创建、detect/compute输出，以及 [ORB API](https://docs.opencv.org/4.x/db/d95/classcv_1_1ORB.html) 的detectAndCompute、descriptorSize契约。理解同次返回点与行的关系即可。
+- 选看：对照本页理解binary descriptor的最低限度含义；不要求读算法推导。
+- 跳过：Theory的内部检测/方向/采样模式、参数百科、距离与匹配示例、几何估计、其他描述子和性能比较。
+
+URL核验日期2026-09-21；中文正文是主教材，Stage 2旧必读范围不扩大。运行时记录自己的OpenCV/NumPy版本，精确点数不是跨版本验收标准。

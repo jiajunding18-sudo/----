@@ -12,7 +12,7 @@ describe("Stage 3 feature representation", () => {
   const c = catalog.concepts.find(c => c.id === "dip.feature-representation")!;
   it("publishes only the tenth Stage 3 Concept at understand depth", () => {
     expect(c).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "understand", slug: "dip-feature-representation" });
-    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(10);
+    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(11);
     expect(catalog.concepts.filter(x => x.id === c.id)).toHaveLength(1);
     expect(c.masteryCriteria.map(x => x.id)).toEqual([
       "criterion.dip-feature-representation.explain-local-feature-representation",
@@ -54,7 +54,7 @@ describe("Stage 3 feature representation", () => {
     expect(getNextStep({ catalog, state: s, now: stageTime })).toMatchObject({ targetId: c.id });
   });
   it("does not publish the remaining Concepts, Project or retest", () => {
-    for (const id of ["dip.restoration", "dip.quality-metrics"])
+    for (const id of ["dip.quality-metrics"])
       expect(catalog.concepts.some(x => x.id === id)).toBe(false);
     expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
     expect(catalog.stageRetests.find(r => r.stageId === c.stageId)?.contentStatus).toBe("planned");

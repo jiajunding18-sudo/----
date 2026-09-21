@@ -1,0 +1,313 @@
+---
+schemaVersion: 1
+id: dip.restoration
+slug: dip-restoration
+title: 退化模型与图像恢复
+englishTitle: Degradation Models and Image Restoration
+aliases: [图像恢复, Image Restoration, 稳定化逆滤波]
+searchKeywords: [degradation, deconvolution, inverse filtering, regularized inverse, model mismatch, noise amplification]
+summary: 在已知模糊核和固定噪声下观察直接逆滤波的失稳，用稳定化与错误模型对照解释恢复的收益、代价和信息边界。
+why: 更锐利不等于更接近真实图像；需要先声明退化假设，再检查小频率响应、噪声放大和模型失配，而不是盲目增强细节。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 70
+level: beginner
+requiredness: required
+targetDepth: understand
+estimatedHours: { min: 4, max: 6 }
+dependencies:
+  - conceptId: dip.frequency-domain
+    kind: hard
+    reason: 需要先理解复数频谱、卷积乘法、补零和裁切，才能区分逆恢复失败与算子契约错误。
+  - conceptId: dip.noise-models
+    kind: hard
+    reason: 需要固定噪声实现并保留未裁剪浮点数据，才能解释逆运算为何放大扰动。
+tags: [Restoration, Degradation, Inverse Filtering]
+learningOutcomes:
+  - 能借助给定框架解释退化模型、小 H 的逆运算风险，以及增强和恢复的区别。
+  - 能修改少量噪声或稳定化参数，记录同一真值下的数值与局部结构，解释取舍和模型失配。
+masteryCriteria:
+  - id: criterion.dip-restoration.explain-degradation-and-inverse-instability
+    description: 借助示例解释已知模糊与加性噪声模型，预测并观察直接逆滤波的噪声放大，区分有限输出和可靠恢复。
+    evidenceHint: 一份简短退化/逆滤波记录，包含固定输入、核、噪声、预测、实际范围和误差；说明小 H、零 H 与裁剪的边界，不要求从零实现算法。
+    required: true
+  - id: criterion.dip-restoration.reason-about-restoration-tradeoffs
+    description: 在给定框架帮助下比较稳定化强度或模型失配，解释改善与细节代价，区分锐利外观与接近真值。
+    evidenceHint: 复用同一观测，记录参数、局部细线与数值检查及一次失败解释；允许参考正文，不要求参数优化、PSF 估计或完整恢复系统。
+    required: true
+resourceIds: [resource.numpy-fft]
+publicationStatus: published
+contentVersion: 2026.09.21.1
+---
+
+# 退化模型与图像恢复（Image Restoration）
+
+## 1. 现象：变锐了，为什么仍可能离真值更远？
+
+一根亮细线被模糊成一条宽浅带。锐化后它旁边出现更强的亮暗纹，却不一定回到原来的一像素线。先问：图像经历了什么过程？观测中还剩多少可区分的信息？本篇从已知干净图出发，故意模糊并加噪，再检查恢复，而不是靠外观投票。
+
+**增强（enhancement）**让某些视觉或任务属性更明显，不一定建模真实退化过程，例如 contrast stretch、直接锐化。**恢复（restoration）**在明确退化假设下估计原图，例如根据已知 blur kernel 做逆恢复。恢复不是“高级增强”；它也可能因假设错误而失败。
+
+主线：退化假设 → 简化观测模型 → 预测恢复难点 → 直接逆 → 噪声放大 → 稳定化 → 固定条件比较 → 失配与适用边界。
+
+## 2. 为什么现在学 / 前置与深度
+
+hard 是[频域](/knowledge/dip-frequency-domain/)与[噪声模型](/knowledge/dip-noise-models/)。前者教过 full/same、卷积方向和补零，后者教过固定 seed、加性扰动与 raw/clipped 分离；这里把二者用于解释逆操作。[增强](/knowledge/dip-enhancement/)和[空域滤波](/knowledge/dip-spatial-filtering/)可作对照回看，不新增 hard edge。
+
+正式目标是 **understand**，预计4–6小时：能在框架帮助下运行、修改少量参数、解释结果和限制，不要求从零设计恢复系统。两个 required criteria 支持解释与实验记录，达到 understood 即满足本节点默认路线目标，不把要求悄然提升成 master。
+
+ROADMAP 推荐 `imaging.psf-mtf`，但实体尚未发布：关系保留在路线，正式 recommended edge 等发布后再加入 DAG。现在只把核理解为已知的混合规则，不要求真实 PSF 测量。也不要求 sensor.noise-snr、sensor.dynamic-range 或 quality-metrics 先发布。
+
+## 3. 最小模型：先明确前向过程
+
+设 f 是 clean（干净参考图），h 是已知模糊核，n 是 additive noise（加性噪声），g 是 observed image（观测图）：
+
+$$
+g=h*f+n.
+$$
+
+星号是**卷积**，不是逐元素乘法。h 表示一个输入像素如何把贡献分布到邻域；blur 系统性混合空间结构，noise 在混合结果上另加扰动，二者不是一回事。固定核、线性移不变和加性噪声只是教学假设，不包括空间变化模糊、饱和、未知处理和所有真实成像物理。
+
+本页 h 为归一化 3×3 均值核，每项1/9、总和1。它保持无限常量区域的亮度；零边界下边缘会变暗，不能把 sum=1 理解成有限图上每个位置都不变。模糊常削弱快速变化，但不是把所有高频一刀删掉；具体衰减由核和频率决定。
+
+在相同卷积方向、支持范围、边界和对齐下，前课的卷积定理给出：
+
+$$
+G=HF+N.
+$$
+
+大写表示对应 FFT，H 是核的频率响应（每个频率被如何缩放和改变相位）。乘法与除法都是对应频率逐项运算，不是矩阵乘法。核已知不意味着现实中的核容易测到。
+
+### 小 H：不是只有除零才危险
+
+无噪声且 H 非零时，G/H=F；有噪声时：
+
+$$
+\frac{G}{H}=F+\frac{N}{H}.
+$$
+
+某频率的响应幅度 |H|=0.001 时，原本很小的该频率扰动会被约放大1000倍。输出可以全是有限数，却不可靠；这不是 FFT 的程序错误。这里 |H| 是复数幅度，不是像素亮度。
+
+若 H=0，该频率的原信息没有进入观测，单靠这份观测不能唯一找回它；不同原图可以产生相同观测。H 接近0则可能理论上可除、实际对微小扰动极敏感。这就是本篇够用的逆问题困难直觉，不推导误差界。
+
+epsilon/floor 或忽略小响应能限制除法增益，但同时改变了逆算子；它们不能创造被丢失的真实信息，也不能让所有 finite 输出可信。下面把极小响应频点的逆估计设为0，而不是偷偷给复数 H 任意加一个数；这是明确的保护规则，不是准确恢复的保证。
+
+### 稳定化：减少放大，也不再严格求逆
+
+本页只用一个**稳定化逆滤波（regularized inverse）**：
+
+$$
+\widehat F_\lambda=\frac{\overline H G}{|H|^2+\lambda},\qquad \lambda>0.
+$$
+
+帽子表示估计，横线是复共轭（`np.conj`），|H|² 是幅度平方。分母加正数限制小 H 处的放大；它不是完整 Wiener 最优滤波器，也不要求推导优化问题。即使 N=0，原成分也被乘上 `|H|²/(|H|²+λ)`，因此稳定化会牺牲恢复程度，连 DC 都可能略衰减。
+
+小 λ 更接近直接逆，可能保留细节也放大扰动；较大 λ 更保守，但可能让细线变淡、边缘变缓。λ 越大不代表越好，它的数值依赖核归一化等约定，不能作为通用质量等级。
+
+## 4. 实验契约：truth、full 观测与最小检查
+
+先固定 truth 和检查区域，再退化，不按结果挑选“有利”区域。clean 是32×41 float64；x=20是阶跃，x=8是一像素细线，另有4×4亮块。全部强度按0–1参考尺度解释，但加噪和逆运算不保证仍在此范围内。
+
+沿用前课的**零边界 full 线性卷积**：核数组左上索引作 full 累加原点，输出34×43。两者 FFT 都补到这个支持范围，核不翻转、不 shift。保留完整尾部作为合成观测；现实中只有32×41裁切照片时，不能假装拥有这些尾部信息。
+
+频域逆得到34×43的估计，再取左上 `[:32,:41]` 返回原 f 坐标。这与“从 full 前向结果 `[1:33,1:42]` 裁出中心 anchor 的 same 模糊图”是两个不同裁切：前者还原原图支持范围，后者只用于和原图同位置显示/直接锐化。不能拿 same 裁切后再随意补零当作原 full 观测。
+
+只用三项当前实验检查，不建立完整质量指标课程：
+
+- **MSE**：`mean((result-clean)**2)`，float 作差后平方平均；越小只表示更接近这份合成参考，不证明感知或工业任务更好。
+- **flat residual std**：在事先固定的平坦区 `[12:26,12:17]` 计算 result−clean 的标准差；其中也可能包含振铃/模型误差，不能全部叫随机噪声。
+- **line contrast**：固定细线 `[12:22,8]` 均值减已知背景0.2，truth为0.7；它是本实验局部结构读数，不是通用对比度指标。
+
+另做 shape、finite、实际 min/max 等数据安全检查。所有误差在未 clip 的分析数组上计算；显示使用共同 `vmin=0,vmax=1`，超范围会显示饱和但数组不变。不能先截到0–1再宣布逆滤波误差小。
+
+## 5. Worked Example：四个连续 checkpoint
+
+使用现有 NumPy/Matplotlib 环境，按 A→D 在同一脚本逐段运行。无需外部图片、SciPy 或新安装。代码提供框架；每段先写预测，运行后解释数值，不要求从空白重写 FFT。
+
+### Checkpoint A：已知输入、核与噪声
+
+先预测：细线会变宽变浅；无噪声前向结果应与空间 full 累加吻合。噪声只抽一次，所有恢复方法共享它。`normal(0,sigma,shape)` 的 sigma 是强度标准差。
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+clean = np.full((32, 41), 0.2, dtype=np.float64)
+clean[:, 20:] = 0.7
+clean[8:24, 8] = 0.9
+clean[7:11, 28:32] = 1.0
+clean_snapshot = clean.copy()
+kernel = np.ones((3, 3), dtype=np.float64) / 9
+support = (34, 43)
+seed, sigma = 42, 0.003
+
+def real_checked(z):
+    assert np.isfinite(z).all() and np.max(np.abs(z.imag)) < 1e-10
+    return z.real.copy()
+
+def full_convolution(a, k):
+    out = np.zeros((a.shape[0]+k.shape[0]-1, a.shape[1]+k.shape[1]-1))
+    for r in range(a.shape[0]):
+        for c in range(a.shape[1]):
+            out[r:r+k.shape[0], c:c+k.shape[1]] += a[r,c] * k
+    return out
+
+H = np.fft.fft2(kernel, s=support)
+F = np.fft.fft2(clean, s=support)
+blur_full = real_checked(np.fft.ifft2(H * F))
+assert np.allclose(blur_full, full_convolution(clean, kernel), atol=1e-12)
+assert np.isclose(kernel.sum(), 1) and np.isclose(H[0,0], 1)
+noise = np.random.default_rng(seed).normal(0, sigma, support)
+observed = blur_full + noise  # 不 clip，不转 uint8
+observed_snapshot = observed.copy()
+G = np.fft.fft2(observed)
+print("NumPy / seed / sigma:", np.__version__, seed, sigma)
+print("observed:", observed.shape, observed.dtype, observed.min(), observed.max())
+print("min |H|:", np.abs(H).min())
+```
+
+本例观测 shape `(34,43)`，范围约0.02231–1.00398，最小 |H|约0.001031，已经很小但不为0。尺寸是明确实验条件；换尺寸后 DFT 频点可能恰好落在核的零点上，不能保证每次都可直接除。这里无需 fftshift/ifftshift，全部计算保持未 shift 顺序。
+
+### Checkpoint B：无噪声可逆，不代表有噪声可靠
+
+先预测同一核的两条路径：blur-only逆应接近clean；blur+noise逆即使finite也可能剧烈波动。`where` 指定允许除法的位置，`out` 为其他位置保留0；eps仅是本例保护阈值。
+
+```python
+def inverse_crop(spectrum):
+    return real_checked(np.fft.ifft2(spectrum))[:32, :41].copy()
+
+def naive_inverse(spectrum, transfer, eps=1e-8):
+    allowed = np.abs(transfer) > eps
+    estimate = np.zeros_like(spectrum)
+    np.divide(spectrum, transfer, out=estimate, where=allowed)
+    return inverse_crop(estimate), int(np.count_nonzero(~allowed))
+
+def checks(a):
+    assert a.shape == clean.shape and np.isfinite(a).all()
+    residual = a - clean
+    return (float(np.mean(residual**2)),
+            float(residual[12:26, 12:17].std()),
+            float(a[12:22, 8].mean() - 0.2))
+
+ideal, blocked_ideal = naive_inverse(np.fft.fft2(blur_full), H)
+naive, blocked_noisy = naive_inverse(G, H)
+assert blocked_ideal == blocked_noisy == 0
+assert np.max(np.abs(ideal-clean)) < 1e-10
+assert checks(naive)[0] > 0.02
+print("ideal max error:", np.max(np.abs(ideal-clean)))
+print("naive MSE / flat std / line:", checks(naive))
+print("naive actual range:", naive.min(), naive.max())
+```
+
+当前 σ仅0.003，逆结果 MSE却约0.04177、flat std约0.19874，范围约−0.48046–1.41784。无噪声最大误差小于1e−10；同一实现加入噪声就失败，原因是 N/H，而不是“库坏了”。细线均值碰巧仍接近0.7也不能推翻全图失稳证据。
+
+失败卡：input=固定full观测；expected=恢复细线且不严重放大扰动；actual=finite但负值/过冲与残差很大；reason=小|H|放大噪声；correction=回到未改观测，比较稳定化并检查细节代价，不靠clip掩盖失败。
+
+### Checkpoint C：稳定化的收益与代价
+
+先预测 λ从0.0001到0.1增大时，波动会下降，但细线也可能更浅。只比较这三个值，不做参数搜索。为满足增强/恢复对照，另复用一个直接锐化 baseline：`same + (same - local_mean)`，即加回一次局部变化。它不使用真实核的逆，是增强，不是恢复。
+
+```python
+def stabilized(spectrum, transfer, lam):
+    if not np.isfinite(lam) or lam <= 0:
+        raise ValueError("expected finite lambda > 0")
+    return inverse_crop(np.conj(transfer)*spectrum/(np.abs(transfer)**2 + lam))
+
+lambdas = (0.0001, 0.01, 0.1)
+stable = {lam: stabilized(G, H, lam) for lam in lambdas}
+same_observed = observed[1:33, 1:42].copy()
+local_mean = full_convolution(same_observed, kernel)[1:33, 1:42]
+sharpened = same_observed + (same_observed - local_mean)
+results = {"observed same": same_observed, "direct sharpen": sharpened,
+           "naive": naive, **{f"lambda {v}": stable[v] for v in lambdas}}
+for name, a in results.items():
+    print(name, "MSE / flat std / line:", checks(a), "range:", a.min(), a.max())
+assert checks(stable[0.01])[0] < checks(naive)[0]
+assert checks(stable[0.1])[1] < checks(stable[0.0001])[1]
+assert checks(stable[0.1])[2] < checks(stable[0.0001])[2]
+
+fig, axes = plt.subplots(2, 4, figsize=(12, 6), layout="constrained")
+shown = {"truth": clean, "ideal": ideal, **results}
+for ax, (name, a) in zip(axes.ravel(), shown.items()):
+    im = ax.imshow(a, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    ax.set_title(name)
+fig.colorbar(im, ax=axes.ravel().tolist(), label="shared display 0-1; analysis unclipped")
+plt.show()
+```
+
+NumPy 2.4.6 的核验近似值如下，末位舍入不是判断重点。锐化 baseline 只拿到了声明的same视野，恢复用了完整full观测；这不是公平性能排行榜，只对照方法含义。三个 λ与naive之间则完全共享同一G、核、支持和裁切。
+
+| 结果 | MSE | flat residual std | line contrast |
+| --- | ---: | ---: | ---: |
+| truth | 0 | 0 | 0.70000 |
+| observed same | 0.00902 | 0.00274 | 0.23460 |
+| direct sharpen | 0.00876 | 0.00530 | 0.23613 |
+| naive | 0.04177 | 0.19874 | 0.69153 |
+| λ=0.0001 | 0.00320 | 0.04840 | 0.69315 |
+| λ=0.01 | 0.00198 | 0.03538 | 0.58122 |
+| λ=0.1 | 0.00769 | 0.01603 | 0.37293 |
+
+直接锐化增强局部差异但没有撤销邻域混合。λ=0.01在当前三值中MSE较小，不是所有场景最优；λ=0.1的平坦波动更小但细线明显变浅。画面更干净、更锐或MSE单独更小，都不能替代任务判断。
+
+### Checkpoint D：同一观测，换错模型
+
+预测：真实核是二维均值，却用仅水平方向的 `[0.2,0.6,0.2]` 混合来解释，会恢复出错误结构。保持observed、λ=0.01、支持、dtype、裁切和显示不变，只改假设核；不要重新退化图像，否则同时改了两个因素。
+
+```python
+wrong_kernel = np.array([[0,0,0], [0.2,0.6,0.2], [0,0,0]], dtype=np.float64)
+wrong_H = np.fft.fft2(wrong_kernel, s=support)
+wrong = stabilized(G, wrong_H, 0.01)
+print("correct / wrong model:", checks(stable[0.01]), checks(wrong))
+assert checks(wrong)[0] > checks(stable[0.01])[0]
+assert checks(wrong)[2] < checks(stable[0.01])[2]
+assert np.array_equal(clean, clean_snapshot)
+assert np.array_equal(observed, observed_snapshot)
+
+fig, axes = plt.subplots(1, 3, figsize=(9, 3), layout="constrained")
+for ax, a, name in zip(axes, [clean, stable[0.01], wrong],
+                       ["truth", "correct kernel", "wrong kernel"]):
+    ax.imshow(a, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    ax.set_title(name)
+plt.show()
+```
+
+错模型MSE约0.01356、细线对比约0.15475；正确模型同λ为0.00198、0.58122。错模型的flat std反而较小，仍不能宣布成功。核方向、宽度、边界或对齐错误都可能造成伪影；先核对模型和实现契约，再判断是bug还是假设不足。真实图通常没有已知h、clean和full尾部，困难更大，不能把本例误差当成真实照片的恢复承诺。
+
+## 6. Active Recall：预测与诊断
+
+- blur-only逆几乎精确，加了很小噪声却剧烈变化，优先检查什么？为什么finite不能证明可靠？
+- 某频点H=0，与H很小但不为0分别意味着什么？加epsilon为什么不能证明找回了真实细节？
+- λ增大后flat std下降、细线对比也下降，如何解释收益与代价？为什么不是越大越好？
+- 同一图先clip再算MSE，为什么可能掩盖逆滤波失败？只换imshow范围是否也修改了数组？
+- 输入只有same裁切，能否补零后假装是full观测？核原点不同会造成哪类误差？
+- 错核结果更平滑但更远离truth，为什么不是“更高级增强”？真实照片没有truth时，你还不能作哪些结论？
+
+## 7. Practice：框架内四次小检查
+
+1. **小H预测**：给定某频率 `|H|=0.01`、扰动幅度0.002，预测逆后该扰动幅度约0.2；这不是整图像素误差。用B记录实际范围，解释H=0时为何不能继续同样相除。标准：区分非零敏感性、除零与finite。
+2. **只改噪声**：保持seed与blur_full，将 `observed2=blur_full+2*noise`，重算其FFT和naive。预测相对ideal的逆噪声加倍，核对误差趋势；不要clip或重新抽样。标准：保存两次MSE与范围，解释线性放大，不要求理论证明。
+3. **只改λ**：复用C的同一个G，比较0.0001和0.1，先预测波动/细线，再记录三项检查。标准：指出一项收益、一项损失；允许参考公式和代码，不需要寻优。
+4. **错模型诊断**：复用D，保留正确核结果作为基准，写 input/expected/actual/reason/correction。标准：数据相同、只有假设核不同，包含MSE与细线读数；说明修正为已知核只服务合成实验，不意味着会估计真实PSF。
+
+常见错误的检查顺序：输入是float且未clip → 同一观测/seed → 核归一化和卷积方向 → full支持与原点 → FFT顺序 → 小H保护/λ → 逆变换虚部 → 裁切坐标 → 三项检查与source断言。这里虚部容差只针对本例尺度，不能强行丢掉显著虚部掩盖错误。
+
+## 8. Mastery Evidence
+
+保持两项 required，可合并为一份短记录，复用全部代码骨架：
+
+1. **Degradation / inverse note**：说明clean、已知核、噪声与full契约；先预测，再运行blur-only/noisy逆并改一次噪声幅度，保存实际范围和MSE。用自己的话解释N/H、小H/零H、保护规则不能增加信息。验收核心是解释，不是从零实现数值算法。
+2. **Stabilization / mismatch note**：在同一观测上比较两个λ或正确/错误核，保留数值与固定细线观察、source断言；说明改善与代价，联系直接锐化解释“更锐≠更接近truth”。一次失败卡即可，不要求完整恢复报告或新系统。
+
+## 9. 后续用途 / Project / Capability 边界
+
+ROADMAP 的 `ci.forward-models`、`ci.inverse-problems`、`ci.deconvolution` 未来会进一步研究前向假设、逆问题与PSF失配；`imaging.psf-mtf` 再解释真实成像质量。本页只建立判断恢复结果可信边界的能力，不提前发布这些节点。
+
+规划中的 `project.optics-algorithm` 包含前向模型、简单基线、逆方法与失配测试；本例是相应思维的入门，不是新增正式Project requirement，更不是完成该draft项目。`project.imaging-quality-lab` 的合成退化替代路径也要求区分仿真假设与真实采集结论。本轮不扩展Classical Inspection，不宣称能够恢复工业测量真值。
+
+不学blind deconvolution、PSF估计、Richardson–Lucy、Wiener最优推导、Bayesian restoration、完整regularization优化或深度恢复；`dip.quality-metrics` 的正式评价体系仍留到后续。已严重丢失的信息可以靠额外假设选一个估计，但不能把选择说成从观测唯一找回真实细节。
+
+## 10. 精选 Resource
+
+共享 Resource 卡片中的 `fftshift/ifftshift/fftfreq` 等必看项仍适用于前置 `dip.frequency-domain`；本篇只需按下文列出的 restoration 窄范围核对，无需重新完成这些前置阅读。
+
+复用 **NumPy Discrete Fourier Transform**，中文正文是主教材。本篇必看 `fft2/ifft2` 的 `s`、返回shape和默认归一化，只核对A–D；选看实数输入对应复数频谱、共轭与DC的简短说明。跳过FFT算法、其他变换、性能与历史论文。本例不使用shift，不要求再做一轮频谱课；官方API参考也不替你判断恢复是否真实。不新增完整数值分析/信号处理课程，不扩大Stage 2 Resource scope。

@@ -10,9 +10,9 @@ import { getRetestLifecycle } from "@/features/progress/stage-retest";
 
 describe("Stage 3 frequency domain", () => {
   const concept = contentManifest.concepts.find(c => c.id === "dip.frequency-domain")!;
-  it("includes frequency domain in the ten published Stage 3 concepts with constrained master depth", () => {
+  it("includes frequency domain in the eleven published Stage 3 concepts with constrained master depth", () => {
     expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId).map(c => c.id).sort()).toEqual([
-      "dip.convolution-lsi", "dip.edge-detection", "dip.enhancement", "dip.feature-representation", "dip.frequency-domain", "dip.morphology", "dip.noise-models", "dip.sampling-quantization", "dip.segmentation", "dip.spatial-filtering",
+      "dip.convolution-lsi", "dip.edge-detection", "dip.enhancement", "dip.feature-representation", "dip.frequency-domain", "dip.morphology", "dip.noise-models", "dip.restoration", "dip.sampling-quantization", "dip.segmentation", "dip.spatial-filtering",
     ]);
     expect(concept).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master" });
     expect(concept.masteryCriteria).toHaveLength(2);
@@ -58,7 +58,7 @@ describe("Stage 3 frequency domain", () => {
   });
   it("uses an isolated FFT resource and supplies full teaching scaffolding", async () => {
     expect(concept.resourceIds).toEqual(["resource.numpy-fft"]);
-    expect(contentManifest.concepts.filter(c => c.resourceIds.some(id => id === "resource.numpy-fft")).map(c => c.id)).toEqual([concept.id]);
+    expect(contentManifest.concepts.filter(c => c.resourceIds.some(id => id === "resource.numpy-fft")).map(c => c.id)).toEqual([concept.id, "dip.restoration"]);
     const resource = contentManifest.resources.find(r => r.id === "resource.numpy-fft")!;
     expect(resource.verification).toBe("verified");
     expect(resource.recommendedParts?.join(" ")).toContain("跳过");

@@ -9,7 +9,7 @@ describe("Stage 3 morphology", () => {
   const c = catalog.concepts.find(c => c.id === "dip.morphology")!;
   it("publishes one master with exactly two required criteria", () => {
     expect(c).toMatchObject({publicationStatus:"published",requiredness:"required",targetDepth:"master"});
-    expect(catalog.concepts.filter(x=>x.stageId===c.stageId)).toHaveLength(10);
+    expect(catalog.concepts.filter(x=>x.stageId===c.stageId)).toHaveLength(11);
     expect(c.masteryCriteria.map(x=>x.id)).toEqual(["criterion.dip-morphology.explain-structuring-element-effects","criterion.dip-morphology.diagnose-morphology-tradeoffs"]);
     expect(c.masteryCriteria.every(x=>x.required)).toBe(true);
     expect(getConceptStatus({},c.id)).toBe("not_started");
@@ -26,7 +26,7 @@ describe("Stage 3 morphology", () => {
     expect(getNextStep({catalog,state:s,now:stageTime})).not.toMatchObject({targetId:c.id});
   });
   it("keeps later content and Project/retest unpublished",()=>{
-    for(const id of ["dip.restoration","dip.quality-metrics"])
+    for(const id of ["dip.quality-metrics"])
       expect(catalog.concepts.some(x=>x.id===id)).toBe(false);
     expect(catalog.projects.find(x=>x.id==="project.classical-inspection")?.publicationStatus).toBe("draft");
     expect(catalog.stageRetests.find(x=>x.stageId===c.stageId)?.contentStatus).toBe("planned");

@@ -12,7 +12,7 @@ describe("Stage 3 edge detection", () => {
   const c = catalog.concepts.find(c => c.id === "dip.edge-detection")!;
   it("publishes the ninth Concept with two required criteria", () => {
     expect(c).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master", slug: "dip-edge-detection" });
-    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(10);
+    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(11);
     expect(c.masteryCriteria.map(x => x.id)).toEqual([
       "criterion.dip-edge-detection.interpret-gradient-edge-response",
       "criterion.dip-edge-detection.diagnose-edge-detection-tradeoffs",
@@ -53,7 +53,7 @@ describe("Stage 3 edge detection", () => {
     expect(getNextStep({ catalog, state: s, now: stageTime })).toMatchObject({ targetId: c.id });
   });
   it("does not publish future content or execute Stage 3 completion", () => {
-    for (const id of ["dip.restoration", "dip.quality-metrics"])
+    for (const id of ["dip.quality-metrics"])
       expect(catalog.concepts.some(x => x.id === id)).toBe(false);
     expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
     expect(catalog.stageRetests.find(r => r.stageId === c.stageId)?.contentStatus).toBe("planned");

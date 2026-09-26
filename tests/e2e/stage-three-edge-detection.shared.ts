@@ -58,7 +58,6 @@ export function edgeDetectionTests() {
       await page.goto(route);
       if (route === "/roadmap/graph/") await page.locator("#global-graph-stage").selectOption("stage.digital-image-processing");
       await expect(page.locator('a[href^="/knowledge/dip-edge-detection"]').first()).toBeAttached();
-      await expect(page.locator('a[href="/knowledge/dip-quality-metrics/"]')).toHaveCount(0);
     }
     for (const slug of ["opencv-image-gradients", "opencv-canny-edges"]) {
       await page.goto(`/resources/${slug}/`);

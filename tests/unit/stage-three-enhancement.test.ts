@@ -10,9 +10,9 @@ import { imageStage, stageCatalog, stageReadyInput, stageRef, stageTime } from "
 
 describe("Stage 3 enhancement slice", () => {
   const concept = contentManifest.concepts.find(c => c.id === "dip.enhancement")!;
-  it("publishes exactly ten Stage 3 concepts with two constrained mastery criteria", () => {
+  it("keeps the published Stage 3 scope current with two constrained mastery criteria", () => {
     expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId).map(c => c.id).sort()).toEqual([
-      "dip.convolution-lsi", "dip.edge-detection", "dip.enhancement", "dip.feature-representation", "dip.frequency-domain", "dip.morphology", "dip.noise-models", "dip.restoration", "dip.sampling-quantization", "dip.segmentation", "dip.spatial-filtering",
+      "dip.convolution-lsi", "dip.edge-detection", "dip.enhancement", "dip.feature-representation", "dip.frequency-domain", "dip.morphology", "dip.noise-models", "dip.quality-metrics", "dip.restoration", "dip.sampling-quantization", "dip.segmentation", "dip.spatial-filtering",
     ]);
     expect(concept).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master", slug: "dip-enhancement" });
     expect(concept.masteryCriteria).toHaveLength(2);

@@ -12,7 +12,7 @@ describe("Stage 3 restoration", () => {
   const c = catalog.concepts.find(c => c.id === "dip.restoration")!;
   it("publishes the eleventh Stage 3 Concept at understand depth", () => {
     expect(c).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "understand", slug: "dip-restoration" });
-    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(11);
+    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(12);
     expect(catalog.concepts.filter(x => x.id === c.id)).toHaveLength(1);
     expect(c.masteryCriteria.map(x => x.id)).toEqual([
       "criterion.dip-restoration.explain-degradation-and-inverse-instability",
@@ -53,8 +53,8 @@ describe("Stage 3 restoration", () => {
     delete s.conceptProgress[c.id];
     expect(getNextStep({ catalog, state: s, now: stageTime })).toMatchObject({ targetId: c.id });
   });
-  it("does not publish the remaining Concepts, Project or retest", () => {
-    for (const id of ["dip.quality-metrics", "imaging.psf-mtf"])
+  it("does not publish future Concepts, Project or retest", () => {
+    for (const id of ["imaging.psf-mtf"])
       expect(catalog.concepts.some(x => x.id === id)).toBe(false);
     expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
     expect(catalog.stageRetests.find(r => r.stageId === c.stageId)?.contentStatus).toBe("planned");
@@ -65,7 +65,7 @@ describe("Stage 3 restoration", () => {
   });
   it("reuses the resource without adding a curriculum or matching implementation", async () => {
     expect(c.resourceIds).toEqual(["resource.numpy-fft"]);
-    expect(catalog.resources).toHaveLength(25);
+    expect(catalog.resources).toHaveLength(26);
     expect(catalog.resources.find(r => r.id === c.resourceIds[0])?.verification).toBe("verified");
     const body = await readFile("content/concepts/image-processing/dip-restoration.mdx", "utf8");
     for (const text of ["Active Recall", "Practice", "Mastery Evidence", "N/H", "full", "understand", "不要求从零", "clean_snapshot", "observed_snapshot", "跳过", "epsilon", "不是完整 Wiener", "同一观测"])

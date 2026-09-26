@@ -2,6 +2,25 @@ import type { Resource } from "../../src/types";
 
 export const resources: readonly Resource[] = [
   {
+    id: "resource.skimage-image-metrics",
+    title: "skimage.metrics — scikit-image documentation",
+    authorOrOrganization: "scikit-image",
+    type: "official-doc",
+    level: "beginner",
+    priority: "recommended",
+    language: "en",
+    reason: "官方接口页可定点核对 MSE、PSNR 定义和 data_range 边界；本课仍用 NumPy 自写最小 helper，不新增 scikit-image 运行依赖。",
+    recommendedParts: [
+      "必看：mean_squared_error 与 peak_signal_noise_ratio 两小节；核对同形状参考图与 PSNR 的 data_range 参数。",
+      "选看：structural_similarity 开头的局部结构直觉；只需知道结构敏感不等于任务语义。",
+      "跳过：其余指标、完整 API 清单、感知/学习指标、benchmark 与配准；不扩大 Stage 2 Resource 范围。",
+    ],
+    verification: "verified",
+    url: "https://scikit-image.org/docs/stable/api/skimage.metrics.html",
+    verifiedAt: "2026-09-26",
+    lastCheckedAt: "2026-09-26",
+  },
+  {
     id: "resource.opencv-image-gradients",
     title: "OpenCV Image Gradients",
     authorOrOrganization: "OpenCV",

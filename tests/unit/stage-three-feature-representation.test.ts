@@ -12,7 +12,7 @@ describe("Stage 3 feature representation", () => {
   const c = catalog.concepts.find(c => c.id === "dip.feature-representation")!;
   it("publishes only the tenth Stage 3 Concept at understand depth", () => {
     expect(c).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "understand", slug: "dip-feature-representation" });
-    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(11);
+    expect(catalog.concepts.filter(x => x.stageId === c.stageId)).toHaveLength(12);
     expect(catalog.concepts.filter(x => x.id === c.id)).toHaveLength(1);
     expect(c.masteryCriteria.map(x => x.id)).toEqual([
       "criterion.dip-feature-representation.explain-local-feature-representation",
@@ -53,9 +53,8 @@ describe("Stage 3 feature representation", () => {
     delete s.conceptProgress[c.id];
     expect(getNextStep({ catalog, state: s, now: stageTime })).toMatchObject({ targetId: c.id });
   });
-  it("does not publish the remaining Concepts, Project or retest", () => {
-    for (const id of ["dip.quality-metrics"])
-      expect(catalog.concepts.some(x => x.id === id)).toBe(false);
+  it("keeps Project and retest unpublished", () => {
+    expect(catalog.concepts.some(x => x.id === "dip.quality-metrics")).toBe(true);
     expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
     expect(catalog.stageRetests.find(r => r.stageId === c.stageId)?.contentStatus).toBe("planned");
     const stage = catalog.stages.find(s => s.id === c.stageId)!;
@@ -65,7 +64,7 @@ describe("Stage 3 feature representation", () => {
   });
   it("reuses the resource without adding a curriculum or matching implementation", async () => {
     expect(c.resourceIds).toEqual(["resource.opencv-python-tutorials"]);
-    expect(catalog.resources).toHaveLength(25);
+    expect(catalog.resources).toHaveLength(26);
     expect(catalog.resources.find(r => r.id === c.resourceIds[0])?.verification).toBe("verified");
     const body = await readFile("content/concepts/image-processing/dip-feature-representation.mdx", "utf8");
     for (const text of ["Active Recall", "Practice", "Mastery Evidence", "去均值", "碰撞", "None", "256 bits", "不要求从零", "source_snapshot", "不把它称为描述子稳定性评分", "跳过"])

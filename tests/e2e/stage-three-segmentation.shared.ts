@@ -75,8 +75,6 @@ export function segmentationTests() {
       await page.goto(route);
       if (route === "/roadmap/graph/") await page.locator("#global-graph-stage").selectOption("stage.digital-image-processing");
       await expect(page.locator('a[href^="/knowledge/dip-segmentation"]').first()).toBeAttached();
-      for (const slug of ["dip-quality-metrics"])
-        await expect(page.locator(`a[href="/knowledge/${slug}/"]`)).toHaveCount(0);
     }
     await page.goto("/resources/opencv-segmentation-thresholds/");
     await expect(page.getByRole("main")).toContainText("adaptiveThreshold");

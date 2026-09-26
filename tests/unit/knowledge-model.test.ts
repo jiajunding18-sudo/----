@@ -66,10 +66,11 @@ describe("Knowledge manifest 派生视图", () => {
         "dip.morphology",
         "dip.edge-detection",
         "dip.feature-representation",
+        "dip.quality-metrics",
       ],
     );
     expect(knowledge.concepts.map(({ recommendedSequence }) => recommendedSequence)).toEqual(
-      Array.from({ length: 40 }, (_, index) => index + 1),
+      Array.from({ length: 41 }, (_, index) => index + 1),
     );
     expect(
       knowledge.concepts.every(
@@ -118,7 +119,7 @@ describe("Knowledge manifest 派生视图", () => {
     expect(knowledge.availableStageCount).toBe(5);
     expect(knowledge.plannedStageCount).toBe(12);
     expect(knowledge.tracks.map(({ publishedConceptCount }) => publishedConceptCount)).toEqual([
-      40, 0, 0,
+      41, 0, 0,
     ]);
   });
 

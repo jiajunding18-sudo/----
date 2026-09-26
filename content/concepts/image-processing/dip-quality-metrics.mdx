@@ -1,0 +1,264 @@
+---
+schemaVersion: 1
+id: dip.quality-metrics
+slug: dip-quality-metrics
+title: 图像与任务质量指标
+englishTitle: Image and Task Quality Metrics
+aliases: [图像质量指标, Image Quality Metrics, MSE MAE PSNR]
+searchKeywords: [MSE, MAE, PSNR, data range, ROI metric, residual, task evidence]
+summary: 在固定参考、数值尺度和任务区域下计算误差指标，用同分异错与低 MSE 漏目标反例诊断单一分数的盲点。
+why: 图像更清楚或 PSNR 更高不自动等于目标被保留；需要先定义评价问题，再用全图、局部与任务证据解释结果。
+stageId: stage.digital-image-processing
+trackIds: [track.common]
+order: 120
+level: beginner
+requiredness: required
+targetDepth: master
+estimatedHours: { min: 5, max: 7 }
+dependencies:
+  - conceptId: math.probability-statistics
+    kind: hard
+    reason: 需要先理解均值、绝对偏差与平方偏差，才能解释误差聚合方式。
+  - conceptId: dip.noise-models
+    kind: hard
+    reason: 需要先会在固定参考下观察 residual、数值范围和裁剪边界，才能公平比较指标。
+tags: [Image Quality, Metrics, Task Evidence]
+learningOutcomes:
+  - 能在同一数据契约下独立计算并解释 MSE、MAE、PSNR 与固定 ROI 指标，安全处理零误差和空 mask。
+  - 能用受控反例解释全局分数与局部任务结果为何冲突，并选择补充证据而非给指标排通用名次。
+masteryCriteria:
+  - id: criterion.dip-quality-metrics.compute-and-interpret-reference-metrics
+    description: 独立核对参考和候选的形状、对齐、dtype、数值尺度，安全计算 MSE、MAE、显式 data_range 的 PSNR 与固定 mask 误差，并解释零误差和空 mask 边界。
+    evidenceHint: 提交一份短指标记录，包含输入契约、公式/计算结果、固定 ROI、同图 PSNR=+∞ 或空 mask 拒绝的一个边界案例，以及数值解释；允许查 API，不要求质量评价理论全集。
+    required: true
+  - id: criterion.dip-quality-metrics.diagnose-metric-limitations-and-task-fit
+    description: 独立比较两种结果，展示相同或更低的全图误差仍可能伤害关键目标，借助 residual、局部/任务证据解释指标分歧和选择边界。
+    evidenceHint: 固定任务和 ROI 后提交两候选、全图与局部结果、误差位置、一个误导性标量结论及修正解释；不要求感知模型、人工评分或大数据基准。
+    required: true
+resourceIds: [resource.skimage-image-metrics]
+publicationStatus: published
+contentVersion: 2026.09.26.1
+---
+
+# 图像与任务质量指标（Image and Task Quality Metrics）
+
+## 1. 先问任务：一个分数到底评价什么？
+
+两张处理后的零件图：A 的背景略有误差，但小目标还在；B 的背景更干净，却把小目标抹掉了。若任务是找到这个目标，哪张更好？在算任何分数前，先写下**评价对象**：是逐像素接近干净参考图、保留目标，还是保证批处理不漏文件？**指标（metric）**只是针对已声明问题的一种数值证据，不能替你决定哪种错误最重要。
+
+本篇按「任务 → 证据目标 → 指标假设 → 固定条件比较 → 数值 → 反例 → 失败解释 → 适用边界」走。一个标量把许多位置压缩成一个数，不能自动概括空间结构、任务风险或人的感受；**PSNR 不是图像质量总分**。
+
+## 2. 为什么现在学 / 前置 / 深度
+
+hard 是[概率统计](/knowledge/probability-and-statistics/)和[噪声模型](/knowledge/dip-noise-models/)：复用平均、偏差，以及 `residual = candidate - reference`（候选图减参考图），不重讲概率分布。Stage 2 的[数字图像表示](/knowledge/digital-image-representation/)和[可信显示](/knowledge/image-plots/)可随时回看，不增加 hard edge。后续 ROADMAP 的几何/成像评价会复用「先定义任务，再检查证据」；draft `project.classical-inspection` 以后也可能用固定测试输入和失败分析，本轮不发布或更改项目契约。
+
+正式深度是 **master**，预计 5–7 小时：能独立运行限定对照、先预测、检查数值和局部结果、解释反例与常见错误；不要求完整感知质量理论。`cv.evaluation-basics` 在 ROADMAP 是未来 recommended，但尚无正式实体，因此不写入当前 DAG；`sensor.noise-snr`、`sensor.dynamic-range` 同样不是前置。本页的 `data_range` 是**指标的数值尺度**，不是传感器物理动态范围。
+
+## 3. 最小指标：先懂误差，再看公式
+
+**全参考（full-reference）**指标需要已对齐的 `reference`（参考图）与 `candidate`（待评结果），且形状、空间位置、强度契约一致。**任务/局部证据**可以是预先确定的缺陷区域对比度、分割 IoU、边缘存活或 batch 失败数；不一定有完整干净参考图。本篇只拿这些作对照，不重教它们。若没有 reference，不能假装可算 MSE/PSNR；先选与任务相符的可观察证据。
+
+设同形状图像共有 $N$ 个待比较数值，$r_i$ 是第 $i$ 个参考值，$c_i$ 是对应候选值：
+
+$$
+\mathrm{MSE}=\frac{1}{N}\sum_{i=1}^{N}(c_i-r_i)^2.
+$$
+
+$$
+\mathrm{MAE}=\frac{1}{N}\sum_{i=1}^{N}|c_i-r_i|.
+$$
+
+求和符号 $\sum$ 是「把所有项加起来」。**均方误差（MSE）**先平方，较大的单点误差被放大；**平均绝对误差（MAE）**取每项误差绝对值再平均。两者都不记得误差发生在哪里。四个位置的误差：
+
+| 模式 | 四处误差 | MSE | MAE |
+|---|---|---:|---:|
+| 少数大错 | `[0.4,0,0,0]` | 0.04 | 0.10 |
+| 多数小错 | `[0.15,0.15,0.15,0.15]` | 0.0225 | 0.15 |
+
+前者 MAE 较低、MSE 较高：指标没算错，它们对少数大错和多数小错的权重不同，没有普遍赢家。若需要原强度单位，可看 $\sqrt{\mathrm{MSE}}$（RMSE），本页不另开主线。
+
+**峰值信噪比（PSNR）**只是把 MSE 按明确峰值尺度写成对数分数。令 $R=\mathrm{data\_range}$：
+
+$$
+\mathrm{PSNR}=10\log_{10}(R^2/\mathrm{MSE}).
+$$
+
+这里 `data_range` 是契约规定的**可能强度范围宽度**，不是这张图实际 `max-min`。常见 8-bit 强度 0–255 用 255；明确归一化到 0–1 的浮点图用 1。`float32` 不自动意味着 0–1；`uint8` 可表示 0–255，也不表示本图实际用满整个范围。范围必须从来源与表示约定确认，不能只看 dtype 猜。MSE=0 时 PSNR=+∞，表示这份逐像素比较没有误差，不表示图像「无限好」；不能偷偷加 epsilon 改成有限高分。
+
+若同一组 8-bit 数值同时把参考和候选除以 255，MSE 会除以 $255^2$，PSNR 的 `data_range` 也要从 255 变为 1；正确换算后 PSNR 不变（小数舍入除外）。不能把不同强度尺度的原始 MSE 直接比较，再说数值较小者质量更高。
+
+**对齐也是契约**：逐像素指标把同坐标值当成对应物。错位会提高误差，但不能据此断言内容本身差；需要任务要求的空间对齐，而非换个分数「掩盖」错位。本篇不教配准。所有比较固定 reference、shape、范围、对齐、裁剪策略与事先确定的 ROI/mask；不能看完结果才挑有利区域。
+
+## 4. Worked Example：四个连续 checkpoint
+
+以下是一个 16×16 的合成灰度参考图（0–1 契约）：左侧背景 0.2、右侧 0.5、左侧 2×2 小目标 1.0。任务预先固定为**保留这个小目标**，ROI 也在看候选前固定为 `[6:8,3:5]`。所有代码块按 A→D 在同一 Python 会话运行，不需要外部图片或新运行依赖。先写预测再运行；这不是证明真实相机都如此。
+
+### Checkpoint A：安全计算与边界
+
+先预测同图比较的 PSNR，和「少数大误差」相较「多数小误差」会怎样影响 MSE/MAE。计算时先转 `float64` 再相减，避免 `uint8` 回绕。helper 拒绝不同形状、空数据、非数值与非有限值；`masked_mse` 只接受同形状二维 bool mask 且至少选中一个像素。「没有评价像素」不能当成零误差。
+
+`checked_pair` 只能核对形状、数值类型和有限值等数组契约，**不能验证空间对齐**：形状相同不等于像素位置对应，helper 不报错也不代表已经对齐。逐像素 MSE/MAE/PSNR 所需的对齐须由输入来源、已知位置关系或上游配准契约保证；本篇不让指标函数负责配准。
+
+```python
+import numpy as np
+
+reference = np.full((16, 16), 0.2, dtype=np.float64)
+reference[:, 8:] = 0.5
+reference[6:8, 3:5] = 1.0
+reference_snapshot = reference.copy()
+target_roi = np.zeros(reference.shape, dtype=bool)
+target_roi[6:8, 3:5] = True  # 4 个 True；在查看候选前固定
+
+def checked_pair(ref, cand):
+    r, c = np.asarray(ref), np.asarray(cand)
+    if r.shape != c.shape or r.size == 0 or r.ndim != 2:
+        raise ValueError("需要同形状、非空的 H×W 图像")
+    if r.dtype.kind not in "iuf" or c.dtype.kind not in "iuf":
+        raise ValueError("需要数值图像，不接受布尔或非数值数据")
+    r, c = r.astype(np.float64), c.astype(np.float64)
+    if not np.isfinite(r).all() or not np.isfinite(c).all():
+        raise ValueError("输入含 NaN 或 infinity")
+    return r, c
+
+def mse(ref, cand):
+    r, c = checked_pair(ref, cand)
+    return float(np.mean((c - r) ** 2))
+
+def mae(ref, cand):
+    r, c = checked_pair(ref, cand)
+    return float(np.mean(np.abs(c - r)))
+
+def psnr(ref, cand, data_range):
+    if not np.isfinite(data_range) or data_range <= 0:
+        raise ValueError("data_range 必须是有限正数")
+    error = mse(ref, cand)
+    return float("inf") if error == 0 else float(10 * np.log10(data_range**2 / error))
+
+def masked_mse(ref, cand, mask):
+    r, c = checked_pair(ref, cand)
+    if mask.shape != r.shape or mask.dtype != np.dtype(bool):
+        raise ValueError("mask 必须是与 H×W 匹配的 bool 数组")
+    if not mask.any():
+        raise ValueError("空 mask：没有可评价像素")
+    return float(np.mean((c[mask] - r[mask]) ** 2))
+
+assert np.isinf(psnr(reference, reference.copy(), data_range=1.0))
+try:
+    masked_mse(reference, reference, np.zeros_like(target_roi))
+except ValueError as error:
+    print("expected empty-mask diagnosis:", error)
+print("contract:", reference.shape, reference.dtype, reference.min(), reference.max())
+```
+
+预期：shape `(16,16)`、dtype `float64`、实际范围 0.2–1.0；同图 PSNR 为 `inf`，空 mask 明确报错。实际 min/max 与指标契约中的 `data_range=1` 是两个不同问题。
+
+### Checkpoint B：同分，错在不同位置
+
+先预测：A 把背景左上四像素各加 0.4；B 把关键目标四像素各减 0.4。两者平方误差能量相同，但任务风险是否相同？
+
+```python
+background_error = reference.copy()
+background_error[:2, :2] += 0.4
+target_error = reference.copy()
+target_error[target_roi] -= 0.4
+
+for name, candidate in [("background error", background_error),
+                        ("target error", target_error)]:
+    residual = candidate - reference
+    print(name, "global MSE", round(mse(reference, candidate), 6),
+          "MAE", round(mae(reference, candidate), 6),
+          "PSNR", round(psnr(reference, candidate, 1.0), 4),
+          "target ROI MSE", round(masked_mse(reference, candidate, target_roi), 4),
+          "residual mean/std", round(float(residual.mean()), 6),
+          round(float(residual.std()), 6),
+          "nonzero residual positions", np.argwhere(np.abs(residual) > 1e-12).tolist())
+assert np.isclose(mse(reference, background_error), mse(reference, target_error))
+assert masked_mse(reference, background_error, target_roi) == 0
+assert np.array_equal(reference, reference_snapshot)
+```
+
+两者全图 MSE 都是 **0.0025**、MAE 都是 **0.00625**、PSNR 都约 **26.0206 dB**；但 ROI MSE 分别为 **0** 与 **0.16**。残差 mean 分别为 +0.00625 与 −0.00625，std 相同：它们还提示误差方向，但不替代位置检查。PSNR 与 MSE 基于同一误差，不是两份独立支持。`residual` 的非零坐标揭示错误落在背景还是目标；分数告诉「多少」，残差帮助看「哪里」，仍需已知任务解释「为什么重要」。
+
+### Checkpoint C：全图排名与目标保留冲突
+
+保持同一个 reference、ROI 和范围。`widespread` 在目标外 252 个像素各加 0.15，目标保留；`target_lost` 背景原样，但把四个目标像素从 1.0 置为 0.2。先猜哪个全图 MSE 更低，再按任务检查目标。
+
+```python
+widespread = reference.copy()
+widespread[~target_roi] += 0.15
+target_lost = reference.copy()
+target_lost[target_roi] = 0.2
+for name, candidate in [("widespread", widespread), ("target lost", target_lost)]:
+    print(name, "global MSE", round(mse(reference, candidate), 6),
+          "global MAE", round(mae(reference, candidate), 6),
+          "ROI MSE", round(masked_mse(reference, candidate, target_roi), 4),
+          "target mean", round(float(candidate[target_roi].mean()), 3))
+assert mse(reference, target_lost) < mse(reference, widespread)
+assert masked_mse(reference, target_lost, target_roi) > masked_mse(reference, widespread, target_roi)
+assert np.array_equal(reference, reference_snapshot)
+```
+
+实际全图 MSE：`widespread ≈ 0.022148`，`target_lost = 0.01`，按这个分数后者更「接近参考」。但 ROI MSE 是 0 对 0.64，后者的目标均值由 1.0 变 0.2，目标完全消失。**更低 MSE 不等于更好的任务结果**。这个实验刻意把噪声候选改动扩散到大部分背景；它不能证明日常噪声都比漏检轻。选哪个方案取决于事先声明的任务和可接受错误。
+
+### Checkpoint D：增加一种证据，不给指标排总名次
+
+以下均值模糊只用于造一个局部结构受损候选，不教学新的恢复算法。`np.pad(..., mode="edge")` 复制边界像素，九个偏移图求平均对应简单 3×3 mean；亮度偏移和 clipping 则给出另一种失真。先预测：哪一项会使小目标局部对比度下降？哪一项会把不同高亮值都压到 1？图像/残差显示都固定范围，不能靠自动缩放营造改善。
+
+```python
+import matplotlib.pyplot as plt
+
+padded = np.pad(reference, 1, mode="edge")
+blurred = sum(padded[dy:dy+16, dx:dx+16] for dy in range(3) for dx in range(3)) / 9
+brightness_shift = np.clip(reference + 0.05, 0, 1)
+saturated = np.clip(reference * 2, 0, 1)
+variants = [("reference", reference), ("blurred", blurred),
+            ("brightness shift", brightness_shift), ("saturated", saturated)]
+for name, candidate in variants[1:]:
+    print(name, "MSE", round(mse(reference, candidate), 6),
+          "MAE", round(mae(reference, candidate), 6),
+          "target mean", round(float(candidate[target_roi].mean()), 4),
+          "saturated fraction", round(float(np.mean(candidate == 1.0)), 4))
+fig, axes = plt.subplots(2, 4, figsize=(10, 5), layout="constrained")
+for column, (name, candidate) in enumerate(variants):
+    axes[0, column].imshow(candidate, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    axes[0, column].set_title(name)
+    axes[1, column].imshow(candidate-reference, cmap="coolwarm", vmin=-0.8,
+                           vmax=0.8, interpolation="nearest")
+    axes[1, column].set_title("residual: " + name)
+plt.show()
+assert blurred[target_roi].mean() < reference[target_roi].mean()
+assert np.array_equal(reference, reference_snapshot)
+```
+
+模糊图目标中心变淡；饱和比例只告诉有多少像素到达 1，不告诉这些像素是否仍可区分原值。即便某个全图指标改善，也不能自己解释因果；结合已知改动、固定 ROI、残差图和任务几何才可诊断。对当前事先确定的「保留小目标」任务，应直接检查目标 ROI 与局部结构是否保留；全图 MSE 仍可补充说明整体像素误差，却不能代替任务证据。若任务改变，证据的优先级也应重新确定，并非 ROI 指标普遍优于全图指标。**结构敏感指标**（如 SSIM）尝试比较局部亮度、对比度与结构，但也不会自动理解缺陷语义；本页不实现 SSIM，也不新增运行依赖。
+
+## 5. Active Recall：先判断，再解释
+
+- 两个误差分布分别是「少数大错」与「多数小错」，MSE/MAE 可能为何排序不同？
+- 归一化浮点图 PSNR 仍用 255 会怎样？`float32` 是否自动意味着 `data_range=1`？
+- 同图 PSNR 为什么为 `+∞`？它证明了什么、没证明什么？
+- 两候选全图 MSE 一样，为什么其中一张仍可能抹掉目标？残差和事前 ROI 各补什么信息？
+- 为什么空 mask 返回 0 是误导？为什么不能看完结果再划 ROI？
+- 什么时候没有完整参考图却仍可评估任务？例如哪个具体的局部/批处理证据能回答问题？
+- 错位图像的 MSE 很高时，应先核对什么，而不是让指标忽略错位？
+- MSE 与 MAE 排名冲突或 PSNR 与目标保留相矛盾，为什么不必认定某个计算出错？
+
+## 6. Practice：四个可验收小练习
+
+1. **先预测权重**：手算 `[0.4,0,0,0]` 与 `[0.15,0.15,0.15,0.15]` 的 MSE/MAE，再用 helper 核对。完成标准：分别得到 `(0.04,0.10)` 与 `(0.0225,0.15)`，解释排序反转，不给指标排普遍优劣。
+2. **尺度与边界**：运行前先预测：同一对数组的像素值都除以 255 后，原始 MSE 会如何、为何变化？若 PSNR 的 `data_range` 同步从 255 改为 1，它应如何变化？再用 `np.rint(reference*255).astype(np.uint8)` 制作明确 8-bit 表示，把它和一个已修改的同尺度 candidate 比较；之后将**同一对 8-bit 数组**除以 255，比较两次 MSE 与 PSNR。完成标准：MSE 相差约 $255^2$ 倍、对应 `data_range=255/1` 的 PSNR 近似相同（按同一数组换算）；还要展示同图 `+∞` 和空 mask 报错。不可拿原 float reference 与量化图直接宣称纯尺度差异。
+3. **固定 ROI**：先写任务与 `[6:8,3:5]`，再比较 B/C 的全图、ROI MSE 和残差位置；另造一个 shape 不符的 mask。完成标准：同分异错、低全图误差漏目标、错 shape 被明确拒绝；ROI 不事后移动。
+4. **独立反例**：修改 B 或 C 的一个误差幅度/位置，或另选小目标位置，先写预期，保持 reference、对齐、尺度和裁剪策略，报告两候选至少一个误导性全图结论及局部/任务证据。完成标准：指出哪项结论会误导、为什么、该如何补证据；不需要大数据集或主观评分。
+
+## 7. Mastery Evidence：两项 required
+
+1. **Reference-metric record**：独立提交一份短记录：固定参考/候选与来源、shape/对齐、dtype/数值契约、预定 ROI、MSE/MAE/显式范围 PSNR、一次 `+∞` 或空 mask 边界，以及对分数含义和局限的解释。可沿用本页 helper，但不能只贴输出。
+2. **Metric-failure diagnosis**：提交两种候选和事前确定的任务/ROI，给出全图、局部或任务证据、残差位置及一次「同分不同错」或「全图更好却丢目标」案例；说明指标冲突源于哪种加权/位置盲点，并写下可复核的选择理由。只交分数表不算通过。
+
+## 8. 后续用途、常见错误与 Resource
+
+图像级指标帮助比较有参考图的处理结果；目标保留、分割 truth/IoU、已知位置的细线和批处理失败记录回答不同任务问题。后续标定、几何估计或工业视觉仍须先定义目标和证据；本篇不宣称学完即可完成真实检测。`project.classical-inspection` 仍为 draft，不把课程实验伪装成项目完成，也不改 Stage 3 出口或复测。
+
+常见错误是：`uint8` 直接相减；按 dtype 猜 `data_range`；零 MSE 偷加 epsilon；空 mask 当作零误差；不同 ROI、未对齐图像或不同裁剪策略混比；只看 PSNR 不看错误位置；把结构敏感分数当成目标语义。逐一回到任务、表示、残差和局部证据检查。
+
+**scikit-image metrics 官方文档**只用来核对 MSE、PSNR 的定义与 `data_range` 参数。必看这两项的说明，尤其 PSNR 对范围的假设；可选浏览 SSIM 的一句结构直觉；跳过其余指标、API 实现、感知模型、benchmark 和配准。本页的可运行代码只依赖已用的 NumPy/Matplotlib，不需安装 scikit-image。资源是核对工具，中文正文是主教材。

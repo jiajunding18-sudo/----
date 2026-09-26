@@ -9,7 +9,7 @@ import { stageReadyInput, stageTime } from "../fixtures/stage-lifecycle";
 describe("Stage 3 spatial filtering", () => {
   const concept = contentManifest.concepts.find(c => c.id === "dip.spatial-filtering")!;
   it("retains the four approved C3 concepts", () => {
-    expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId && !["dip.restoration", "dip.frequency-domain", "dip.enhancement", "dip.segmentation", "dip.morphology", "dip.edge-detection", "dip.feature-representation"].includes(c.id)).map(c => c.id).sort())
+    expect(contentManifest.concepts.filter(c => c.stageId === concept.stageId && !["dip.restoration", "dip.frequency-domain", "dip.enhancement", "dip.segmentation", "dip.morphology", "dip.edge-detection", "dip.feature-representation", "dip.quality-metrics"].includes(c.id)).map(c => c.id).sort())
       .toEqual(["dip.convolution-lsi", "dip.noise-models", "dip.sampling-quantization", "dip.spatial-filtering"]);
     expect(concept).toMatchObject({ publicationStatus: "published", requiredness: "required", targetDepth: "master" });
     expect(concept.masteryCriteria).toHaveLength(2);

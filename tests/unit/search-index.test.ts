@@ -22,10 +22,10 @@ beforeAll(async () => {
 
 describe("构建期 SearchDocument", () => {
   it("只生成正式可搜索实体，并按稳定 ID 确定排序", () => {
-    expect(searchIndex.documents).toHaveLength(66);
+    expect(searchIndex.documents).toHaveLength(68);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "concept"),
-    ).toHaveLength(40);
+    ).toHaveLength(41);
     expect(
       searchIndex.documents
         .filter(({ kind }) => kind === "concept")
@@ -41,7 +41,7 @@ describe("构建期 SearchDocument", () => {
     ).toHaveLength(1);
     expect(
       searchIndex.documents.filter(({ kind }) => kind === "resource"),
-    ).toHaveLength(25);
+    ).toHaveLength(26);
     expect(searchIndex.documents.some(({ id }) => id === "project.stereo-or-pnp")).toBe(
       false,
     );

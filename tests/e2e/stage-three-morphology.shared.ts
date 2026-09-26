@@ -36,7 +36,6 @@ export function morphologyTests() {
       await page.goto(route);
       if(route==="/roadmap/graph/")await page.locator("#global-graph-stage").selectOption("stage.digital-image-processing");
       await expect(page.locator('a[href^="/knowledge/dip-morphology"]').first()).toBeAttached();
-      await expect(page.locator('a[href="/knowledge/dip-quality-metrics/"]')).toHaveCount(0);
     }
     await page.goto("/resources/opencv-morphology/");
     await expect(page.getByRole("main")).toContainText("跳过");

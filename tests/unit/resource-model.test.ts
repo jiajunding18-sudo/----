@@ -13,10 +13,10 @@ import {
 } from "@/lib/content/site-content";
 
 describe("正式 Resource 派生模型", () => {
-  it("完整保留 25 个 catalog Resource 及学习指导字段", () => {
+  it("完整保留 26 个 catalog Resource 及学习指导字段", () => {
     const view = getResourceCatalogView();
 
-    expect(view.resources).toHaveLength(25);
+    expect(view.resources).toHaveLength(26);
     expect(
       view.resources.every(
         ({ concepts, projects, resource }) =>
@@ -92,12 +92,12 @@ describe("正式 Resource 派生模型", () => {
     );
   });
 
-  it("从不可变 Resource ID 唯一派生 25 个站内详情路由", () => {
+  it("从不可变 Resource ID 唯一派生 26 个站内详情路由", () => {
     const view = getResourceCatalogView();
     const slugs = getResourceSlugs();
 
-    expect(slugs).toHaveLength(25);
-    expect(new Set(slugs.map(({ slug }) => slug)).size).toBe(25);
+    expect(slugs).toHaveLength(26);
+    expect(new Set(slugs.map(({ slug }) => slug)).size).toBe(26);
     expect(view.resources.every(({ href }) => href.startsWith("/resources/"))).toBe(
       true,
     );

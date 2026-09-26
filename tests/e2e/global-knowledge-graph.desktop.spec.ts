@@ -77,10 +77,10 @@ test("全局图按正式 Stage、Track 与 dependency kind 浏览，并保留完
   await expect(nodeItems).toHaveCount(0);
   await expect(graph).toContainText("不会用占位节点伪造路线覆盖");
   await filters.getByLabel("Track").selectOption("track.common");
-  await expect(nodeItems).toHaveCount(40);
+  await expect(nodeItems).toHaveCount(41);
 
   await filters.locator('[data-global-scope="published"]').click();
-  await expect(nodeItems).toHaveCount(40);
+  await expect(nodeItems).toHaveCount(41);
   await filters.locator('[data-global-scope="stage"]').click();
   await filters
     .getByLabel("Stage")

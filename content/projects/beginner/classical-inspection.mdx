@@ -115,13 +115,28 @@ contentVersion: 2026.09.27.1
 
 # 经典零件与图形检测
 
-**本页目录：** [任务与真值](#section-task-and-truth-先说清什么算对) · [数据集](#section-generate-and-inspect-dataset-先看数据-再看答案) · [单图流水线](#section-build-a-single-image-pipeline-让每个数字有来历) · [A/B 比较](#section-scheme-a-b-只改变阈值选择方法) · [冻结、未见与退化](#section-freeze-unseen-and-controlled-degradation) · [失败分析](#section-failure-analysis-诚实保留边界) · [交付与验收](#section-deliverables-and-acceptance-交什么-如何核对) · [Stage 证据边界](#section-stage-evidence-boundary-项目不是阶段完成)。
+**本页目录：** [学习者执行顺序](#section-learner-workflow-从准备到交付) · [任务与真值](#section-task-and-truth-先说清什么算对) · [数据集](#section-generate-and-inspect-dataset-先看数据-再看答案) · [单图流水线](#section-build-a-single-image-pipeline-让每个数字有来历) · [A/B 比较](#section-scheme-a-b-只改变阈值选择方法) · [冻结、未见与退化](#section-freeze-unseen-and-controlled-degradation) · [失败分析](#section-failure-analysis-诚实保留边界) · [交付与验收](#section-deliverables-and-acceptance-交什么-如何核对) · [Stage 证据边界](#section-stage-evidence-boundary-项目不是阶段完成)。
 
 ## Project overview：一个目标、一条规则
 
 一批**暗色矩形薄片**位于较亮背景。正常零件的宽高、位置和亮度会小幅变化，背景也有弱梯度与孤立暗点；异常只有一种：**长边中部向零件内部凹入的外缘缺口（notch）**。目标不是识别所有缺陷，而是建立可解释的 `normal / notched` 判断，并说明什么时候判断失效。这里的 `pass` 对应 normal，`fail` 对应 notched；检测到缺口的 `fail` 是一次**成功处理后的任务判定**，不同于文件解码或测量失败。
 
 预计 25–35 小时覆盖 Stage 2–3 的整个项目，不是在 Stage 3 另加一份 25–35 小时作业。建议分配：契约与数据 3–4h；分割/测量 6–8h；A/B 与 dev 4–5h；batch/manifest 4–5h；退化 2–3h；未见 2–3h；失败分析和交付整理各 2–3h。复用 [Pixel Lab](/projects/pixel-lab/) 的环境及 [批处理契约](/knowledge/pipeline-batch-images/)，不要重做安装、建仓或基础路径练习。可查 API，但每项决定必须能用自己的测量解释。
+
+## Learner workflow：从准备到交付
+
+下面是使用本页已定义契约的**执行顺序**，不是新增验收项；每一步的参数、判断规则和证据边界见后文对应小节。
+
+1. **开始准备：**选择已有的离线合成数据执行路径，核对 Python/OpenCV 环境与前置知识，写下一项具体动作；复用 Pixel Lab 的工程骨架，不重新安装工具。
+2. **dev 数据开发：**在新目录生成固定版本与 seed 的数据，核对 split 清单、输入形状与读取失败。dev 可以查看独立 truth 来调试和评价，但推断函数仍只能接收图像与配置。
+3. **单图流水线调试：**先用 dev 的 normal、notched 图检查固定 ROI、暗前景 mask、opening、目标筛选、bbox、前景像素数、R 和判定；另用坏文件验证解码失败会在访问图像属性前停止。保存可解释的中间证据，不按样本 ID 猜标签。
+4. **批处理执行：**稳定排序发现文件，为每个文件留下唯一的 succeeded、failed 或 skipped 记录；把输出放在独立目录，先检查危险输出关系，保存逐项 manifest 与汇总。
+5. **A/B 受控比较：**先写假设，让同一 dev 输入分别独立运行固定阈值 A 与 Otsu B；保持其余处理和规则相同，记录阈值、技术覆盖、FP/FN、差异与局限。
+6. **unseen 冻结前检查：**根据 dev 结果定下完整配置（含两方案、共同处理和判定规则），记录生成版本、seed 与配置身份；确认未见集推断不会读取 truth，也不会逐图调参。
+7. **unseen 首跑：**使用冻结配置运行一次并保留原始输出、逐项 manifest 和配置身份；**先保存首跑事实，再由独立评价步骤联接 truth**。后续修改或重跑须另存结果，不得覆盖首跑失败或改称首次成功。truth 不作为隐藏的开发提示或推断输入。
+8. **压力测试：**另从 clean 输入分别生成已声明的亮度与模糊条件，在独立输出中运行相同冻结方案；记录参数、实际范围、覆盖、任务错误和 R，不把压力图反复叠加处理。
+9. **失败分析：**选 1–2 个真实观察到的失败或边界，沿输入条件、现象、出错环节、数值/图像证据、可能原因、缓解方向和未解决限制写短卡；不要制造不存在的漏检。
+10. **最终交付整理：**在新的干净输出目录按相同版本、seed 和配置重跑，核对身份与汇总语义一致；按下方 A–D 索引整理可运行材料、数据、运行证据与短报告，再逐项核对已有验收。
 
 ## Task and truth：先说清什么算对
 
@@ -184,6 +199,13 @@ dev 阶段可调整 A 的 T、共同 ROI、opening、目标选择范围和 R 规
 ## Deliverables and acceptance：交什么、如何核对
 
 正式交付仅四组：A 源码/执行包（generator、pipeline、evaluation、README、frozen config）；B 数据/真值包（split、spec、独立 truth、version/seed）；C 运行证据（输出、逐项 JSON、summary、少量代表图）；D 分析短报告（A/B、亮度/模糊、未见首跑、失败和局限）。页面上七项 required acceptance 对应任务/真值分离、批次身份、分割与测量、非平凡规则、公平 A/B、冻结未见与退化、可复现失败分析。交付物登记记录本身不等于系统已检查磁盘上所有文件：当前机器完成条件是**至少一条交付物记录 + 七项验收逐一通过 + 学习者显式确认**；四组内容须按验收实际核对。完成项目也不会自动把相关 Concept 标记 mastered。
+
+**学习者交付索引（整理已有四组要求，不指定新的目录格式）：**
+
+- **A · 源码与配置：**生成器、单图/批处理与独立评价程序、冻结 config、README/运行说明；说明版本、seed 和安全输出目录用法。
+- **B · 数据与划分：**dev/unseen 的 split 清单、sample 规格及独立 truth；truth 供评价使用，不传入推断。
+- **C · 运行记录：**逐项 JSON manifest、汇总、输出图像和少量代表图；区分 dev、unseen **首跑**、各项独立压力实验与干净目录重跑，保留失败/跳过身份。
+- **D · 分析短报告：**预写假设后的 A/B 对照、亮度/模糊记录、未见首跑结果、真实失败卡及适用边界；引用 C 中的同一证据即可，不为每个验收项复制一套文件。
 
 ## Stage evidence boundary：项目不是阶段完成
 

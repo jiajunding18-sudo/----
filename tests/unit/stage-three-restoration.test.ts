@@ -56,7 +56,7 @@ describe("Stage 3 restoration", () => {
   it("does not publish future Concepts, Project or retest", () => {
     for (const id of ["imaging.psf-mtf"])
       expect(catalog.concepts.some(x => x.id === id)).toBe(false);
-    expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
     expect(catalog.stageRetests.find(r => r.stageId === c.stageId)?.contentStatus).toBe("planned");
     const stage = catalog.stages.find(s => s.id === c.stageId)!;
     expect(stage.contentStatus).toBe("available");

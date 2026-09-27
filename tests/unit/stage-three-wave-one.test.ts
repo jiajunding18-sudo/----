@@ -36,7 +36,7 @@ describe("Stage 3 Wave 1 publication boundary", () => {
     expect(stage && "entryGate" in stage ? stage.entryGate : undefined).toBeUndefined();
     expect(stage?.exitCriteria).toHaveLength(2);
     expect(stage?.projectGates).toHaveLength(1);
-    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
   });
   it("teaches prediction, execution, limitations and meaningful evidence", async () => {
     for (const c of concepts) {

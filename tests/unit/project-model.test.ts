@@ -35,8 +35,8 @@ describe("Phase 5A Project 能力目录", () => {
     const catalog = buildProjectCatalogView(contentManifest);
 
     expect(catalog.projects).toHaveLength(13);
-    expect(catalog.publishedCount).toBe(1);
-    expect(catalog.draftCount).toBe(12);
+    expect(catalog.publishedCount).toBe(2);
+    expect(catalog.draftCount).toBe(11);
     expect(
       catalog.projects.every(
         ({ project }) =>
@@ -55,11 +55,11 @@ describe("Phase 5A Project 能力目录", () => {
       "stage.image-computing",
     ]);
 
-    const planned = catalog.projects.find(
+    const classical = catalog.projects.find(
       ({ project }) => project.id === "project.classical-inspection",
     );
-    expect(planned?.href).toBe("/projects/#project-classical-inspection");
-    expect(planned?.project.conceptRequirements).toEqual([]);
+    expect(classical?.href).toBe("/projects/classical-inspection/");
+    expect(classical?.project.conceptRequirements).toHaveLength(7);
   });
 
   it("只从 Project requirements 反向派生 Concept 使用关系", () => {
@@ -236,10 +236,10 @@ describe("Phase 5A Project 能力目录", () => {
       expect.objectContaining({
         project: expect.objectContaining({
           id: "project.classical-inspection",
-          publicationStatus: "draft",
+          publicationStatus: "published",
         }),
         stage: expect.objectContaining({ id: "stage.digital-image-processing" }),
-        href: "/projects/#project-classical-inspection",
+        href: "/projects/classical-inspection/",
       }),
     ]);
   });

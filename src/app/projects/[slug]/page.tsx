@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { DocumentContext } from "@/components/content/document-context";
 import { ResourceGuidanceList } from "@/features/resources";
 import { ProjectMilestonePanel } from "@/features/projects/project-milestone-panel";
+import { ProjectAnchorRestorer } from "@/features/projects/project-anchor-restorer";
 import {
   getProjectCatalogItem,
   getProjectNextProjects,
@@ -67,6 +68,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   return (
     <article className="mx-auto max-w-4xl">
+      <ProjectAnchorRestorer />
       <DocumentContext
         backHref="/projects/"
         backLabel="返回 Projects"

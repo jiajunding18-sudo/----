@@ -1120,7 +1120,7 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
     expect(resource?.recommendedParts?.[2]).toContain("Path.rglob");
   });
 
-  it("不扩展 Pixel Lab 或后续 draft Project", () => {
+  it("保持 Pixel Lab 原契约，并识别已发布的后续 Project", () => {
     const pixelLab = contentManifest.projects.find(
       ({ id }) => id === "project.pixel-lab",
     );
@@ -1143,11 +1143,8 @@ describe("Phase 9D Stage 2 图像计算基础与 OpenCV 实验", () => {
       stageZeroIds,
     );
     expect(pixelLab?.evidenceConceptIds).toEqual(stageZeroIds);
-    expect(classicalInspection).toMatchObject({
-      publicationStatus: "draft",
-      conceptRequirements: [],
-      evidenceConceptIds: [],
-    });
+    expect(classicalInspection).toMatchObject({ publicationStatus: "published" });
+    expect(classicalInspection?.conceptRequirements).toHaveLength(7);
   });
 
   it("自动进入 Knowledge、Roadmap、Graph 与 Search，并保持初始状态和 NextStep", () => {

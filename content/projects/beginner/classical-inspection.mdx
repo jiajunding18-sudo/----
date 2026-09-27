@@ -1,0 +1,190 @@
+---
+schemaVersion: 1
+id: project.classical-inspection
+slug: classical-inspection
+title: 经典零件与图形检测
+level: beginner
+trackIds:
+  - track.common
+problemStatement: 对亮背景上的暗色矩形薄片建立单一外缘缺口检查，分清正常波动、真实缺口、处理失败与检测判定。
+capabilitySummary:
+  - 在独立真值和固定 ROI 下，以分割、形态学、区域测量和透明规则完成缺口判定。
+  - 冻结配置后批量处理未见图像，区分技术覆盖、误报和漏检，并保留真实失败。
+  - 用同输入 A/B 与独立亮度、模糊压力实验解释方法假设和边界。
+realWorldApplications:
+  - 为简单零件或打印图形的外形异常检查建立可复现的经典视觉原型；合成实验不证明真实工业现场精度。
+conceptRequirements:
+  - conceptId: opencv.io-color
+    kind: hard
+    minimumStatus: understood
+    reason: 必须在读取后检查解码、形状、dtype 和灰度契约，不能把坏文件当正常零件。
+  - conceptId: opencv.roi-masks
+    kind: hard
+    minimumStatus: understood
+    reason: 必须使用统一 ROI 并保护原始图，不得逐张凭 truth 调整位置。
+  - conceptId: opencv.edges-contours
+    kind: hard
+    minimumStatus: understood
+    reason: 必须能从二值区域选择主要目标并核对外接框，且区分轮廓面积与前景像素数。
+  - conceptId: pipeline.batch-images
+    kind: hard
+    minimumStatus: understood
+    reason: 批次需要稳定发现、逐项身份、失败记录、输出安全与可复现 manifest。
+  - conceptId: dip.segmentation
+    kind: hard
+    minimumStatus: understood
+    reason: 必须先固定暗色前景与独立 truth，才能公平比较固定阈值和 Otsu。
+  - conceptId: dip.morphology
+    kind: hard
+    minimumStatus: understood
+    reason: 必须解释开运算去散点的收益和改变缺口几何的风险。
+  - conceptId: dip.quality-metrics
+    kind: hard
+    minimumStatus: understood
+    reason: 必须分开报告任务错误、局部几何证据和技术覆盖，不能以单一好看分数代替结论。
+estimatedHours:
+  min: 25
+  max: 35
+techStack:
+  - Python
+  - NumPy
+  - OpenCV
+resources: []
+environmentRequirements:
+  - id: environment.classical-inspection.python-opencv
+    kind: software
+    label: Python、NumPy 与 OpenCV
+    required: true
+    details: 复用 Pixel Lab 环境，记录实际解释器与依赖版本；不要求重新安装或新建仓库。
+  - id: environment.classical-inspection.generated-data
+    kind: dataset
+    label: 本项目确定性生成的小型图像集
+    required: true
+    details: 使用仓库生成脚本离线创建 dev/unseen 和独立 truth；无需摄像头或下载。
+executionPaths:
+  - id: execution.classical-inspection.generated-parts
+    title: 离线合成零件图像
+    mode: simulation
+    requirementIds:
+      - environment.classical-inspection.python-opencv
+      - environment.classical-inspection.generated-data
+    evidenceBoundary: 证明受控合成条件下的单缺口规则、批处理和失败分析；不证明物理尺寸、真实采集条件或工业现场性能。
+acceptanceCriteria:
+  - id: acceptance.classical-inspection.task-truth-split
+    description: 提交单缺口任务和固定 ROI 定义、dev/unseen 清单与独立 truth 文件；展示推断函数只收图像和冻结配置，文件名不泄漏标签，未见集在首次运行后才联接真值。
+    required: true
+  - id: acceptance.classical-inspection.input-batch-integrity
+    description: 提交稳定排序输入和逐项 manifest；每个发现文件恰有 succeeded、failed 或 skipped 身份，损坏 PNG 失败、非支持扩展名跳过，源图不覆盖，输出危险在写入前被拦截并能在干净目录重跑。
+    required: true
+  - id: acceptance.classical-inspection.segmentation-morphology-measurement
+    description: 展示同一 ROI 的暗前景 0/255 mask、3×3 opening 前后像素/几何、确定性主目标筛选、bbox、框内前景像素数与 R；保留 source 断言，不把 contourArea 当像素数。
+    required: true
+  - id: acceptance.classical-inspection.nontrivial-rule-decision
+    description: 用冻结的 R 阈值和无目标失败规则，至少正确判定一个 normal 与一个 notched 基准及未见集各一例；常量 pass/fail 不合格，但不设任意百分比门槛。
+    required: true
+  - id: acceptance.classical-inspection.controlled-comparison
+    description: 预写假设并在同一输入、ROI、极性、opening、测量和规则下比较固定阈值与 Otsu；分别记录阈值、覆盖、FP/FN、差异、解释和局限，不预设胜者。
+    required: true
+  - id: acceptance.classical-inspection.frozen-unseen-degradation
+    description: 在首次未见运行前冻结完整配置并保存身份和 manifest；保留首次结果，另从 clean base 独立施加 -40/-80 亮度或 sigma 0.8/1.6 模糊，记录参数、覆盖与任务错误，不逐图调参。
+    required: true
+  - id: acceptance.classical-inspection.reproducibility-failure-analysis
+    description: 提交 generator 版本/seed、冻结配置、逐项 JSON、干净输出目录语义重跑，以及 1–2 个真实失败或压力边界卡；可解释来源和局限，不伪造失败或要求字节相同的全部编码输出。
+    required: true
+deliverableRequirements:
+  - A. 源码与执行包：生成器、单图/批处理程序、评价程序、冻结配置和 README。
+  - B. 数据与真值包：split 清单、sample 规格、独立 truth metadata、生成器版本与 seed。
+  - C. 运行证据：输出图、逐项 JSON manifest、技术覆盖和任务汇总，以及少量代表性可视化。
+  - D. 分析短报告：同输入 A/B、独立退化、未见首次结果、失败卡与适用边界。
+evidenceConceptIds:
+  - opencv.io-color
+  - opencv.roi-masks
+  - opencv.edges-contours
+  - pipeline.batch-images
+  - dip.segmentation
+  - dip.morphology
+  - dip.quality-metrics
+  - visualization.image-plots
+resumeOutcome: 完成后能独立交接一个可检查的单缺口经典视觉原型，并诚实说明合成数据与真实采集之间的差距。
+tags:
+  - OpenCV
+  - 经典视觉
+publicationStatus: published
+contentVersion: 2026.09.27.1
+---
+
+# 经典零件与图形检测
+
+**本页目录：** [任务与真值](#section-task-and-truth-先说清什么算对) · [数据集](#section-generate-and-inspect-dataset-先看数据-再看答案) · [单图流水线](#section-build-a-single-image-pipeline-让每个数字有来历) · [A/B 比较](#section-scheme-a-b-只改变阈值选择方法) · [冻结、未见与退化](#section-freeze-unseen-and-controlled-degradation) · [失败分析](#section-failure-analysis-诚实保留边界) · [交付与验收](#section-deliverables-and-acceptance-交什么-如何核对) · [Stage 证据边界](#section-stage-evidence-boundary-项目不是阶段完成)。
+
+## Project overview：一个目标、一条规则
+
+一批**暗色矩形薄片**位于较亮背景。正常零件的宽高、位置和亮度会小幅变化，背景也有弱梯度与孤立暗点；异常只有一种：**长边中部向零件内部凹入的外缘缺口（notch）**。目标不是识别所有缺陷，而是建立可解释的 `normal / notched` 判断，并说明什么时候判断失效。这里的 `pass` 对应 normal，`fail` 对应 notched；检测到缺口的 `fail` 是一次**成功处理后的任务判定**，不同于文件解码或测量失败。
+
+预计 25–35 小时覆盖 Stage 2–3 的整个项目，不是在 Stage 3 另加一份 25–35 小时作业。建议分配：契约与数据 3–4h；分割/测量 6–8h；A/B 与 dev 4–5h；batch/manifest 4–5h；退化 2–3h；未见 2–3h；失败分析和交付整理各 2–3h。复用 [Pixel Lab](/projects/pixel-lab/) 的环境及 [批处理契约](/knowledge/pipeline-batch-images/)，不要重做安装、建仓或基础路径练习。可查 API，但每项决定必须能用自己的测量解释。
+
+## Task and truth：先说清什么算对
+
+本项目输入为 192×192 的单通道 uint8 PNG；目标像素较暗、背景较亮。**truth（独立真值）**是生成时声明的 image-level `normal / notched`，放在独立 evaluation metadata 中；推断程序只能收到图像和冻结配置，不能读取 label、理想 mask 或缺口几何。文件名 `dev-0001.png` 等也不含标签。这是教学接口边界，不是防作弊安全系统。像素级理想 mask 可用于调试，但不是 Project 必交 benchmark。
+
+正类是 **notched**：FP 是 normal 被判 notched（误报），FN 是 notched 被判 normal（漏检）。技术覆盖另记：有效图像总数、成功得到判定数、处理失败数、跳过数与 `succeeded / eligible`。不要只对成功项算误报/漏检，却把处理失败悄悄从报告中消失。
+
+## Generate and inspect dataset：先看数据，再看答案
+
+用已有 Python/OpenCV 环境在**尚不存在**的输出目录运行生成器；目录已存在时脚本拒绝覆盖：
+
+```powershell
+python scripts/generate_classical_inspection.py data/classical-v1 --seed 917
+```
+
+版本 `classical-inspection-v1` 与 seed 写入清单和 truth。`dev/images` 有 24 张有效图（12/12），另有一个损坏 PNG 和一个 unsupported `.txt`；`unseen/images` 有 16 张有效图（8/8），使用独立样本规格。两个 `inference-list.json` 只列文件名，不含标签；`evaluation/truth.json` 独立存放 label 和生成几何。没有网络、摄像头或外部数据集要求。生成图是可控替代路径，不代表真实工业采集已经验证。
+
+先按 [可靠 I/O](/knowledge/opencv-io-color/) 检查 path、解码是否为 `None`、H×W、dtype 和**实际** min/max，再确认是灰度单通道、暗目标亮背景。不要把 uint8 的可表示范围误当每张图实际用了 0–255。固定空间 ROI 为 `(x=24, y=32, width=144, height=128)`，即 `image[32:160, 24:168]`，适用于所有样本；切片前核对边界，不根据 truth 或每张图的观感移动 ROI。行/列索引是 `[y,x]`。
+
+开发集允许查看 truth、预测、检查中间 mask 并调参数。**unseen** 不意味着秘密竞赛数据，而是配置冻结后的**第一次**评价：先保存配置身份与首跑 manifest，再联接 truth。不能查看标签后逐图换阈值、手画 mask，或用多次重跑覆盖首次失败。
+
+## Build a single-image pipeline：让每个数字有来历
+
+顺序固定为：输入契约 → 固定 ROI → 反向阈值分割 → 共同 3×3 opening → 外轮廓候选及确定性主目标 → bbox 与像素计数 → R → 判定 → 证据图与逐项记录。单图处理接口只接收 `image, frozen_config`，评价函数在预测完成后才读 truth。每个方案都从受保护的原图独立产生 mask；B 不能在 A 的结果上继续处理。
+
+二值 mask 为 H×W、uint8、仅 `{0,255}`，其中 255 是**暗色零件**。3×3 中心锚点矩形 opening 旨在删掉已声明的 1–2px 孤立暗点；记录前后前景像素数，并检查它是否误删了缺口或正常零件。它不懂目标，不是通用“去噪按钮”。从 `RETR_EXTERNAL` 候选中按固定合法 bbox 范围和面积顺序选主要目标；建议在本数据契约下允许 bbox 宽 90–102、高 58–70，超出或无合法目标记处理失败，不能当 normal。`contourArea` 可帮助排序，但**不是**下式分子。
+
+令 `B=(x,y,w,h)` 为目标 bbox，`F` 为清理后该框内属于目标的前景像素数：
+
+$$
+R = \frac{F}{w\,h}.
+$$
+
+这是**栅格像素占有率**，不是多边形轮廓面积。生成器的理想 normal 为 `R=1`，notched 约 `0.955–0.962`；工程预检中，固定阈值与 Otsu 经过共同 opening 的 clean 样本仍保持该分离。因此本受控任务冻结 `R<0.98 → notched/fail`，否则 `normal/pass`。`0.98` 不是工业通用阈值。记录 bbox、F、R、候选数和 threshold used；用至少一个正常和一个缺口基准证明不是常量输出。
+
+逐项 `status` 继续复用 [Stage 2 batch](/knowledge/pipeline-batch-images/) 的 `succeeded / failed / skipped`：只有 succeeded 才有 inspection `pass/fail`；损坏 PNG 或无合法目标为 failed，unsupported extension 为 skipped。每个发现文件恰有一条身份记录；run-level 输出碰撞或危险输入/输出关系必须在写入前停止。成功项记录 input ID、scheme、所用阈值、bbox、F、R、判定和证据引用。JSON 若由 Project 自己保存，不要改全局学习进度 schema。
+
+## Scheme A/B：只改变阈值选择方法
+
+先写出假设：背景/零件灰度是否足够分离，亮度下降可能怎样影响两方案？A 用 `THRESH_BINARY_INV` 的固定全局阈值（此生成器参考起点 `T=120`）；B 用同极性 `THRESH_BINARY_INV | THRESH_OTSU`，每张图由直方图求阈值，**不是**学习者看过 unseen truth 后手调。Otsu 只选数字，不自动识别零件。
+
+| 共同固定 | 唯一核心差别 | 每项要核对 |
+| --- | --- | --- |
+| 同图、ROI、暗前景、3×3 opening、目标筛选、bbox/F/R 与 0.98 规则 | A：固定 T；B：Otsu 自动计算 T | threshold、mask、R、status、decision、truth 联接后的 FP/FN |
+
+两个方案均报告成功处理数和失败数；对成功获得判定的有效样本汇总 normal/notched、FP/FN，同时把 processing failure 单列。不要先宣称 Otsu 一定更好。对相同输入保留 input、mask、目标 overlay、数值与判断的紧凑对照，不用几十张图堆页面。
+
+## Freeze, unseen and controlled degradation
+
+dev 阶段可调整 A 的 T、共同 ROI、opening、目标选择范围和 R 规则，但正式 unseen **首跑前**必须保存一份 frozen config（包括 Scheme B 算法选择）、生成版本/seed 和配置身份。首次 unseen 逐项结果、sample IDs、manifest、技术覆盖与 FP/FN 原样留存；之后才读取独立 truth。失败可提出下一轮改进，但不得回写成“首次就正确”。至少要有未见 normal 与 notched 各一例正确；不设随意的 90% 正确率门槛。
+
+压力实验各自从同一 **clean base** 独立生成，不叠加：亮度偏移 `-40` 或 `-80`，先转安全整数类型、加偏移、显式 clip 到 0–255 后再转 uint8；clip 是本实验定义的一部分。模糊使用 Gaussian `7×7`、`sigma=0.8` 或 `1.6`、固定 border 约定（如 `BORDER_REFLECT_101`）。分别记录来源、参数、实际范围、覆盖、FP/FN 和 R；不为了造一个赢家修改规则。工程预检中 `-80` 下固定 T 出现无法选出合法目标的案例，Otsu 仍可处理；这是具体合成条件下的边界，不是算法普遍排名。模糊改变局部灰度与 R，即使最终类别不变也值得解释。
+
+## Failure analysis：诚实保留边界
+
+从未见批次或预声明退化中选择 1–2 个**真实观察**的失败/边界。每张短卡包括 sample ID、输入条件、observed result、发生阶段、数值/视觉证据、可能原因、一项合理缓解办法与仍未解决的局限。若未见 clean 样本全成功，不要伪造漏检；可用已声明压力条件展示真实 no-target 或稳定性边界。一个坏文件继续处理、一个 unsupported 扩展名跳过；危险 output collision 是整批写前失败，不应被吞成某张图的普通 failed。
+
+代表图只需 normal 成功、notched 成功、一个真实失败/边界和同图 A/B：每例展示原图、二值 mask、目标位置、R 与决定。灰度图按二维标量可信显示，固定显示范围；若改用彩色 overlay，先写清 BGR/RGB 契约。不要用“看着更干净”代替 truth、几何和错误计数。
+
+## Deliverables and acceptance：交什么、如何核对
+
+正式交付仅四组：A 源码/执行包（generator、pipeline、evaluation、README、frozen config）；B 数据/真值包（split、spec、独立 truth、version/seed）；C 运行证据（输出、逐项 JSON、summary、少量代表图）；D 分析短报告（A/B、亮度/模糊、未见首跑、失败和局限）。页面上七项 required acceptance 对应任务/真值分离、批次身份、分割与测量、非平凡规则、公平 A/B、冻结未见与退化、可复现失败分析。交付物登记记录本身不等于系统已检查磁盘上所有文件：当前机器完成条件是**至少一条交付物记录 + 七项验收逐一通过 + 学习者显式确认**；四组内容须按验收实际核对。完成项目也不会自动把相关 Concept 标记 mastered。
+
+## Stage evidence boundary：项目不是阶段完成
+
+A/B 报告可作为 `stage-criterion.digital-image-processing.controlled-comparison` 的候选证据；失败解释可部分支持 `stage-criterion.digital-image-processing.explain-image-phenomena`。后者仍需结合已学采样、卷积、噪声、频域等 Concept 证据与简短阶段解释，**不要求把这些算法塞进本项目**。Project 的七项验收和完成确认不会自动确认任何 Stage criterion、开启复测或完成 Stage 3。Stage 3 的复测属于独立后续阶段；本项目目前只发布可执行内容契约。

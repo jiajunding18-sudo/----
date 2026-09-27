@@ -51,7 +51,7 @@ describe("Stage 3 quality metrics", () => {
   it("does not publish the draft Project, retest, or learner Stage completion", () => {
     const stage = catalog.stages.find(s => s.id === concept.stageId)!;
     expect(stage.contentStatus).toBe("available");
-    expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
     expect(catalog.stageRetests.find(r => r.stageId === concept.stageId)?.contentStatus).toBe("planned");
     expect(getStageReadiness(stage, catalog.stages, catalog.concepts, catalog.projects,
       catalog.tracks, stageReadyInput(), stageTime).ready).toBe(false);

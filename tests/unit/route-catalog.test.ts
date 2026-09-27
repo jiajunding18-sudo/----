@@ -271,9 +271,9 @@ describe("Phase 2B-1 路线 catalog", () => {
     });
     expect(new Set(criterionIds).size).toBe(criterionIds.length);
     expect(contentManifest.projects.filter(({ publicationStatus }) => publicationStatus === "published"))
-      .toHaveLength(1);
+      .toHaveLength(2);
     expect(contentManifest.projects.filter(({ publicationStatus }) => publicationStatus === "draft"))
-      .toHaveLength(12);
+      .toHaveLength(11);
   });
 
   it("项目门槛与 ROADMAP 的 checkpoint 表一致", () => {

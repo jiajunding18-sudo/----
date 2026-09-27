@@ -27,7 +27,7 @@ describe("Stage 3 morphology", () => {
   });
   it("keeps Project/retest unpublished after content publication",()=>{
     expect(catalog.concepts.some(x=>x.id==="dip.quality-metrics")).toBe(true);
-    expect(catalog.projects.find(x=>x.id==="project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(catalog.projects.find(x=>x.id==="project.classical-inspection")?.publicationStatus).toBe("published");
     expect(catalog.stageRetests.find(x=>x.stageId===c.stageId)?.contentStatus).toBe("planned");
   });
   it("provides controlled experiments and an isolated official resource",async()=>{

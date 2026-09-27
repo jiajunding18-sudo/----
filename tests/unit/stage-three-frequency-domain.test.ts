@@ -35,11 +35,11 @@ describe("Stage 3 frequency domain", () => {
     }
     expect(concept.dependencies.every(d => contentManifest.concepts.some(c => c.id === d.conceptId))).toBe(true);
   });
-  it("keeps completion, retest and Classical Inspection unpublished", () => {
+  it("keeps Stage completion and retest unpublished after Project publication", () => {
     const stage = contentManifest.stages.find(s => s.id === concept.stageId)!;
     expect(stage.contentStatus).toBe("available");
     expect(contentManifest.stageRetests.find(r => r.stageId === stage.id)?.contentStatus).toBe("planned");
-    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
     expect(getStageReadiness(stage, contentManifest.stages, contentManifest.concepts, contentManifest.projects,
       contentManifest.tracks, stageReadyInput(), stageTime).ready).toBe(false);
   });

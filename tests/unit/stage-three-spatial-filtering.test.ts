@@ -31,12 +31,12 @@ describe("Stage 3 spatial filtering", () => {
       expect(getNextStep({ catalog: contentManifest, state: blocked, now: stageTime })).not.toMatchObject({ targetId: concept.id });
     }
   });
-  it("does not publish Stage completion, retest, or Classical Inspection", () => {
+  it("does not publish Stage completion or retest after Project publication", () => {
     const stage = contentManifest.stages.find(s => s.id === concept.stageId)!;
     expect(stage.contentStatus).toBe("available");
     expect(stage).not.toHaveProperty("entryGate");
     expect(contentManifest.stageRetests.find(r => r.stageId === stage.id)?.contentStatus).toBe("planned");
-    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
     expect(getStageReadiness(stage, contentManifest.stages, contentManifest.concepts, contentManifest.projects,
       contentManifest.tracks, stageReadyInput(), stageTime).ready).toBe(false);
   });

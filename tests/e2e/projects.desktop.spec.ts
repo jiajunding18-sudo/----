@@ -95,15 +95,15 @@ test("Projects 从 manifest 浏览 13 项能力路线并按正式维度筛选", 
   ).toHaveAttribute("data-project-status", "published");
   await expect(
     page.locator('[data-project-id="project.classical-inspection"]'),
-  ).toHaveAttribute("data-project-status", "draft");
-  await expect(page.getByText("Published · 可执行", { exact: true })).toHaveCount(2);
-  await expect(page.getByText("Draft · Planned", { exact: true })).toHaveCount(13);
+  ).toHaveAttribute("data-project-status", "published");
+  await expect(page.getByText("Published · 可执行", { exact: true })).toHaveCount(3);
+  await expect(page.getByText("Draft · Planned", { exact: true })).toHaveCount(12);
 
   const status = page.getByLabel("Status");
   await status.focus();
   await expect(status).toBeFocused();
   await status.selectOption("draft");
-  await expect(page.locator("[data-project-id]")).toHaveCount(12);
+  await expect(page.locator("[data-project-id]")).toHaveCount(11);
   await expect(page.locator('[data-project-status="published"]')).toHaveCount(0);
   await expect(page.getByRole("link", { name: "查看正式项目内容" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /开始 Project/ })).toHaveCount(0);
@@ -154,7 +154,7 @@ test("Pixel Lab 显示能力、应用、Required Knowledge 与实时 readiness",
   await expect(page.getByRole("button", { name: "记录交付物" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "经典零件与图形检测" })).toHaveAttribute(
     "href",
-    "/projects/#project-classical-inspection",
+    "/projects/classical-inspection/",
   );
 
   await seedAllPublishedConceptsMastered(page);

@@ -300,7 +300,7 @@ Phase 9E-1 已发布 `project.pixel-lab` 的 `milestone.pixel-lab.image-computin
 
 **关联项目：** `project.classical-inspection`, `project.imaging-quality-lab`。
 
-Phase 9F-C1 已发布 `dip.sampling-quantization` 与 `dip.convolution-lsi`；Phase 9F-C2 发布 `dip.noise-models`；Phase 9F-C3 发布 `dip.spatial-filtering`；Phase 9F-C4 发布 `dip.frequency-domain`；Phase 9F-C5 发布 `dip.enhancement`；Phase 9F-C6 发布 `dip.segmentation`；Phase 9F-C7 发布 `dip.morphology`；Phase 9F-C8 发布 `dip.edge-detection`；Phase 9F-C9 发布 `dip.feature-representation`；Phase 9F-C10 发布 `dip.restoration`；Phase 9F-C11 发布 `dip.quality-metrics`，Stage 3 内容现为 12/12 published。`stage.digital-image-processing` 内容成熟度保持 `available`；内容全发布不等于个人阶段完成。本轮不发布 Classical Inspection、Stage 3 retest 或新增出口契约。Stage 2 旧文中指向卷积的延后 recommended edge 仍待单独同步；noise-models 对 `sensor.noise-snr`、restoration 对 `imaging.psf-mtf`、quality-metrics 对 `cv.evaluation-basics` 的推荐关系保留在 ROADMAP/正文，待各实体正式发布后再加入 DAG，不创建占位节点。
+Phase 9F-C1 已发布 `dip.sampling-quantization` 与 `dip.convolution-lsi`；Phase 9F-C2 发布 `dip.noise-models`；Phase 9F-C3 发布 `dip.spatial-filtering`；Phase 9F-C4 发布 `dip.frequency-domain`；Phase 9F-C5 发布 `dip.enhancement`；Phase 9F-C6 发布 `dip.segmentation`；Phase 9F-C7 发布 `dip.morphology`；Phase 9F-C8 发布 `dip.edge-detection`；Phase 9F-C9 发布 `dip.feature-representation`；Phase 9F-C10 发布 `dip.restoration`；Phase 9F-C11 发布 `dip.quality-metrics`，Stage 3 Concept 内容现为 12/12 published。Phase 9F-E1 发布同一 `project.classical-inspection` 的单外缘缺口 Project 契约；`stage.digital-image-processing` 内容成熟度保持 `available`，Project 发布不等于个人项目或阶段完成，Stage 3 retest 与独立出口证据仍未发布。Stage 2 旧文中指向卷积的延后 recommended edge 仍待单独同步；noise-models 对 `sensor.noise-snr`、restoration 对 `imaging.psf-mtf`、quality-metrics 对 `cv.evaluation-basics` 的推荐关系保留在 ROADMAP/正文，待各实体正式发布后再加入 DAG，不创建占位节点。
 
 ### 5.1 核心知识簇
 
@@ -321,7 +321,7 @@ Phase 9F-C1 已发布 `dip.sampling-quantization` 与 `dip.convolution-lsi`；Ph
 
 ### 5.2 阶段项目与出口标准
 
-**项目：** 在 `project.classical-inspection` 中增加受控噪声、模糊、亮度和参数变化；给出至少两种处理方案、固定测试集、指标和失败分析。
+**项目：** 当前 `project.classical-inspection` 的正式完成要求以已批准的 Project Contract 为准：围绕单一外缘缺口任务，在固定数据和规则下比较两种阈值方案，独立测试亮度与模糊退化，并保留指标和失败分析。受控噪声及更广的参数变化属于后续项目增量方向或独立学习扩展，不是当前 Project 的隐含必交项。
 
 **出口标准：**
 

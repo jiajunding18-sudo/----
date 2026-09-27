@@ -67,7 +67,7 @@ describe("Stage 3 segmentation slice", () => {
     const stage = contentManifest.stages.find(s => s.id === concept.stageId)!;
     expect(stage.contentStatus).toBe("available");
     expect(contentManifest.stageRetests.find(r => r.stageId === stage.id)?.contentStatus).toBe("planned");
-    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(contentManifest.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
     expect(getStageReadiness(stage, contentManifest.stages, contentManifest.concepts, contentManifest.projects,
       contentManifest.tracks, stageReadyInput(), stageTime).ready).toBe(false);
   });

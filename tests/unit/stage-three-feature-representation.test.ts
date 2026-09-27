@@ -55,7 +55,7 @@ describe("Stage 3 feature representation", () => {
   });
   it("keeps Project and retest unpublished", () => {
     expect(catalog.concepts.some(x => x.id === "dip.quality-metrics")).toBe(true);
-    expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("draft");
+    expect(catalog.projects.find(p => p.id === "project.classical-inspection")?.publicationStatus).toBe("published");
     expect(catalog.stageRetests.find(r => r.stageId === c.stageId)?.contentStatus).toBe("planned");
     const stage = catalog.stages.find(s => s.id === c.stageId)!;
     expect(stage.contentStatus).toBe("available");
